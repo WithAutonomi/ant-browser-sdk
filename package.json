@@ -1,0 +1,129 @@
+{
+  "name": "@autonomi/browser-sdk",
+  "version": "0.1.0",
+  "description": "Build browser applications that connect directly to the Autonomi Network over WebRTC.",
+  "type": "module",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/WithAutonomi/ant-client-browser-sdk.git"
+  },
+  "homepage": "https://github.com/WithAutonomi/ant-client-browser-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/WithAutonomi/ant-client-browser-sdk/issues"
+  },
+  "keywords": [
+    "autonomi",
+    "webrtc",
+    "browser",
+    "sdk",
+    "decentralized-storage"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE-MIT",
+    "LICENSE-APACHE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./ethers": {
+      "types": "./dist/ethers.d.ts",
+      "import": "./dist/ethers.js"
+    },
+    "./autonomi-stream-sw.js": "./dist/autonomi-stream-sw.js"
+  },
+  "types": "./dist/index.d.ts",
+  "sideEffects": [
+    "./dist/upload-worker.js",
+    "./dist/wasm/ant_core.js"
+  ],
+  "scripts": {
+    "build": "node ./scripts/build.mjs",
+    "check": "npm run build && npm run typecheck && npm test",
+    "predev": "npm run build",
+    "dev": "vite --config examples/vanilla/vite.config.ts",
+    "prebuild:example": "npm run build",
+    "build:example": "vite build --config examples/vanilla/vite.config.ts",
+    "sync:wasm": "node ./scripts/sync-wasm.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepack": "npm run check"
+  },
+  "peerDependencies": {
+    "ethers": "^6.17.0"
+  },
+  "peerDependenciesMeta": {
+    "ethers": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "ethers": "^6.17.0",
+    "fake-indexeddb": "^6.2.2",
+    "typescript": "^5.9.2",
+    "vite": "^8.2.0",
+    "vitest": "^3.2.4"
+  },
+  "main": "index.js",
+  "directories": {
+    "example": "examples",
+    "test": "test"
+  },
+  "dependencies": {
+    "aes-js": "^4.0.0-beta.5",
+    "assertion-error": "^2.0.1",
+    "cac": "^6.7.14",
+    "chai": "^5.3.3",
+    "check-error": "^2.1.3",
+    "debug": "^4.4.3",
+    "deep-eql": "^5.0.2",
+    "detect-libc": "^2.1.2",
+    "es-module-lexer": "^1.7.0",
+    "esbuild": "^0.28.2",
+    "estree-walker": "^3.0.3",
+    "expect-type": "^1.4.0",
+    "fdir": "^6.5.0",
+    "js-tokens": "^9.0.1",
+    "lightningcss": "^1.33.0",
+    "lightningcss-darwin-arm64": "^1.33.0",
+    "loupe": "^3.2.1",
+    "magic-string": "^0.30.21",
+    "ms": "^2.1.3",
+    "nanoid": "^3.3.18",
+    "pathe": "^2.0.3",
+    "pathval": "^2.0.1",
+    "picocolors": "^1.1.1",
+    "picomatch": "^4.0.7",
+    "postcss": "^8.5.26",
+    "rolldown": "^1.2.6",
+    "rollup": "^4.63.1",
+    "siginfo": "^2.0.0",
+    "source-map-js": "^1.2.1",
+    "stackback": "^0.0.2",
+    "std-env": "^3.10.0",
+    "strip-literal": "^3.1.0",
+    "tinybench": "^2.9.0",
+    "tinyexec": "^0.3.2",
+    "tinyglobby": "^0.2.17",
+    "tinypool": "^1.1.1",
+    "tinyrainbow": "^2.0.0",
+    "tinyspy": "^4.0.4",
+    "tslib": "^2.7.0",
+    "undici-types": "^8.3.0",
+    "vite-node": "^3.2.4",
+    "why-is-node-running": "^2.3.0",
+    "ws": "^8.21.0"
+  },
+  "author": ""
+}

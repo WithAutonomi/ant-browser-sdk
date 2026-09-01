@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Minimal Autonomi Browser SDK example" />
+    <title>Autonomi Browser SDK</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">@autonomi/browser-sdk</p>
+      <h1>A complete client in one page</h1>
+      <p class="lede">
+        Connect directly to Autonomi nodes over certificate-pinned WebRTC, then
+        upload, download, or stream a public file.
+      </p>
+
+      <section>
+        <h2>1. Connect</h2>
+        <label for="source">Manifest URL or WebRTC Direct multiaddress</label>
+        <input id="source" value="http://127.0.0.1:25000/api/browser-manifest.json" />
+        <button id="connect">Connect</button>
+        <output id="connection">Not connected</output>
+      </section>
+
+      <section>
+        <h2>2. Upload</h2>
+        <label for="wallet">Paying wallet private key (local devnet only)</label>
+        <input id="wallet" type="password" autocomplete="off" />
+        <label for="upload-input">Public file</label>
+        <input id="upload-input" type="file" />
+        <button id="upload" disabled>Pay and upload</button>
+      </section>
+
+      <section>
+        <h2>3. Read</h2>
+        <label for="address">Public DataMap address</label>
+        <input id="address" placeholder="64 hexadecimal characters" />
+        <div class="actions">
+          <button id="download" disabled>Download and save</button>
+          <button id="stream" disabled>Open as media</button>
+        </div>
+        <video id="media" controls hidden></video>
+      </section>
+
+      <section>
+        <h2>Progress</h2>
+        <pre id="log">Ready.</pre>
+      </section>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
