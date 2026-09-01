@@ -11,10 +11,9 @@ export class MediaBridge {
   #sessions = new Map<string, MediaSession>();
   #workerUrl?: string;
   #scope?: string;
+  #messageListenerAttached = false;
 
-  constructor() {
-    navigator.serviceWorker.addEventListener("message", this.#onMessage);
-  }
+  constructor() {}
 
   async attach(reader: PublicFileReader, options: MediaOptions): Promise<MediaSource> {
     const workerUrl = new URL(
@@ -23,6 +22,10 @@ export class MediaBridge {
     ).href;
     const scope = normalizeScope(options.scope ?? "/");
     await this.#ensureWorker(workerUrl, scope);
+    if (!this.#messageListenerAttached) {
+      navigator.serviceWorker.addEventListener("message", this.#onMessage);
+      this.#messageListenerAttached = true;
+    }
 
     const sessionId = randomSessionId();
     const url = new URL(`__autonomi_stream/${sessionId}/file`, new URL(scope, location.origin));
@@ -53,7 +56,10 @@ export class MediaBridge {
   close(): void {
     for (const { source } of this.#sessions.values()) source.close();
     this.#sessions.clear();
-    navigator.serviceWorker.removeEventListener("message", this.#onMessage);
+    if (this.#messageListenerAttached) {
+      navigator.serviceWorker.removeEventListener("message", this.#onMessage);
+      this.#messageListenerAttached = false;
+    }
   }
 
   #onMessage = async (event: MessageEvent<unknown>): Promise<void> => {
@@ -94,7 +100,10 @@ export class MediaBridge {
 
   async #ensureWorker(workerUrl: string, scope: string): Promise<void> {
     if (!("serviceWorker" in navigator)) {
-      throw new AutonomiError("MEDIA_FAILED", "This browser does not support service workers");
+      throw new AutonomiError(
+        "MEDIA_FAILED",
+        "Media streaming requires a secure context (HTTPS; localhost is allowed) with service-worker support",
+      );
     }
     if (this.#workerUrl && (this.#workerUrl !== workerUrl || this.#scope !== scope)) {
       throw new AutonomiError(
