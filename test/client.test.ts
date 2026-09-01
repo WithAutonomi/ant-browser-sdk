@@ -4,11 +4,8 @@ import type { PaymentProvider, PublicFile } from "../src/types.js";
 const state = vi.hoisted(() => ({
   hello: {
     type: "hello",
-    protocol: "autonomi.web.poc.v3",
+    protocol: "autonomi.web.poc.v4",
     peer_id: "ab".repeat(32),
-    challenge: "cd".repeat(32),
-    public_key: "11",
-    signature: "22",
     endpoint: { multiaddr: "/ip4/127.0.0.1/udp/24000/mock" },
     max_chunk_size: 4_194_304,
     capabilities: ["get_chunk", "put_chunk"],

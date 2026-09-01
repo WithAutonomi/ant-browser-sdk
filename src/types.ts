@@ -41,9 +41,6 @@ export interface HelloInfo {
   type: string;
   protocol: string;
   peer_id: string;
-  challenge: string;
-  public_key: string;
-  signature: string;
   endpoint: { multiaddr: string };
   max_chunk_size: number;
   capabilities: string[];

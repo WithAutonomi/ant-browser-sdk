@@ -224,11 +224,6 @@ export function serverAnswerFromEndpoint(endpoint: any, ice_credential: string):
 export function start(): void;
 
 /**
- * Authenticate a node HELLO against its expected endpoint and challenge.
- */
-export function verifyHelloIdentity(hello: any, endpoint: any, challenge: Uint8Array): string;
-
-/**
  * Verify one content-addressed record with native BLAKE3.
  */
 export function verifyRecord(address: string, content: Uint8Array): string;
@@ -287,7 +282,6 @@ export interface InitOutput {
     readonly paymentQuoteHash: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly serverAnswerFromEndpoint: (a: any, b: number, c: number) => [number, number, number];
     readonly start: () => void;
-    readonly verifyHelloIdentity: (a: any, b: any, c: number, d: number) => [number, number, number, number];
     readonly verifyRecord: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly verifyStorageQuote: (a: any, b: number, c: number, d: number, e: number) => [number, number, number];
     readonly BrotliDecoderCreateInstance: (a: number, b: number, c: number) => number;
@@ -312,8 +306,8 @@ export interface InitOutput {
     readonly BrotliDecoderVersion: () => number;
     readonly wasm_bindgen__convert__closures_____invoke__h2239c0895563b164: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen__convert__closures_____invoke__h2cbab48b124203fc: (a: number, b: number, c: any, d: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h4327dbc82797adb0: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h4327dbc82797adb0_2: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h66b5d2deea5443be: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h66b5d2deea5443be_2: (a: number, b: number, c: any) => void;
     readonly wasm_bindgen__convert__closures_____invoke__hb48bac15b778bb45: (a: number, b: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
