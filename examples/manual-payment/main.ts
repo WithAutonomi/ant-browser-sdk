@@ -121,10 +121,11 @@ function showQuotes(request: ManualPaymentRequest): void {
   price.value =
     `${request.totalAmountAtto} atto-tokens across ${request.quotes.length} quotes`;
   quoteList.replaceChildren(
-    ...request.quotes.map((quote, index) => {
+    ...request.quotes.map((quote) => {
       const item = document.createElement("li");
-      item.textContent =
-        `${index + 1}. ${quote.amount} atto-tokens → ${quote.rewardsAddress}`;
+      const chunkAddress = quoteChunkAddress(quote);
+      item.textContent = `${chunkAddress.slice(0, 12)}: ${quote.amount} atto`;
+      item.title = chunkAddress;
       return item;
     }),
   );
@@ -165,4 +166,19 @@ function refreshWalletControls(): void {
   const useInjected = walletMode.value === "injected";
   injectedFields.classList.toggle("hidden", !useInjected);
   privateKeyFields.classList.toggle("hidden", useInjected);
+}
+
+function quoteChunkAddress(
+  quote: ManualPaymentRequest["quotes"][number],
+): string {
+  const artifact = quote.quote;
+  if (
+    typeof artifact !== "object" ||
+    artifact === null ||
+    !("content" in artifact) ||
+    typeof artifact.content !== "string"
+  ) {
+    throw new Error("Verified storage quote is missing its chunk address");
+  }
+  return artifact.content;
 }
