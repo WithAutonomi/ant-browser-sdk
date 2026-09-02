@@ -1,6 +1,12 @@
 export { AutonomiClient } from "./client.js";
 export { AutonomiError, type AutonomiErrorCode } from "./errors.js";
 export { PublicFileReader } from "./file-reader.js";
+export {
+  createManualPaymentProvider,
+  type ManualPaymentOptions,
+  type ManualPaymentRequest,
+  type ManualPaymentStatus,
+} from "./manual-payment.js";
 export { saveDownload } from "./save.js";
 export { initializeWasm } from "./internal/runtime.js";
 export type {

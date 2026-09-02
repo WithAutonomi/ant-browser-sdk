@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ManualPaymentRequest } from "../src/manual-payment.js";
 import type { PaymentProvider, PublicFile } from "../src/types.js";
 
 const state = vi.hoisted(() => ({
@@ -77,7 +78,11 @@ vi.mock("../src/internal/runtime.js", () => {
   };
 });
 
-import { AutonomiClient, AutonomiError } from "../src/index.js";
+import {
+  AutonomiClient,
+  AutonomiError,
+  createManualPaymentProvider,
+} from "../src/index.js";
 
 const endpoint = "/ip4/127.0.0.1/udp/24000/webrtc-direct/mock";
 const file: PublicFile = {
@@ -164,6 +169,59 @@ describe("AutonomiClient", () => {
     expect(result.file).toEqual(file);
     expect(payment.pay).toHaveBeenCalledOnce();
     expect(client.files).toContainEqual(file);
+    client.close();
+  });
+
+  it("pauses at verified quotes and continues after explicit payment", async () => {
+    const walletPayment: PaymentProvider = {
+      pay: vi.fn(async (_network, quotes) => ({
+        transactionHash: "0xpayment",
+        totalAmount: quotes[0]?.amount ?? "0",
+      })),
+    };
+    let request!: ManualPaymentRequest;
+    const payment = createManualPaymentProvider({
+      payment: walletPayment,
+      onRequest: (pending) => {
+        request = pending;
+      },
+    });
+    const client = await AutonomiClient.connect(endpoint, { payment });
+    let continuedAfterPayment = false;
+    state.networks[0]!.uploadPublicFile.mockImplementation(
+      async (
+        _bytes: Uint8Array,
+        _name: string,
+        _type: string,
+        paymentNetwork: unknown,
+        payForQuotes: (network: unknown, quotes: unknown) => Promise<unknown>,
+      ) => {
+        await payForQuotes(paymentNetwork, [
+          {
+            quote: {},
+            quoteHash: "55".repeat(32),
+            rewardsAddress: `0x${"66".repeat(20)}`,
+            amount: "42",
+          },
+        ]);
+        continuedAfterPayment = true;
+        return {
+          file,
+          transactionHash: "0xpayment",
+          storageCostAtto: "42",
+          records: 4,
+        };
+      },
+    );
+
+    const upload = client.upload(new Uint8Array(3_072));
+    await vi.waitFor(() => expect(request?.status).toBe("pending"));
+    expect(continuedAfterPayment).toBe(false);
+    expect(walletPayment.pay).not.toHaveBeenCalled();
+
+    await request.pay();
+    await expect(upload).resolves.toMatchObject({ storageCostAtto: "42" });
+    expect(continuedAfterPayment).toBe(true);
     client.close();
   });
 
