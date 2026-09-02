@@ -151,6 +151,43 @@ Complete, type-checked upload examples are included for a connected
 [private-key wallet](examples/payments/private-key.ts). The private-key form is
 intended only for disposable development wallets in browser applications.
 
+### Present quotes before payment
+
+Wrap any wallet provider with `createManualPaymentProvider` when an application
+wants to show the verified storage price before asking the wallet to pay:
+
+```ts
+import { createManualPaymentProvider } from "@autonomi/browser-sdk";
+
+const payment = createManualPaymentProvider({
+  onRequest(request) {
+    price.textContent = `${request.totalAmountAtto} atto-tokens`;
+    quoteCount.textContent = String(request.quotes.length);
+
+    payButton.onclick = () => {
+      // Resolve this after quote review, so the user can switch wallet,
+      // account, or Wagmi connector before clicking Pay.
+      void request.pay(getSelectedWalletPayment()).catch(showError);
+    };
+    cancelButton.onclick = () => {
+      request.cancel("User declined the storage price");
+    };
+  },
+});
+
+// Self-encryption and quote verification start now. This promise remains
+// pending at the payment boundary until request.pay() is called.
+const result = await client.upload(file, { payment });
+```
+
+`request.pay(provider)` accepts an Ethers, Wagmi, private-key, or custom provider
+selected after quote review and waits for its confirmed receipt. Alternatively,
+configure `payment` as a default in `createManualPaymentProvider` and call
+`request.pay()` without an argument. Wagmi resolves its active connector, and
+Ethers invokes `getSigner`, only when payment starts. The Rust upload then verifies
+the reported total and only afterward starts storing records. See the complete
+[button-driven and wallet-switchable example](examples/payments/manual-confirmation.ts).
+
 ## Download and save
 
 ```ts
