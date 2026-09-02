@@ -46,6 +46,16 @@ input {
   font: inherit;
 }
 
+select {
+  display: block;
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid #adc4b8;
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+}
+
 button {
   margin-top: 14px;
   padding: 10px 16px;
@@ -61,5 +71,10 @@ button {
 button:disabled { cursor: wait; opacity: 0.45; }
 output { display: block; margin-top: 12px; color: #137658; font-weight: 700; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.secondary { color: #137658; background: #dcebe4; }
+.note { color: #52665f; line-height: 1.5; }
+.hidden { display: none; }
+.quote-list { padding-left: 20px; overflow-wrap: anywhere; }
+.quote-list li { margin: 8px 0; }
 video { width: 100%; margin-top: 18px; background: #07100d; border-radius: 10px; }
 pre { max-height: 260px; overflow: auto; white-space: pre-wrap; }

@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="description" content="Review Autonomi storage quotes before wallet payment" />
+    <title>Autonomi SDK — Review quotes</title>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">@autonomi/browser-sdk · manual payment</p>
+      <h1>Review quotes, choose a wallet, then pay</h1>
+      <p class="lede">
+        Start an upload, pause after verified quotes arrive, switch wallet if
+        desired, and continue storage only after confirmed payment.
+      </p>
+
+      <section>
+        <h2>1. Connect</h2>
+        <label for="bootstrap">WebRTC Direct bootstrap multiaddress</label>
+        <input id="bootstrap" placeholder="/ip4/127.0.0.1/udp/24000/webrtc-direct/certhash/.../p2p/..." spellcheck="false" />
+        <button id="connect">Connect node</button>
+        <output id="connection">Not connected</output>
+      </section>
+
+      <section>
+        <h2>2. Choose a wallet</h2>
+        <p class="note">This selection remains available while quotes are being reviewed.</p>
+        <label for="wallet-mode">Payment wallet</label>
+        <select id="wallet-mode">
+          <option value="injected">Connected Ethers wallet</option>
+          <option value="private-key">Disposable private key</option>
+        </select>
+        <div id="injected-fields">
+          <button id="connect-wallet">Connect or switch injected wallet</button>
+          <output id="wallet-state">No injected wallet connected</output>
+        </div>
+        <div id="private-key-fields" class="hidden">
+          <label for="private-key">Disposable funded private key</label>
+          <input id="private-key" type="password" autocomplete="off" placeholder="0x…" />
+        </div>
+      </section>
+
+      <section>
+        <h2>3. Collect quotes</h2>
+        <label for="file">Public file</label>
+        <input id="file" type="file" />
+        <button id="quote" disabled>Prepare upload and get quotes</button>
+      </section>
+
+      <section id="quote-panel" class="hidden">
+        <h2>4. Review and pay</h2>
+        <output id="price"></output>
+        <ul id="quotes" class="quote-list"></ul>
+        <div class="actions">
+          <button id="pay" disabled>Pay with selected wallet</button>
+          <button id="cancel" class="secondary" disabled>Cancel upload</button>
+        </div>
+        <output id="payment-state"></output>
+      </section>
+
+      <section>
+        <h2>Progress</h2>
+        <pre id="log">Ready.</pre>
+      </section>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

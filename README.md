@@ -145,10 +145,9 @@ The returned `totalAmount` must be a decimal string exactly matching the sum the
 Rust core calculated. A wallet callback cannot silently underpay or overpay and
 continue the upload.
 
-Complete, type-checked upload examples are included for a connected
-[Ethers wallet](examples/payments/ethers.ts), a connected
-[Wagmi wallet](examples/payments/wagmi.ts), and a
-[private-key wallet](examples/payments/private-key.ts). The private-key form is
+Complete, browser-runnable upload examples are included for a connected
+[Ethers wallet](examples/ethers), a connected [Wagmi wallet](examples/wagmi),
+and a [private-key wallet](examples/private-key). The private-key form is
 intended only for disposable development wallets in browser applications.
 
 ### Present quotes before payment
@@ -186,7 +185,7 @@ configure `payment` as a default in `createManualPaymentProvider` and call
 `request.pay()` without an argument. Wagmi resolves its active connector, and
 Ethers invokes `getSigner`, only when payment starts. The Rust upload then verifies
 the reported total and only afterward starts storing records. See the complete
-[button-driven and wallet-switchable example](examples/payments/manual-confirmation.ts).
+[button-driven and wallet-switchable example](examples/manual-payment).
 
 ## Download and save
 
@@ -270,7 +269,7 @@ the node's certificate pin and peer identity. Every node HELLO and storage quote
 is cryptographically checked, but production endpoint publication still needs
 certificate-rotation recovery, relayed WebRTC, and traffic quotas.
 
-## Run the included example
+## Run the browser examples
 
 Start the browser-enabled devnet from the sibling `ant-node` checkout, then:
 
@@ -279,8 +278,18 @@ npm install
 npm run dev
 ```
 
-Open `http://127.0.0.1:5174`. The example is intentionally small; its complete
-logic is in [`examples/vanilla/main.ts`](examples/vanilla/main.ts).
+`npm run dev` starts the [all-in-one example](examples/all-in-one) at
+`http://127.0.0.1:5174`. Each payment integration is also a complete Vite app:
+
+| Example | Command | URL |
+| --- | --- | --- |
+| All-in-one | `npm run dev:all-in-one` | `http://127.0.0.1:5174` |
+| Ethers connected wallet | `npm run dev:ethers` | `http://127.0.0.1:5175` |
+| Wagmi connected wallet | `npm run dev:wagmi` | `http://127.0.0.1:5176` |
+| Private key | `npm run dev:private-key` | `http://127.0.0.1:5177` |
+| Review quotes, then pay | `npm run dev:manual-payment` | `http://127.0.0.1:5178` |
+
+Build all five examples with `npm run build:examples`.
 
 ## Maintainer workflow
 

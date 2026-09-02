@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="description" content="Autonomi upload using a connected Ethers wallet" />
+    <title>Autonomi SDK — Ethers wallet</title>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">@autonomi/browser-sdk/ethers</p>
+      <h1>Upload with an Ethers wallet</h1>
+      <p class="lede">
+        Connect an injected EIP-1193 wallet, obtain verified storage quotes, and
+        confirm approval and payment from that wallet.
+      </p>
+
+      <section>
+        <h2>1. Connect to Autonomi</h2>
+        <label for="bootstrap">WebRTC Direct bootstrap multiaddress</label>
+        <input id="bootstrap" placeholder="/ip4/127.0.0.1/udp/24000/webrtc-direct/certhash/.../p2p/..." spellcheck="false" />
+        <button id="connect-node">Connect node</button>
+        <output id="node-state">Not connected</output>
+      </section>
+
+      <section>
+        <h2>2. Connect wallet</h2>
+        <p class="note">The active injected account is resolved again when payment starts.</p>
+        <button id="connect-wallet">Connect injected wallet</button>
+        <output id="wallet-state">No wallet connected</output>
+      </section>
+
+      <section>
+        <h2>3. Pay and upload</h2>
+        <label for="file">Public file</label>
+        <input id="file" type="file" />
+        <button id="upload" disabled>Upload with wallet</button>
+        <output id="result"></output>
+      </section>
+
+      <section>
+        <h2>Progress</h2>
+        <pre id="log">Ready.</pre>
+      </section>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

@@ -1,5 +1,6 @@
 import { AutonomiClient, type MediaSource } from "@autonomi/browser-sdk";
 import { createEthersPaymentProvider } from "@autonomi/browser-sdk/ethers";
+import "../shared/style.css";
 
 const bootstrap = element<HTMLInputElement>("bootstrap");
 const wallet = element<HTMLInputElement>("wallet");

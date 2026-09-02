@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="description" content="Autonomi upload using a private-key wallet" />
+    <title>Autonomi SDK — Private key</title>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">@autonomi/browser-sdk/ethers · development</p>
+      <h1>Upload with a private key</h1>
+      <p class="lede">
+        Use a disposable funded development key to sign approval and payment
+        automatically, while still waiting for confirmed receipts.
+      </p>
+
+      <section>
+        <h2>1. Connect</h2>
+        <label for="bootstrap">WebRTC Direct bootstrap multiaddress</label>
+        <input id="bootstrap" placeholder="/ip4/127.0.0.1/udp/24000/webrtc-direct/certhash/.../p2p/..." spellcheck="false" />
+        <button id="connect">Connect node</button>
+        <output id="connection">Not connected</output>
+      </section>
+
+      <section>
+        <h2>2. Pay and upload</h2>
+        <p class="note">Never embed a production private key in browser code.</p>
+        <label for="private-key">Disposable funded private key</label>
+        <input id="private-key" type="password" autocomplete="off" placeholder="0x…" />
+        <label for="file">Public file</label>
+        <input id="file" type="file" />
+        <button id="upload" disabled>Sign, pay, and upload</button>
+        <output id="result"></output>
+      </section>
+
+      <section>
+        <h2>Progress</h2>
+        <pre id="log">Ready.</pre>
+      </section>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

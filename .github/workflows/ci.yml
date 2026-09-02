@@ -19,5 +19,5 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
-      - run: npm run build:example
+      - run: npm run build:examples
       - run: npm pack --dry-run
