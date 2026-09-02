@@ -67,10 +67,12 @@ vi.mock("../src/internal/runtime.js", () => {
     getBindings: () => ({
       BrowserNodeClient: NodeClient,
       BrowserNetworkClient: NetworkClient,
-      parseWebRtcDirectMultiaddr: (endpoint: string | { multiaddr: string }) => ({
-        multiaddr: typeof endpoint === "string" ? endpoint : endpoint.multiaddr,
-      }),
-      parseBrowserManifest: (value: unknown) => value,
+      parseWebRtcDirectMultiaddr: (endpoint: unknown) => {
+        if (typeof endpoint !== "string" || !endpoint.includes("/webrtc-direct/")) {
+          throw new Error("invalid WebRTC Direct multiaddress");
+        }
+        return { multiaddr: endpoint };
+      },
     }),
   };
 });
@@ -101,6 +103,7 @@ describe("AutonomiClient", () => {
     });
 
     expect(client.connection.bootstrap.peer_id).toBe("ab".repeat(32));
+    expect(client.connection.bootstrapMultiaddr).toBe(endpoint);
     expect(client.connection.paymentNetwork).toEqual(state.hello.payment);
     expect(state.networks[0]?.endpoints).toEqual([{ multiaddr: endpoint }]);
     expect(progress.at(-1)).toContain("Connected to authenticated peer");
@@ -109,6 +112,13 @@ describe("AutonomiClient", () => {
     expect(state.networks[0]?.closed).toBe(true);
     expect(state.networks[0]?.freed).toBe(true);
     await expect(client.findClosest()).rejects.toBeInstanceOf(AutonomiError);
+  });
+
+  it("rejects bootstrap URLs instead of treating them as manifests", async () => {
+    await expect(
+      AutonomiClient.connect("https://network.example/browser-manifest.json"),
+    ).rejects.toMatchObject({ code: "INVALID_SOURCE" });
+    expect(state.networks).toHaveLength(0);
   });
 
   it("delegates an in-memory upload and exposes only verified quotes to payment", async () => {

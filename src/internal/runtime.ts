@@ -1,7 +1,6 @@
 import initAntCore, {
   BrowserNetworkClient,
   BrowserNodeClient,
-  parseBrowserManifest,
   parseWebRtcDirectMultiaddr,
 } from "../wasm/ant_core.js";
 import { AutonomiError } from "../errors.js";
@@ -55,7 +54,6 @@ export interface RawNodeClient {
 export interface WasmBindings {
   BrowserNetworkClient: new (endpoints: unknown) => RawNetworkClient;
   BrowserNodeClient: new (endpoint: unknown) => RawNodeClient;
-  parseBrowserManifest(value: unknown): unknown;
   parseWebRtcDirectMultiaddr(value: unknown): { multiaddr: string };
 }
 
@@ -84,7 +82,6 @@ export function getBindings(): WasmBindings {
   return {
     BrowserNetworkClient,
     BrowserNodeClient,
-    parseBrowserManifest,
     parseWebRtcDirectMultiaddr,
   };
 }

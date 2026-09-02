@@ -1,6 +1,3 @@
-/** A certificate-pinned WebRTC Direct multiaddress or its manifest form. */
-export type Endpoint = string | { multiaddr: string };
-
 /** Public EVM contracts advertised by authenticated Autonomi nodes. */
 export interface PaymentNetwork {
   rpc_url: string;
@@ -25,16 +22,6 @@ export interface PublicFile {
   data_map_size: number;
   chunks: ChunkInfo[];
   replicas: number;
-}
-
-/** Validated bootstrap document produced by an Autonomi deployment. */
-export interface BrowserManifest {
-  version: number;
-  network_id: string;
-  created_at?: string;
-  endpoints: Array<{ multiaddr: string }>;
-  payment: PaymentNetwork;
-  files: PublicFile[];
 }
 
 export interface HelloInfo {
@@ -108,14 +95,6 @@ export interface ProgressEvent {
 
 export type ProgressListener = (event: ProgressEvent) => void;
 
-/** A URL is treated as a manifest; a string beginning with `/` is a multiaddress. */
-export type ConnectionSource =
-  | string
-  | URL
-  | Endpoint
-  | readonly Endpoint[]
-  | BrowserManifest;
-
 export type WasmSource =
   | RequestInfo
   | URL
@@ -126,14 +105,12 @@ export type WasmSource =
 export interface ClientOptions {
   payment?: PaymentProvider;
   onProgress?: ProgressListener;
-  fetch?: typeof globalThis.fetch;
   /** Override where the bundled WASM module is loaded from. */
   wasm?: WasmSource | Promise<WasmSource>;
 }
 
 export interface ConnectionInfo {
-  networkId: string;
-  endpoints: Array<{ multiaddr: string }>;
+  bootstrapMultiaddr: string;
   paymentNetwork: PaymentNetwork;
   bootstrap: HelloInfo;
   files: PublicFile[];

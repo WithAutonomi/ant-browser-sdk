@@ -1,32 +1,19 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { initializeWasm, parseManifest } from "../src/index.js";
-
-const payment = {
-  rpc_url: "http://127.0.0.1:8545",
-  payment_token_address: `0x${"11".repeat(20)}`,
-  payment_vault_address: `0x${"22".repeat(20)}`,
-};
+import { initializeWasm } from "../src/index.js";
+import { getBindings } from "../src/internal/runtime.js";
 
 describe("packaged Rust/WASM boundary", () => {
-  it("loads the checked-in module and validates manifests", async () => {
+  it("loads the checked-in module and validates WebRTC Direct multiaddresses", async () => {
     const bytes = await readFile(
       new URL("../src/wasm/ant_core_bg.wasm", import.meta.url),
     );
     await initializeWasm(bytes);
-    const manifest = await parseManifest({
-      version: 5,
-      network_id: "sdk-test",
-      endpoints: [{ multiaddr: endpoint("AA".repeat(32), 0xbb) }],
-      payment,
-      files: [],
-    });
+    const parse = getBindings().parseWebRtcDirectMultiaddr;
+    const parsed = parse(endpoint("AA".repeat(32), 0xbb));
 
-    expect(manifest.endpoints[0]?.multiaddr).toContain("/webrtc-direct/");
-    expect(manifest.payment.rpc_url).toBe("http://127.0.0.1:8545/");
-    await expect(
-      parseManifest({ ...manifest, endpoints: [] }),
-    ).rejects.toMatchObject({ code: "MANIFEST_FAILED" });
+    expect(parsed.multiaddr).toContain("/webrtc-direct/");
+    expect(() => parse("https://network.example/bootstrap.json")).toThrow();
   });
 });
 

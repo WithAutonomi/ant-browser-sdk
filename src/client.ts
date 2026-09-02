@@ -8,16 +8,12 @@ import {
   stageBlob,
   type StagedUpload,
 } from "./internal/staging.js";
-import { fetchManifest, parseManifest } from "./manifest.js";
 import { saveDownload } from "./save.js";
 import type {
-  BrowserManifest,
   ClientOptions,
   ConnectionInfo,
-  ConnectionSource,
   DownloadOptions,
   DownloadResult,
-  Endpoint,
   HelloInfo,
   LookupResult,
   MediaOptions,
@@ -43,13 +39,6 @@ interface RawDownloadResult {
   dataMapNode: DownloadResult["dataMapNode"];
 }
 
-interface ResolvedSource {
-  networkId?: string;
-  endpoints: Array<{ multiaddr: string }>;
-  expectedPayment?: PaymentNetwork;
-  files: PublicFile[];
-}
-
 /** High-level, stateful browser client for direct Autonomi applications. */
 export class AutonomiClient {
   readonly connection: ConnectionInfo;
@@ -72,12 +61,12 @@ export class AutonomiClient {
   }
 
   /**
-   * Initialize WASM, validate bootstrap data, and authenticate the first node.
+   * Initialize WASM, validate a WebRTC Direct bootstrap address, and authenticate the node.
    *
-   * Pass a manifest URL/object, one WebRTC Direct multiaddress, or an endpoint list.
+   * Pass one complete, certificate-pinned WebRTC Direct multiaddress.
    */
   static async connect(
-    source: ConnectionSource,
+    bootstrapMultiaddr: string,
     options: ClientOptions = {},
   ): Promise<AutonomiClient> {
     const report = (message: string): void => {
@@ -86,11 +75,11 @@ export class AutonomiClient {
     try {
       report("Initializing the Autonomi browser core");
       await initializeWasm(options.wasm);
-      const resolved = await resolveSource(source, options);
-      report(`Authenticating bootstrap node from ${resolved.endpoints[0]?.multiaddr}`);
-
       const { BrowserNodeClient, BrowserNetworkClient } = getBindings();
-      const probe = new BrowserNodeClient(resolved.endpoints[0]);
+      const endpoint = parseBootstrapMultiaddr(bootstrapMultiaddr);
+      report(`Authenticating bootstrap node from ${endpoint.multiaddr}`);
+
+      const probe = new BrowserNodeClient(endpoint);
       let hello: HelloInfo;
       try {
         hello = (await probe.hello()) as HelloInfo;
@@ -98,21 +87,15 @@ export class AutonomiClient {
         probe.close();
         probe.free();
       }
-      const paymentNetwork = paymentFromAuthenticatedHello(hello);
-      if (
-        resolved.expectedPayment &&
-        !samePaymentNetwork(resolved.expectedPayment, paymentNetwork)
-      ) {
-        throw new Error("bootstrap node advertises a different payment network than the manifest");
-      }
+      const paymentNetwork = normalizePaymentNetwork(hello.payment);
       hello = { ...hello, payment: paymentNetwork };
-      const network = new BrowserNetworkClient(resolved.endpoints);
+      const endpoints = [endpoint];
+      const network = new BrowserNetworkClient(endpoints);
       const connection: ConnectionInfo = {
-        networkId: resolved.networkId ?? `direct-${hello.peer_id.slice(0, 16)}`,
-        endpoints: resolved.endpoints,
+        bootstrapMultiaddr: endpoint.multiaddr,
         paymentNetwork,
         bootstrap: hello,
-        files: [...resolved.files],
+        files: [],
       };
       report(`Connected to authenticated peer ${hello.peer_id}`);
       return new AutonomiClient(network, connection, options);
@@ -367,70 +350,70 @@ export class AutonomiClient {
   }
 }
 
-async function resolveSource(
-  source: ConnectionSource,
-  options: ClientOptions,
-): Promise<ResolvedSource> {
-  if (source instanceof URL || (typeof source === "string" && !isWebRtcMultiaddr(source))) {
-    const fetchOptions = options.fetch ? { fetch: options.fetch } : {};
-    const manifest = await fetchManifest(source, fetchOptions);
-    return sourceFromManifest(manifest);
+function parseBootstrapMultiaddr(value: string): { multiaddr: string } {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new AutonomiError(
+      "INVALID_SOURCE",
+      "A WebRTC Direct bootstrap multiaddress is required",
+    );
   }
-  if (isManifest(source)) return sourceFromManifest(await parseManifest(source));
+  try {
+    return getBindings().parseWebRtcDirectMultiaddr(value);
+  } catch (error) {
+    throw new AutonomiError(
+      "INVALID_SOURCE",
+      "Invalid WebRTC Direct bootstrap multiaddress",
+      error,
+    );
+  }
+}
 
-  const endpoints = Array.isArray(source) ? source : [source as Endpoint];
-  if (endpoints.length === 0) {
-    throw new AutonomiError("INVALID_SOURCE", "At least one bootstrap endpoint is required");
+function normalizePaymentNetwork(value: unknown): PaymentNetwork {
+  if (typeof value !== "object" || value === null) {
+    throw new TypeError("bootstrap node advertises invalid payment configuration");
   }
-  const parseEndpoint = getBindings().parseWebRtcDirectMultiaddr;
+  const payment = value as Record<string, unknown>;
+  const rpcValue = requiredString(payment.rpc_url, "payment RPC URL");
+  let rpcUrl: URL;
+  try {
+    rpcUrl = new URL(rpcValue);
+  } catch {
+    throw new TypeError("bootstrap node advertises an invalid payment RPC URL");
+  }
+  if (!/^https?:$/u.test(rpcUrl.protocol)) {
+    throw new TypeError("bootstrap node payment RPC URL must use HTTP or HTTPS");
+  }
+  if (rpcUrl.username !== "" || rpcUrl.password !== "") {
+    throw new TypeError("bootstrap node payment RPC URL must not contain credentials");
+  }
   return {
-    endpoints: endpoints.map((endpoint) => ({
-      multiaddr: parseEndpoint(endpoint).multiaddr,
-    })),
-    files: [],
+    rpc_url: rpcUrl.toString(),
+    payment_token_address: normalizeEvmAddress(
+      requiredString(payment.payment_token_address, "payment token address"),
+    ),
+    payment_vault_address: normalizeEvmAddress(
+      requiredString(payment.payment_vault_address, "payment vault address"),
+    ),
   };
 }
 
-function sourceFromManifest(manifest: BrowserManifest): ResolvedSource {
-  return {
-    networkId: manifest.network_id,
-    endpoints: manifest.endpoints,
-    expectedPayment: manifest.payment,
-    files: manifest.files,
-  };
+function requiredString(value: unknown, name: string): string {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new TypeError(`bootstrap node advertises an invalid ${name}`);
+  }
+  return value;
 }
 
-function isManifest(source: ConnectionSource): source is BrowserManifest {
-  return (
-    typeof source === "object" &&
-    source !== null &&
-    !Array.isArray(source) &&
-    "network_id" in source &&
-    "endpoints" in source
-  );
-}
-
-function isWebRtcMultiaddr(value: string): boolean {
-  return value.startsWith("/ip4/") || value.startsWith("/ip6/");
-}
-
-function paymentFromAuthenticatedHello(hello: HelloInfo): PaymentNetwork {
-  const normalized = getBindings().parseBrowserManifest({
-    version: 5,
-    network_id: "authenticated-bootstrap",
-    endpoints: [hello.endpoint],
-    payment: hello.payment,
-    files: [],
-  }) as BrowserManifest;
-  return normalized.payment;
-}
-
-function samePaymentNetwork(left: PaymentNetwork, right: PaymentNetwork): boolean {
-  return (
-    left.rpc_url === right.rpc_url &&
-    left.payment_token_address.toLowerCase() === right.payment_token_address.toLowerCase() &&
-    left.payment_vault_address.toLowerCase() === right.payment_vault_address.toLowerCase()
-  );
+function normalizeEvmAddress(value: string): string {
+  const normalized = value
+    .trim()
+    .replace(/^0x/iu, "")
+    .replaceAll(":", "")
+    .toLowerCase();
+  if (!/^[0-9a-f]{40}$/u.test(normalized)) {
+    throw new TypeError("bootstrap node advertises an invalid payment contract address");
+  }
+  return `0x${normalized}`;
 }
 
 function randomHex(bytes: number): string {

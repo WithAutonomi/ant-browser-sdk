@@ -6,9 +6,9 @@ and adds the browser plumbing an application should not have to rebuild: bootstr
 authenticated node discovery, file staging, payments, downloads, saving, progress,
 and random-access media.
 
-> **Status:** experimental. The direct browser protocol and manifest are currently
-> versioned with the `ant-client` `browser-wasm` implementation. Pin SDK versions
-> while the protocol is being stabilized.
+> **Status:** experimental. The direct browser protocol is currently versioned with
+> the `ant-client` `browser-wasm` implementation. Pin SDK versions while the
+> protocol is being stabilized.
 
 ## Quick start
 
@@ -20,8 +20,10 @@ npm install @autonomi/browser-sdk ethers
 import { AutonomiClient } from "@autonomi/browser-sdk";
 import { createEthersPaymentProvider } from "@autonomi/browser-sdk/ethers";
 
+const bootstrapMultiaddr =
+  "/ip4/203.0.113.10/udp/24000/webrtc-direct/certhash/.../p2p/...";
 const client = await AutonomiClient.connect(
-  "https://network.example/api/browser-manifest.json",
+  bootstrapMultiaddr,
   {
     payment: createEthersPaymentProvider({
       // Useful for a local devnet. In production, use getSigner instead.
@@ -42,21 +44,19 @@ console.log(downloaded.file.name, downloaded.hash, downloaded.blob);
 client.close();
 ```
 
-`connect` initializes WASM, validates untrusted metadata in Rust, opens a pinned
-WebRTC DataChannel, and authenticates the bootstrap node's ML-DSA identity. It
-accepts any of these sources:
+`connect` initializes WASM, validates the multiaddress in Rust, opens a pinned
+WebRTC DataChannel, and authenticates the bootstrap node's ML-DSA identity. Pass
+one complete WebRTC Direct multiaddress:
 
 ```ts
-await AutonomiClient.connect("https://host/browser-manifest.json");
-await AutonomiClient.connect("/ip4/203.0.113.10/udp/24000/webrtc-direct/...");
-await AutonomiClient.connect({ multiaddr: "/ip4/203.0.113.10/udp/24000/...");
-await AutonomiClient.connect(manifestObject);
-await AutonomiClient.connect([firstEndpoint, fallbackEndpoint]);
+await AutonomiClient.connect(
+  "/ip4/203.0.113.10/udp/24000/webrtc-direct/certhash/.../p2p/...",
+);
 ```
 
-A manifest provides optional file names and MIME types. A single direct endpoint
-is enough for address-only downloads: authenticated peers propagate other WebRTC
-Direct addresses during closest-node lookup.
+A single direct endpoint is enough: authenticated peers propagate other WebRTC
+Direct addresses during closest-node lookup. Applications own durable metadata
+about published files and can download using a public DataMap address alone.
 
 ## Upload a `File`
 
@@ -194,14 +194,14 @@ associations and releases WASM and range-cache resources.
   (localhost is accepted for development).
 - Nodes must expose the Autonomi WebRTC Direct listener and complete multiaddresses
   containing `/webrtc-direct/certhash/.../p2p/...`.
-- The manifest host and payment RPC must allow the browser origin through CORS.
+- The payment RPC must allow the browser origin through CORS.
 - Browser uploads currently accept files up to 1 GB. Complete downloads must fit
   in available page memory.
 
-The bootstrap manifest is discovery material, not an identity authority. Every
-node HELLO and storage quote is cryptographically checked, but production endpoint
-publication still needs signed bootstrap records, certificate-rotation recovery,
-relayed WebRTC, and traffic quotas.
+Obtain the bootstrap multiaddress through a trusted deployment channel: it embeds
+the node's certificate pin and peer identity. Every node HELLO and storage quote
+is cryptographically checked, but production endpoint publication still needs
+certificate-rotation recovery, relayed WebRTC, and traffic quotas.
 
 ## Run the included example
 
