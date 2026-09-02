@@ -1,0 +1,153 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { PaymentNetwork, VerifiedStorageQuote } from "../src/types.js";
+
+const mocks = vi.hoisted(() => ({
+  getChainId: vi.fn(),
+  getConnectorClient: vi.fn(),
+  http: vi.fn(),
+  readContract: vi.fn(),
+  waitForTransactionReceipt: vi.fn(),
+  writeContract: vi.fn(),
+}));
+
+vi.mock("@wagmi/core", () => ({
+  getConnectorClient: mocks.getConnectorClient,
+}));
+
+vi.mock("viem", () => ({
+  createPublicClient: () => ({ getChainId: mocks.getChainId }),
+  http: mocks.http,
+  maxUint256: 2n ** 256n - 1n,
+}));
+
+vi.mock("viem/actions", () => ({
+  readContract: mocks.readContract,
+  waitForTransactionReceipt: mocks.waitForTransactionReceipt,
+  writeContract: mocks.writeContract,
+}));
+
+import { createWagmiPaymentProvider } from "../src/wagmi.js";
+
+const walletAddress = `0x${"33".repeat(20)}`;
+const network: PaymentNetwork = {
+  rpc_url: "http://127.0.0.1:8545/",
+  payment_token_address: `0x${"11".repeat(20)}`,
+  payment_vault_address: `0x${"22".repeat(20)}`,
+};
+const quotes: VerifiedStorageQuote[] = [
+  {
+    quote: {},
+    quoteHash: "44".repeat(32),
+    rewardsAddress: `0x${"55".repeat(20)}`,
+    amount: "42",
+  },
+];
+const config = {} as Parameters<typeof createWagmiPaymentProvider>[0]["config"];
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.getChainId.mockResolvedValue(42161);
+  mocks.getConnectorClient.mockResolvedValue({
+    account: { address: walletAddress },
+    chain: { id: 42161 },
+  });
+  mocks.http.mockReturnValue("rpc-transport");
+  mocks.readContract.mockResolvedValue(0n);
+  mocks.writeContract
+    .mockResolvedValueOnce(`0x${"66".repeat(32)}`)
+    .mockResolvedValueOnce(`0x${"77".repeat(32)}`);
+  mocks.waitForTransactionReceipt
+    .mockResolvedValueOnce({
+      status: "success",
+      transactionHash: `0x${"66".repeat(32)}`,
+    })
+    .mockResolvedValueOnce({
+      status: "success",
+      transactionHash: `0x${"77".repeat(32)}`,
+    });
+});
+
+describe("createWagmiPaymentProvider", () => {
+  it("approves and pays verified quotes with the active Wagmi connector", async () => {
+    const report = vi.fn();
+    const payment = createWagmiPaymentProvider({ config, approval: "exact" });
+
+    const receipt = await payment.pay(network, quotes, { report });
+
+    expect(mocks.http).toHaveBeenCalledWith(network.rpc_url);
+    expect(mocks.getConnectorClient).toHaveBeenCalledWith(config);
+    expect(mocks.readContract).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        address: network.payment_token_address,
+        functionName: "allowance",
+        args: [walletAddress, network.payment_vault_address],
+      }),
+    );
+    expect(mocks.writeContract).toHaveBeenNthCalledWith(
+      1,
+      expect.anything(),
+      expect.objectContaining({
+        functionName: "approve",
+        args: [network.payment_vault_address, 42n],
+      }),
+    );
+    expect(mocks.writeContract).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      expect.objectContaining({
+        address: network.payment_vault_address,
+        functionName: "payForQuotes",
+        args: [
+          [
+            {
+              rewardsAddress: quotes[0]!.rewardsAddress,
+              amount: 42n,
+              quoteHash: `0x${quotes[0]!.quoteHash}`,
+            },
+          ],
+        ],
+      }),
+    );
+    expect(receipt).toEqual({
+      transactionHash: `0x${"77".repeat(32)}`,
+      walletAddress,
+      totalAmount: "42",
+    });
+    expect(report).toHaveBeenLastCalledWith(
+      `Payment confirmed in 0x${"77".repeat(32)}`,
+    );
+  });
+
+  it("skips approval when the existing allowance covers the payment", async () => {
+    mocks.readContract.mockResolvedValue(100n);
+    mocks.writeContract.mockReset().mockResolvedValue(`0x${"77".repeat(32)}`);
+    mocks.waitForTransactionReceipt.mockReset().mockResolvedValue({
+      status: "success",
+      transactionHash: `0x${"77".repeat(32)}`,
+    });
+    const payment = createWagmiPaymentProvider({ config });
+
+    await payment.pay(network, quotes, { report: vi.fn() });
+
+    expect(mocks.writeContract).toHaveBeenCalledOnce();
+    expect(mocks.writeContract).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ functionName: "payForQuotes" }),
+    );
+  });
+
+  it("rejects a connected wallet on a different payment chain", async () => {
+    mocks.getConnectorClient.mockResolvedValue({
+      account: { address: walletAddress },
+      chain: { id: 1 },
+    });
+    const payment = createWagmiPaymentProvider({ config });
+
+    await expect(payment.pay(network, quotes, { report: vi.fn() })).rejects.toThrow(
+      "switch to payment chain 42161",
+    );
+    expect(mocks.readContract).not.toHaveBeenCalled();
+    expect(mocks.writeContract).not.toHaveBeenCalled();
+  });
+});

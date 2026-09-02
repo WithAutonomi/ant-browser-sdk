@@ -85,8 +85,8 @@ and retry policy. A payment provider receives only verified quotes.
 
 ## Wallets and payments
 
-The core package has no wallet dependency. Implement `PaymentProvider` for any
-wallet stack, or install the optional Ethers v6 adapter:
+The core package has no wallet dependency. Use one of the optional wallet
+adapters, or implement `PaymentProvider` for another stack. With Ethers v6:
 
 ```ts
 import { BrowserProvider } from "ethers";
@@ -102,7 +102,31 @@ const payment = createEthersPaymentProvider({
 });
 ```
 
-Or supply another adapter:
+For a wallet already connected through Wagmi, install the Wagmi/Viem adapter:
+
+```bash
+npm install @autonomi/browser-sdk @wagmi/core viem
+```
+
+```ts
+import { createWagmiPaymentProvider } from "@autonomi/browser-sdk/wagmi";
+import { config } from "./wagmi-config";
+
+const payment = createWagmiPaymentProvider({
+  config,
+  approval: "exact",
+});
+
+const client = await AutonomiClient.connect(bootstrapMultiaddr, { payment });
+```
+
+The adapter uses the active Wagmi connector directly; it does not convert the
+wallet to Ethers. Before requesting approval or payment, it verifies that the
+wallet is connected to the chain exposed by the authenticated node's payment
+RPC. Applications remain responsible for presenting their preferred chain-switch
+flow when those chains differ.
+
+Or supply a custom adapter:
 
 ```ts
 const payment = {
@@ -120,6 +144,12 @@ const payment = {
 The returned `totalAmount` must be a decimal string exactly matching the sum the
 Rust core calculated. A wallet callback cannot silently underpay or overpay and
 continue the upload.
+
+Complete, type-checked upload examples are included for a connected
+[Ethers wallet](examples/payments/ethers.ts), a connected
+[Wagmi wallet](examples/payments/wagmi.ts), and a
+[private-key wallet](examples/payments/private-key.ts). The private-key form is
+intended only for disposable development wallets in browser applications.
 
 ## Download and save
 
