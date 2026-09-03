@@ -105,15 +105,27 @@ export class MediaBridge {
         "Media streaming requires a secure context (HTTPS; localhost is allowed) with service-worker support",
       );
     }
-    if (this.#workerUrl && (this.#workerUrl !== workerUrl || this.#scope !== scope)) {
+    this.#assertWorkerLocation(workerUrl, scope);
+    const scopeUrl = new URL(scope, location.origin).href;
+    const existing = (await navigator.serviceWorker.getRegistrations()).find(
+      (registration) => registration.scope === scopeUrl,
+    );
+    const newestWorker = existing?.installing ?? existing?.waiting ?? existing?.active;
+    if (newestWorker && newestWorker.scriptURL !== workerUrl) {
       throw new AutonomiError(
         "MEDIA_FAILED",
-        "One client cannot use multiple Autonomi media service-worker locations",
+        `A different service worker is already registered for ${scopeUrl}; ` +
+          "merge the Autonomi media bridge into that worker and pass its URL as serviceWorkerUrl",
       );
     }
+    // Another attach may have selected a location while registrations were loading.
+    this.#assertWorkerLocation(workerUrl, scope);
     this.#workerUrl = workerUrl;
     this.#scope = scope;
-    const registration = await navigator.serviceWorker.register(workerUrl, { scope });
+    const registration =
+      existing && newestWorker
+        ? existing
+        : await navigator.serviceWorker.register(workerUrl, { scope });
     await navigator.serviceWorker.ready;
     if (navigator.serviceWorker.controller?.scriptURL === workerUrl) return;
     if (registration.active?.scriptURL === workerUrl) {
@@ -121,6 +133,15 @@ export class MediaBridge {
       return;
     }
     await waitForController(workerUrl);
+  }
+
+  #assertWorkerLocation(workerUrl: string, scope: string): void {
+    if (this.#workerUrl && (this.#workerUrl !== workerUrl || this.#scope !== scope)) {
+      throw new AutonomiError(
+        "MEDIA_FAILED",
+        "One client cannot use multiple Autonomi media service-worker locations",
+      );
+    }
   }
 }
 

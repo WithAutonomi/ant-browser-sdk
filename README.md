@@ -233,7 +233,9 @@ source.close();
 
 If the application already owns a root-scoped service worker, merge the small
 `autonomi-file-range` handler from the packaged worker into it and pass its URL to
-`createMediaSource`. A site can only have one controlling worker per scope.
+`createMediaSource`. A site can only have one controlling worker per scope. The
+SDK refuses to replace a different worker already registered for the requested
+scope.
 
 ## Error handling and cleanup
 

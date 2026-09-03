@@ -167,7 +167,10 @@ export interface StreamOptions {
 }
 
 export interface MediaOptions extends OperationOptions {
-  /** Must be served from the same origin. Defaults to /autonomi-stream-sw.js. */
+  /**
+   * Must be served from the same origin. Defaults to /autonomi-stream-sw.js.
+   * If the scope already has a worker, integrate the media bridge and pass that worker's URL.
+   */
   serviceWorkerUrl?: string | URL;
   /** Defaults to `/`; change only when both the page and stream URL share a narrower scope. */
   scope?: string;
