@@ -116,13 +116,25 @@ export function createManualPaymentProvider(
       };
       Object.freeze(request);
 
+      const abort = (): void => {
+        if (context.signal) request.cancel(context.signal.reason);
+      };
+      if (context.signal?.aborted) abort();
+      else context.signal?.addEventListener("abort", abort, { once: true });
+
       try {
-        const notified = options.onRequest(request);
-        void Promise.resolve(notified).catch((error: unknown) => request.cancel(error));
+        if (status === "pending") {
+          const notified = options.onRequest(request);
+          void Promise.resolve(notified).catch((error: unknown) => request.cancel(error));
+        }
       } catch (error) {
         request.cancel(error);
       }
-      return uploadPayment;
+      try {
+        return await uploadPayment;
+      } finally {
+        context.signal?.removeEventListener("abort", abort);
+      }
     },
   };
 }

@@ -30,6 +30,7 @@ export type {
   ProgressEvent,
   ProgressListener,
   PublicFile,
+  ReadOptions,
   SaveFileHandle,
   SaveFileWritable,
   SaveOptions,

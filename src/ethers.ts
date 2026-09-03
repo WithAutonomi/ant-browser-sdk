@@ -6,7 +6,9 @@ import {
   Wallet,
   type Signer,
 } from "ethers";
+import { abortable, throwIfAborted } from "./internal/abort.js";
 import type {
+  PaymentContext,
   PaymentNetwork,
   PaymentProvider,
   PaymentReceipt,
@@ -38,53 +40,109 @@ export function createEthersPaymentProvider(
     throw new TypeError("Provide exactly one of privateKey or getSigner");
   }
   const approval = options.approval ?? "unlimited";
+  const privateKeySigners = new Map<string, NonceManager>();
+  let privateKeyPayments: Promise<void> = Promise.resolve();
+
+  const privateKeySigner = (network: PaymentNetwork): NonceManager => {
+    let signer = privateKeySigners.get(network.rpc_url);
+    if (!signer) {
+      signer = new NonceManager(
+        new Wallet(options.privateKey!, new JsonRpcProvider(network.rpc_url)),
+      );
+      privateKeySigners.set(network.rpc_url, signer);
+    }
+    return signer;
+  };
+
+  const serializePrivateKeyPayment = <T>(
+    task: () => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> => {
+    const payment = privateKeyPayments.then(async () => {
+      throwIfAborted(signal);
+      return task();
+    });
+    privateKeyPayments = payment.then(
+      () => undefined,
+      () => undefined,
+    );
+    return abortable(payment, signal);
+  };
 
   return {
     async pay(network, quotes, context): Promise<PaymentReceipt> {
       if (quotes.length === 0) return { totalAmount: "0" };
-      const signer = options.getSigner
-        ? await options.getSigner(network)
-        : new NonceManager(
-            new Wallet(options.privateKey!, new JsonRpcProvider(network.rpc_url)),
-          );
-      const walletAddress = await signer.getAddress();
-      const totalAmount = quotes.reduce(
-        (total, quote) => total + BigInt(quote.amount),
-        0n,
-      );
-      const token = new Contract(network.payment_token_address, TOKEN_ABI, signer);
-      const vault = new Contract(network.payment_vault_address, VAULT_ABI, signer);
-      const allowance = (await token.getFunction("allowance")(
-        walletAddress,
-        network.payment_vault_address,
-      )) as bigint;
-      if (allowance < totalAmount) {
-        context.report(`Approving the payment vault from wallet ${walletAddress}`);
-        const amount = approval === "exact" ? totalAmount : MaxUint256;
-        const transaction = await token.getFunction("approve")(
-          network.payment_vault_address,
-          amount,
+      if (options.getSigner) {
+        throwIfAborted(context.signal);
+        const signer = await abortable(options.getSigner(network), context.signal);
+        return abortable(
+          submitPayment(signer, network, quotes, context, approval),
+          context.signal,
         );
-        const receipt = await transaction.wait();
-        if (!receipt || receipt.status !== 1) {
-          throw new Error("Payment-token approval transaction reverted");
-        }
       }
-
-      const payments = quotePayments(quotes);
-      context.report(`Submitting one payment for ${payments.length} storage quote(s)`);
-      const transaction = await vault.getFunction("payForQuotes")(payments);
-      const receipt = await transaction.wait();
-      if (!receipt || receipt.status !== 1) {
-        throw new Error("Storage payment transaction reverted");
-      }
-      context.report(`Payment confirmed in ${transaction.hash}`);
-      return {
-        transactionHash: transaction.hash,
-        walletAddress,
-        totalAmount: totalAmount.toString(),
-      };
+      return serializePrivateKeyPayment(
+        () => submitPayment(
+          privateKeySigner(network),
+          network,
+          quotes,
+          context,
+          approval,
+        ),
+        context.signal,
+      );
     },
+  };
+}
+
+async function submitPayment(
+  signer: Signer,
+  network: PaymentNetwork,
+  quotes: readonly VerifiedStorageQuote[],
+  context: PaymentContext,
+  approval: "exact" | "unlimited",
+): Promise<PaymentReceipt> {
+  throwIfAborted(context.signal);
+  const walletAddress = await abortable(signer.getAddress(), context.signal);
+  const totalAmount = quotes.reduce(
+    (total, quote) => total + BigInt(quote.amount),
+    0n,
+  );
+  const token = new Contract(network.payment_token_address, TOKEN_ABI, signer);
+  const vault = new Contract(network.payment_vault_address, VAULT_ABI, signer);
+  const allowance = (await abortable(
+    token.getFunction("allowance")(walletAddress, network.payment_vault_address),
+    context.signal,
+  )) as bigint;
+  if (allowance < totalAmount) {
+    throwIfAborted(context.signal);
+    context.report(`Approving the payment vault from wallet ${walletAddress}`);
+    const amount = approval === "exact" ? totalAmount : MaxUint256;
+    // Once a transaction submission starts it cannot be cancelled. Keep this
+    // task queued until its receipt settles so a later private-key payment
+    // cannot race ahead with another signer or provider instance.
+    const transaction = await token.getFunction("approve")(
+      network.payment_vault_address,
+      amount,
+    );
+    const receipt = (await transaction.wait()) as { status: number } | null;
+    if (!receipt || receipt.status !== 1) {
+      throw new Error("Payment-token approval transaction reverted");
+    }
+  }
+
+  throwIfAborted(context.signal);
+  const payments = quotePayments(quotes);
+  context.report(`Submitting one payment for ${payments.length} storage quote(s)`);
+  const transaction = await vault.getFunction("payForQuotes")(payments);
+  const receipt = (await transaction.wait()) as { status: number } | null;
+  if (!receipt || receipt.status !== 1) {
+    throw new Error("Storage payment transaction reverted");
+  }
+  context.report(`Payment confirmed in ${transaction.hash}`);
+  return {
+    transactionHash: transaction.hash,
+    walletAddress,
+    totalAmount: totalAmount.toString(),
   };
 }
 

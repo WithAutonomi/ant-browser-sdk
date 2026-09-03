@@ -82,3 +82,15 @@ export async function deleteStagedRecords(
   }
   await transactionDone(transaction);
 }
+
+/** Remove every record for a session when its worker was terminated mid-stage. */
+export async function deleteStagedSession(sessionId: string): Promise<void> {
+  const database = await uploadDatabase();
+  const transaction = database.transaction(RECORD_STORE, "readwrite");
+  const range = IDBKeyRange.bound(
+    [sessionId, 0],
+    [sessionId, Number.MAX_SAFE_INTEGER],
+  );
+  transaction.objectStore(RECORD_STORE).delete(range);
+  await transactionDone(transaction);
+}

@@ -1,3 +1,4 @@
+import "fake-indexeddb/auto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ManualPaymentRequest } from "../src/manual-payment.js";
 import type {
@@ -24,7 +25,10 @@ const state = vi.hoisted(() => ({
     endpoints: unknown;
     closed: boolean;
     freed: boolean;
+    findClosest: ReturnType<typeof vi.fn>;
+    openPublicFile: ReturnType<typeof vi.fn>;
     uploadPublicFile: ReturnType<typeof vi.fn>;
+    uploadStagedPublicFile: ReturnType<typeof vi.fn>;
     downloadPublicFile: ReturnType<typeof vi.fn>;
   }>,
 }));
@@ -42,7 +46,10 @@ vi.mock("../src/internal/runtime.js", () => {
     endpoints: unknown;
     closed = false;
     freed = false;
+    findClosest = vi.fn(async () => ({ nodes: [], queried: [], failures: [] }));
+    openPublicFile = vi.fn(async () => Promise.reject(new Error("not used")));
     uploadPublicFile = vi.fn();
+    uploadStagedPublicFile = vi.fn(async () => Promise.reject(new Error("not used")));
     downloadPublicFile = vi.fn();
 
     constructor(endpoints: unknown) {
@@ -50,15 +57,6 @@ vi.mock("../src/internal/runtime.js", () => {
       state.networks.push(this);
     }
 
-    async findClosest(): Promise<unknown> {
-      return { nodes: [], queried: [], failures: [] };
-    }
-    async openPublicFile(): Promise<never> {
-      throw new Error("not used");
-    }
-    async uploadStagedPublicFile(): Promise<never> {
-      throw new Error("not used");
-    }
     close(): void {
       this.closed = true;
     }
@@ -132,6 +130,85 @@ describe("AutonomiClient", () => {
       AutonomiClient.connect("https://network.example/browser-manifest.json"),
     ).rejects.toMatchObject({ code: "INVALID_SOURCE" });
     expect(state.networks).toHaveLength(0);
+  });
+
+  it("isolates connection progress listener failures", async () => {
+    const onProgress = vi.fn(() => {
+      throw new Error("broken status UI");
+    });
+
+    const client = await AutonomiClient.connect(endpoint, { onProgress });
+
+    expect(onProgress).toHaveBeenCalled();
+    expect(client.closed).toBe(false);
+    expect(state.networks[0]?.closed).toBe(false);
+    client.close();
+  });
+
+  it("cancels one lookup without closing the client", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    state.networks[0]!.findClosest.mockReturnValue(new Promise(() => undefined));
+    const controller = new AbortController();
+
+    const lookup = client.findClosest(undefined, { signal: controller.signal });
+    controller.abort();
+
+    await expect(lookup).rejects.toMatchObject({ name: "AbortError" });
+    expect(state.networks[0]?.closed).toBe(false);
+    state.networks[0]!.findClosest.mockResolvedValue({
+      nodes: [],
+      queried: [],
+      failures: [],
+    });
+    await expect(client.findClosest("11".repeat(32))).resolves.toMatchObject({
+      nodes: [],
+    });
+    client.close();
+  });
+
+  it("aborts active operations when the client closes", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    state.networks[0]!.findClosest.mockReturnValue(new Promise(() => undefined));
+
+    const lookup = client.findClosest();
+    client.close();
+
+    await expect(lookup).rejects.toMatchObject({ name: "AbortError" });
+    expect(state.networks[0]?.closed).toBe(true);
+    expect(state.networks[0]?.freed).toBe(true);
+  });
+
+  it("forwards custom WASM to staging and terminates its worker on close", async () => {
+    const workers: Array<{
+      postMessage: ReturnType<typeof vi.fn>;
+      terminate: ReturnType<typeof vi.fn>;
+    }> = [];
+    class PendingWorker {
+      postMessage = vi.fn();
+      terminate = vi.fn();
+      constructor() {
+        workers.push(this);
+      }
+      addEventListener(): void {}
+    }
+    vi.stubGlobal("Worker", PendingWorker);
+    const wasm = Uint8Array.of(0, 97, 115, 109).buffer;
+    const payment: PaymentProvider = {
+      pay: vi.fn(async () => ({ totalAmount: "0" })),
+    };
+    const client = await AutonomiClient.connect(endpoint, { payment, wasm });
+
+    const upload = client.upload(new Blob([Uint8Array.of(1, 2, 3)]));
+    await vi.waitFor(() => expect(workers).toHaveLength(1));
+    const posted = workers[0]!.postMessage.mock.calls[0]![0] as {
+      wasm: ArrayBuffer;
+    };
+    expect(new Uint8Array(posted.wasm)).toEqual(new Uint8Array(wasm));
+
+    client.close();
+
+    await expect(upload).rejects.toMatchObject({ name: "AbortError" });
+    expect(workers[0]!.terminate).toHaveBeenCalledOnce();
   });
 
   it("delegates an in-memory upload and exposes only verified quotes to payment", async () => {

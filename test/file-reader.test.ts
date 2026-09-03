@@ -42,4 +42,24 @@ describe("PublicFileReader", () => {
     expect(raw.readRange).not.toHaveBeenCalled();
     reader.close();
   });
+
+  it("cancels an individual pending range read", async () => {
+    const raw = {
+      name: "pending.bin",
+      size: 100,
+      contentType: "application/octet-stream",
+      readRange: vi.fn(() => new Promise<Uint8Array>(() => undefined)),
+      close: vi.fn(),
+      free: vi.fn(),
+    };
+    const reader = new PublicFileReader(raw, "11".repeat(32));
+    const controller = new AbortController();
+
+    const read = reader.read(0, 100, { signal: controller.signal });
+    controller.abort();
+
+    await expect(read).rejects.toMatchObject({ name: "AbortError" });
+    expect(reader.closed).toBe(false);
+    reader.close();
+  });
 });

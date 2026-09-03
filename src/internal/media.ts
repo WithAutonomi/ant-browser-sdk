@@ -1,6 +1,7 @@
 import { AutonomiError, errorMessage } from "../errors.js";
 import type { PublicFileReader } from "../file-reader.js";
 import type { MediaOptions, MediaSource } from "../types.js";
+import { abortable, abortReason, throwIfAborted } from "./abort.js";
 
 interface MediaSession {
   reader: PublicFileReader;
@@ -16,12 +17,14 @@ export class MediaBridge {
   constructor() {}
 
   async attach(reader: PublicFileReader, options: MediaOptions): Promise<MediaSource> {
+    throwIfAborted(options.signal);
     const workerUrl = new URL(
       options.serviceWorkerUrl ?? "/autonomi-stream-sw.js",
       location.href,
     ).href;
     const scope = normalizeScope(options.scope ?? "/");
-    await this.#ensureWorker(workerUrl, scope);
+    await this.#ensureWorker(workerUrl, scope, options.signal);
+    throwIfAborted(options.signal);
     if (!this.#messageListenerAttached) {
       navigator.serviceWorker.addEventListener("message", this.#onMessage);
       this.#messageListenerAttached = true;
@@ -54,7 +57,13 @@ export class MediaBridge {
   }
 
   close(): void {
-    for (const { source } of this.#sessions.values()) source.close();
+    for (const { source } of this.#sessions.values()) {
+      try {
+        source.close();
+      } catch {
+        // Continue releasing the remaining media readers.
+      }
+    }
     this.#sessions.clear();
     if (this.#messageListenerAttached) {
       navigator.serviceWorker.removeEventListener("message", this.#onMessage);
@@ -98,7 +107,11 @@ export class MediaBridge {
     }
   };
 
-  async #ensureWorker(workerUrl: string, scope: string): Promise<void> {
+  async #ensureWorker(
+    workerUrl: string,
+    scope: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
     if (!("serviceWorker" in navigator)) {
       throw new AutonomiError(
         "MEDIA_FAILED",
@@ -107,9 +120,11 @@ export class MediaBridge {
     }
     this.#assertWorkerLocation(workerUrl, scope);
     const scopeUrl = new URL(scope, location.origin).href;
-    const existing = (await navigator.serviceWorker.getRegistrations()).find(
-      (registration) => registration.scope === scopeUrl,
+    const registrations = await abortable(
+      navigator.serviceWorker.getRegistrations(),
+      signal,
     );
+    const existing = registrations.find((registration) => registration.scope === scopeUrl);
     const newestWorker = existing?.installing ?? existing?.waiting ?? existing?.active;
     if (newestWorker && newestWorker.scriptURL !== workerUrl) {
       throw new AutonomiError(
@@ -122,17 +137,21 @@ export class MediaBridge {
     this.#assertWorkerLocation(workerUrl, scope);
     this.#workerUrl = workerUrl;
     this.#scope = scope;
+    throwIfAborted(signal);
     const registration =
       existing && newestWorker
         ? existing
-        : await navigator.serviceWorker.register(workerUrl, { scope });
-    await navigator.serviceWorker.ready;
+        : await abortable(
+            navigator.serviceWorker.register(workerUrl, { scope }),
+            signal,
+          );
+    await abortable(navigator.serviceWorker.ready, signal);
     if (navigator.serviceWorker.controller?.scriptURL === workerUrl) return;
     if (registration.active?.scriptURL === workerUrl) {
-      await waitForController(workerUrl);
+      await waitForController(workerUrl, signal);
       return;
     }
-    await waitForController(workerUrl);
+    await waitForController(workerUrl, signal);
   }
 
   #assertWorkerLocation(workerUrl: string, scope: string): void {
@@ -156,10 +175,32 @@ function randomSessionId(): string {
   ).join("");
 }
 
-function waitForController(workerUrl: string): Promise<void> {
+function waitForController(workerUrl: string, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
+    let settled = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const cleanup = (): void => {
+      if (timeout !== undefined) clearTimeout(timeout);
       navigator.serviceWorker.removeEventListener("controllerchange", changed);
+      signal?.removeEventListener("abort", aborted);
+    };
+    const changed = (): void => {
+      if (settled) return;
+      if (navigator.serviceWorker.controller?.scriptURL !== workerUrl) return;
+      settled = true;
+      cleanup();
+      resolve();
+    };
+    const aborted = (): void => {
+      if (settled || !signal) return;
+      settled = true;
+      cleanup();
+      reject(abortReason(signal));
+    };
+    timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
       reject(
         new AutonomiError(
           "MEDIA_FAILED",
@@ -167,13 +208,11 @@ function waitForController(workerUrl: string): Promise<void> {
         ),
       );
     }, 10_000);
-    const changed = (): void => {
-      if (navigator.serviceWorker.controller?.scriptURL !== workerUrl) return;
-      clearTimeout(timeout);
-      navigator.serviceWorker.removeEventListener("controllerchange", changed);
-      resolve();
-    };
     navigator.serviceWorker.addEventListener("controllerchange", changed);
-    changed();
+    if (signal?.aborted) aborted();
+    else {
+      signal?.addEventListener("abort", aborted, { once: true });
+      changed();
+    }
   });
 }

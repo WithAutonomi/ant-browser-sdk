@@ -83,6 +83,27 @@ describe("createManualPaymentProvider", () => {
     expect(walletPayment.pay).not.toHaveBeenCalled();
   });
 
+  it("cancels a paused payment when its upload signal aborts", async () => {
+    let request!: ManualPaymentRequest;
+    const controller = new AbortController();
+    const payment = createManualPaymentProvider({
+      payment: walletPayment,
+      onRequest: (next) => {
+        request = next;
+      },
+    });
+
+    const uploadPayment = payment.pay(network, quotes, {
+      report: vi.fn(),
+      signal: controller.signal,
+    });
+    controller.abort();
+
+    await expect(uploadPayment).rejects.toMatchObject({ name: "AbortError" });
+    expect(request.status).toBe("cancelled");
+    expect(walletPayment.pay).not.toHaveBeenCalled();
+  });
+
   it("fails the paused upload when wallet payment fails", async () => {
     const rejection = new Error("Wallet rejected the transaction");
     walletPayment.pay = vi.fn(async () => Promise.reject(rejection));

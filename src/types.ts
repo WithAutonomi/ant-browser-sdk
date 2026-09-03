@@ -69,6 +69,8 @@ export interface PaymentReceipt {
 
 export interface PaymentContext {
   report(message: string): void;
+  /** Aborts the upload waiting on this payment, when cancellation is supported. */
+  readonly signal?: AbortSignal;
 }
 
 /** Wallet-independent payment boundary used by uploads. */
@@ -107,6 +109,8 @@ export interface ClientOptions {
   onProgress?: ProgressListener;
   /** Override where the bundled WASM module is loaded from. */
   wasm?: WasmSource | Promise<WasmSource>;
+  /** Cancel connection setup. A connected client is unaffected by later aborts. */
+  signal?: AbortSignal;
 }
 
 export interface ConnectionInfo {
@@ -118,6 +122,8 @@ export interface ConnectionInfo {
 
 export interface OperationOptions {
   onProgress?: ProgressListener;
+  /** Cancel only this operation. */
+  signal?: AbortSignal;
 }
 
 export interface UploadOptions extends OperationOptions {
@@ -167,6 +173,8 @@ export interface SaveOptions {
   fileHandle?: SaveFileHandle;
   /** Set false to skip opening the picker; an explicit fileHandle still takes precedence. */
   useFilePicker?: boolean;
+  /** Cancel destination selection or writing. */
+  signal?: AbortSignal;
 }
 
 export interface SaveResult {
@@ -174,7 +182,12 @@ export interface SaveResult {
   name: string;
 }
 
-export interface StreamOptions {
+export interface ReadOptions {
+  /** Cancel only this range read. */
+  signal?: AbortSignal;
+}
+
+export interface StreamOptions extends ReadOptions {
   start?: number;
   end?: number;
   /** Defaults to 1 MiB and cannot exceed the protocol's 4 MiB range limit. */

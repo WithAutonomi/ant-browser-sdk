@@ -1,4 +1,11 @@
-import { deleteStagedRecords, getStagedRecord } from "./record-store.js";
+import {
+  deleteStagedRecords,
+  deleteStagedSession,
+  getStagedRecord,
+} from "./record-store.js";
+import { abortable, abortReason, throwIfAborted } from "./abort.js";
+
+export type WorkerWasmSource = ArrayBuffer | WebAssembly.Module;
 
 interface StagedRecord {
   address: string;
@@ -51,19 +58,39 @@ export async function stageBlob(
   name: string,
   contentType: string,
   report: (message: string) => void,
+  wasm?: WorkerWasmSource,
+  signal?: AbortSignal,
 ): Promise<StagedUpload> {
+  throwIfAborted(signal);
   if (typeof Worker !== "function" || typeof indexedDB !== "object") {
     throw new Error("File uploads require Web Workers and IndexedDB in this browser");
   }
-  await ensureUploadStorage(blob.size);
+  await abortable(ensureUploadStorage(blob.size), signal);
+  throwIfAborted(signal);
   const sessionId = uploadSessionId();
   const worker = new Worker(new URL("../upload-worker.js", import.meta.url), {
     type: "module",
   });
   return new Promise((resolve, reject) => {
-    const finish = <T>(callback: (value: T) => void, value: T): void => {
+    let finished = false;
+    const stop = (): boolean => {
+      if (finished) return false;
+      finished = true;
+      signal?.removeEventListener("abort", cancel);
       worker.terminate();
-      callback(value);
+      return true;
+    };
+    const fail = (error: unknown): void => {
+      if (!stop()) return;
+      void deleteStagedSession(sessionId).then(
+        () => reject(error),
+        () => reject(error),
+      );
+    };
+    const cancel = (): void => {
+      if (finished || !signal) return;
+      const reason = abortReason(signal);
+      fail(reason);
     };
     worker.addEventListener("message", (event: MessageEvent<unknown>) => {
       const message = event.data as
@@ -72,14 +99,23 @@ export async function stageBlob(
         | { type: "error"; message: string };
       if (message?.type === "progress") report(message.message);
       if (message?.type === "complete") {
-        finish(resolve, { sessionId, staged: message.staged });
+        if (stop()) resolve({ sessionId, staged: message.staged });
       }
-      if (message?.type === "error") finish(reject, new Error(message.message));
+      if (message?.type === "error") fail(new Error(message.message));
     });
     worker.addEventListener("error", (event) => {
-      finish(reject, new Error(event.message || "Upload encryption worker failed"));
+      fail(new Error(event.message || "Upload encryption worker failed"));
     });
-    worker.postMessage({ type: "stage-file", blob, name, contentType, sessionId });
+    if (signal?.aborted) {
+      cancel();
+      return;
+    }
+    signal?.addEventListener("abort", cancel, { once: true });
+    try {
+      worker.postMessage({ type: "stage-file", blob, name, contentType, sessionId, wasm });
+    } catch (error) {
+      fail(error);
+    }
   });
 }
 
@@ -88,8 +124,10 @@ export async function loadStagedRecord(
   index: number,
   _address: string,
   expectedSize: number,
+  signal?: AbortSignal,
 ): Promise<Uint8Array> {
-  const content = await getStagedRecord(sessionId, index);
+  throwIfAborted(signal);
+  const content = await abortable(getStagedRecord(sessionId, index), signal);
   if (content.byteLength !== expectedSize) {
     throw new Error(
       `Staged upload record ${index + 1} has ${content.byteLength} bytes, expected ${expectedSize}`,

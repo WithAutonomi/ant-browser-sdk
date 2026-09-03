@@ -1,7 +1,9 @@
 import { AutonomiError, wrapError } from "./errors.js";
+import { abortable, isAbort, throwIfAborted } from "./internal/abort.js";
 import type {
   DownloadResult,
   SaveFileHandle,
+  SaveFileWritable,
   SaveOptions,
   SaveResult,
 } from "./types.js";
@@ -17,14 +19,31 @@ export async function saveDownload(
 ): Promise<SaveResult> {
   const name = options.suggestedName ?? download.file.name;
   try {
+    throwIfAborted(options.signal);
     const handle =
       options.fileHandle ??
-      (options.useFilePicker === false ? undefined : await requestSaveFileHandle(name));
+      (options.useFilePicker === false
+        ? undefined
+        : await requestSaveFileHandle(name, options.signal));
     if (handle) {
-      const writable = await handle.createWritable();
+      throwIfAborted(options.signal);
+      const writable = await abortable(
+        handle.createWritable(),
+        options.signal,
+        undefined,
+        (lateWritable) => quietlyAbortWritable(lateWritable, options.signal?.reason),
+      );
       try {
-        await writable.write(download.blob);
-        await writable.close();
+        await abortable(
+          writable.write(download.blob),
+          options.signal,
+          (reason) => quietlyAbortWritable(writable, reason),
+        );
+        await abortable(
+          writable.close(),
+          options.signal,
+          (reason) => quietlyAbortWritable(writable, reason),
+        );
       } catch (error) {
         try {
           await writable.abort(error);
@@ -51,7 +70,7 @@ export async function saveDownload(
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
     return { method: "download", name };
   } catch (error) {
-    if (hasErrorName(error, "AbortError")) throw error;
+    if (isAbort(error, options.signal)) throw error;
     throw wrapError("SAVE_FAILED", `Could not save ${name}`, error);
   }
 }
@@ -59,17 +78,22 @@ export async function saveDownload(
 /** Request a destination while transient user activation is still available. */
 export async function requestSaveFileHandle(
   suggestedName?: string,
+  signal?: AbortSignal,
 ): Promise<SaveFileHandle | undefined> {
+  throwIfAborted(signal);
   if (typeof window === "undefined") return undefined;
   const browserWindow = window as SaveFilePickerWindow;
   if (!browserWindow.showSaveFilePicker) return undefined;
 
   try {
-    return await browserWindow.showSaveFilePicker(
-      suggestedName === undefined ? {} : { suggestedName },
+    return await abortable(
+      browserWindow.showSaveFilePicker(
+        suggestedName === undefined ? {} : { suggestedName },
+      ),
+      signal,
     );
   } catch (error) {
-    if (hasErrorName(error, "AbortError")) throw error;
+    if (isAbort(error, signal)) throw error;
     // A picker invoked without transient activation cannot open. The ordinary
     // browser download remains usable, so let the caller take that path.
     if (hasErrorName(error, "SecurityError")) return undefined;
@@ -84,4 +108,8 @@ function hasErrorName(error: unknown, name: string): boolean {
     "name" in error &&
     (error as { name?: unknown }).name === name
   );
+}
+
+function quietlyAbortWritable(writable: SaveFileWritable, reason: unknown): void {
+  void writable.abort(reason).catch(() => undefined);
 }

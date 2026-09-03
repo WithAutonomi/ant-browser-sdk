@@ -1,15 +1,13 @@
 import initAntCore, { BrowserFileEncryptor } from "./wasm/ant_core.js";
 import { deleteStagedRecords, putStagedRecord } from "./internal/record-store.js";
 
-const ready = initAntCore();
-
 self.addEventListener("message", async (event) => {
   if (event.data?.type !== "stage-file") return;
-  const { blob, name, contentType, sessionId } = event.data;
+  const { blob, name, contentType, sessionId, wasm } = event.data;
   let storedRecords = 0;
   let encryptor;
   try {
-    await ready;
+    await initAntCore(wasm === undefined ? undefined : { module_or_path: wasm });
     if (typeof FileReaderSync !== "function") {
       throw new Error("This browser cannot read files inside an upload worker");
     }

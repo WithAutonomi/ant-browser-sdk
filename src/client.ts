@@ -1,5 +1,6 @@
 import { AutonomiError, wrapError } from "./errors.js";
 import { PublicFileReader } from "./file-reader.js";
+import { abortable, isAbort, throwIfAborted } from "./internal/abort.js";
 import { getBindings, initializeWasm, type RawNetworkClient } from "./internal/runtime.js";
 import { MediaBridge } from "./internal/media.js";
 import {
@@ -7,6 +8,7 @@ import {
   loadStagedRecord,
   stageBlob,
   type StagedUpload,
+  type WorkerWasmSource,
 } from "./internal/staging.js";
 import { requestSaveFileHandle, saveDownload } from "./save.js";
 import type {
@@ -39,6 +41,11 @@ interface RawDownloadResult {
   dataMapNode: DownloadResult["dataMapNode"];
 }
 
+interface OperationScope {
+  signal: AbortSignal;
+  finish(): void;
+}
+
 /** High-level, stateful browser client for direct Autonomi applications. */
 export class AutonomiClient {
   readonly connection: ConnectionInfo;
@@ -46,17 +53,21 @@ export class AutonomiClient {
   #network: RawNetworkClient;
   #payment: PaymentProvider | undefined;
   #listeners = new Set<ProgressListener>();
+  #operations = new Set<AbortController>();
   #closed = false;
   #media?: MediaBridge;
+  #workerWasm: WorkerWasmSource | undefined;
 
   private constructor(
     network: RawNetworkClient,
     connection: ConnectionInfo,
     options: ClientOptions,
+    workerWasm?: WorkerWasmSource,
   ) {
     this.#network = network;
     this.connection = connection;
     this.#payment = options.payment;
+    this.#workerWasm = workerWasm;
     if (options.onProgress) this.#listeners.add(options.onProgress);
   }
 
@@ -70,11 +81,16 @@ export class AutonomiClient {
     options: ClientOptions = {},
   ): Promise<AutonomiClient> {
     const report = (message: string): void => {
-      options.onProgress?.({ operation: "connect", message });
+      if (options.onProgress) {
+        safelyNotify(options.onProgress, { operation: "connect", message });
+      }
     };
+    let network: RawNetworkClient | undefined;
     try {
+      throwIfAborted(options.signal);
       report("Initializing the Autonomi browser core");
-      await initializeWasm(options.wasm);
+      const workerWasm = await prepareWorkerWasmSource(options.wasm, options.signal);
+      await abortable(initializeWasm(workerWasm), options.signal);
       const { BrowserNodeClient, BrowserNetworkClient } = getBindings();
       const endpoint = parseBootstrapMultiaddr(bootstrapMultiaddr);
       report(`Authenticating bootstrap node from ${endpoint.multiaddr}`);
@@ -82,15 +98,19 @@ export class AutonomiClient {
       const probe = new BrowserNodeClient(endpoint);
       let hello: HelloInfo;
       try {
-        hello = (await probe.hello()) as HelloInfo;
+        hello = (await abortable(probe.hello(), options.signal)) as HelloInfo;
       } finally {
-        probe.close();
-        probe.free();
+        try {
+          probe.close();
+        } finally {
+          probe.free();
+        }
       }
       const paymentNetwork = normalizePaymentNetwork(hello.payment);
       hello = { ...hello, payment: paymentNetwork };
       const endpoints = [endpoint];
-      const network = new BrowserNetworkClient(endpoints);
+      throwIfAborted(options.signal);
+      network = new BrowserNetworkClient(endpoints);
       const connection: ConnectionInfo = {
         bootstrapMultiaddr: endpoint.multiaddr,
         paymentNetwork,
@@ -98,8 +118,11 @@ export class AutonomiClient {
         files: [],
       };
       report(`Connected to authenticated peer ${hello.peer_id}`);
-      return new AutonomiClient(network, connection, options);
+      throwIfAborted(options.signal);
+      return new AutonomiClient(network, connection, options, workerWasm);
     } catch (error) {
+      if (network) closeNetwork(network);
+      if (isAbort(error, options.signal)) throw error;
       throw wrapError("CONNECTION_FAILED", "Could not connect to Autonomi", error);
     }
   }
@@ -128,13 +151,19 @@ export class AutonomiClient {
     target: string = randomHex(32),
     options: OperationOptions = {},
   ): Promise<LookupResult> {
-    this.#assertOpen();
-    const report = this.#reporter("lookup", options.onProgress);
+    const operation = this.#startOperation(options.signal);
+    const report = this.#reporter("lookup", options.onProgress, operation.signal);
     try {
       report(`Finding nodes closest to ${target}`);
-      return (await this.#network.findClosest(target, report)) as LookupResult;
+      return (await abortable(
+        this.#network.findClosest(target, report),
+        operation.signal,
+      )) as LookupResult;
     } catch (error) {
+      if (isAbort(error, operation.signal)) throw error;
       throw wrapError("LOOKUP_FAILED", "Closest-node lookup failed", error);
+    } finally {
+      operation.finish();
     }
   }
 
@@ -156,16 +185,22 @@ export class AutonomiClient {
         "Uploading requires a PaymentProvider; pass one to connect() or upload()",
       );
     }
-    const report = this.#reporter("upload", options.onProgress);
+    const operation = this.#startOperation(options.signal);
+    const report = this.#reporter("upload", options.onProgress, operation.signal);
+    const cleanupReport = this.#reporter("upload", options.onProgress);
     const payForQuotes = async (
       network: unknown,
       quotes: unknown,
     ): Promise<{ transactionHash?: string; totalAmount: string }> => {
       try {
-        const receipt = await payment.pay(
-          network as PaymentNetwork,
-          quotes as VerifiedStorageQuote[],
-          { report },
+        throwIfAborted(operation.signal);
+        const receipt = await abortable(
+          payment.pay(
+            network as PaymentNetwork,
+            quotes as VerifiedStorageQuote[],
+            { report, signal: operation.signal },
+          ),
+          operation.signal,
         );
         if (!/^\d+$/u.test(receipt.totalAmount)) {
           throw new Error("payment provider returned a non-decimal totalAmount");
@@ -174,6 +209,7 @@ export class AutonomiClient {
           ? { transactionHash: receipt.transactionHash, totalAmount: receipt.totalAmount }
           : { totalAmount: receipt.totalAmount };
       } catch (error) {
+        if (isAbort(error, operation.signal)) throw error;
         throw wrapError("PAYMENT_FAILED", "Storage payment failed", error);
       }
     };
@@ -185,49 +221,67 @@ export class AutonomiClient {
         const name = options.name ?? "public-file.bin";
         const contentType = options.contentType ?? "application/octet-stream";
         report(`Self-encrypting ${name}`);
-        result = await this.#network.uploadPublicFile(
-          input,
-          name,
-          contentType,
-          this.connection.paymentNetwork,
-          payForQuotes,
-          report,
+        result = await abortable(
+          this.#network.uploadPublicFile(
+            input,
+            name,
+            contentType,
+            this.connection.paymentNetwork,
+            payForQuotes,
+            report,
+          ),
+          operation.signal,
         );
       } else if (input instanceof Blob) {
         const isFile = typeof File === "function" && input instanceof File;
         const name = options.name ?? (isFile ? input.name : "public-file.bin");
         const contentType =
           options.contentType || input.type || "application/octet-stream";
-        staged = await stageBlob(input, name, contentType, report);
-        result = await this.#network.uploadStagedPublicFile(
-          staged.staged,
-          this.connection.paymentNetwork,
-          (index: unknown, address: unknown, size: unknown) =>
-            loadStagedRecord(
-              staged!.sessionId,
-              Number(index),
-              String(address),
-              Number(size),
-            ),
-          payForQuotes,
+        staged = await stageBlob(
+          input,
+          name,
+          contentType,
           report,
+          this.#workerWasm,
+          operation.signal,
+        );
+        throwIfAborted(operation.signal);
+        result = await abortable(
+          this.#network.uploadStagedPublicFile(
+            staged.staged,
+            this.connection.paymentNetwork,
+            (index: unknown, address: unknown, size: unknown) =>
+              loadStagedRecord(
+                staged!.sessionId,
+                Number(index),
+                String(address),
+                Number(size),
+                operation.signal,
+              ),
+            payForQuotes,
+            report,
+          ),
+          operation.signal,
         );
       } else {
         throw new TypeError("upload input must be a File, Blob, or Uint8Array");
       }
+      throwIfAborted(operation.signal);
       const upload = result as UploadResult;
       this.#rememberFile(upload.file);
       return upload;
     } catch (error) {
+      if (isAbort(error, operation.signal)) throw error;
       throw wrapError("UPLOAD_FAILED", "Public file upload failed", error);
     } finally {
       if (staged) {
         try {
           await clearStagedUpload(staged);
         } catch (error) {
-          report(`Could not clear temporary upload records: ${String(error)}`);
+          cleanupReport(`Could not clear temporary upload records: ${String(error)}`);
         }
       }
+      operation.finish();
     }
   }
 
@@ -244,13 +298,15 @@ export class AutonomiClient {
         "Download concurrency must be an integer from 1 through 6",
       );
     }
-    const report = this.#reporter("download", options.onProgress);
+    const operation = this.#startOperation(options.signal);
+    const report = this.#reporter("download", options.onProgress, operation.signal);
     try {
-      const raw = (await this.#network.downloadPublicFile(
-        file,
-        concurrency,
-        report,
+      throwIfAborted(operation.signal);
+      const raw = (await abortable(
+        this.#network.downloadPublicFile(file, concurrency, report),
+        operation.signal,
       )) as RawDownloadResult;
+      throwIfAborted(operation.signal);
       this.#rememberFile(raw.file);
       const blobBytes = new Uint8Array(raw.content.byteLength);
       blobBytes.set(raw.content);
@@ -264,7 +320,10 @@ export class AutonomiClient {
         dataMapNode: raw.dataMapNode,
       };
     } catch (error) {
+      if (isAbort(error, operation.signal)) throw error;
       throw wrapError("DOWNLOAD_FAILED", "Public file download failed", error);
+    } finally {
+      operation.finish();
     }
   }
 
@@ -273,28 +332,34 @@ export class AutonomiClient {
     file: string | PublicFile,
     options: DownloadOptions & SaveOptions = {},
   ): Promise<{ download: DownloadResult; save: SaveResult }> {
-    this.#assertOpen();
-    const knownFile =
-      typeof file === "string"
-        ? this.files.find(
-            (candidate) => normalizeAddress(candidate.address) === normalizeAddress(file),
-          )
-        : file;
-    const suggestedName =
-      options.suggestedName ?? knownFile?.name;
-    const fileHandle =
-      options.fileHandle ??
-      (options.useFilePicker === false
-        ? undefined
-        : await requestSaveFileHandle(suggestedName));
-    const download = await this.download(file, options);
-    const save = await saveDownload(
-      download,
-      fileHandle
-        ? { ...options, fileHandle }
-        : { ...options, useFilePicker: false },
-    );
-    return { download, save };
+    const operation = this.#startOperation(options.signal);
+    try {
+      const knownFile =
+        typeof file === "string"
+          ? this.files.find(
+              (candidate) => normalizeAddress(candidate.address) === normalizeAddress(file),
+            )
+          : file;
+      const suggestedName = options.suggestedName ?? knownFile?.name;
+      const fileHandle =
+        options.fileHandle ??
+        (options.useFilePicker === false
+          ? undefined
+          : await requestSaveFileHandle(suggestedName, operation.signal));
+      const download = await this.download(file, {
+        ...options,
+        signal: operation.signal,
+      });
+      const save = await saveDownload(
+        download,
+        fileHandle
+          ? { ...options, fileHandle, signal: operation.signal }
+          : { ...options, useFilePicker: false, signal: operation.signal },
+      );
+      return { download, save };
+    } finally {
+      operation.finish();
+    }
   }
 
   /** Open a bounded random-access reader without reconstructing the whole file. */
@@ -302,14 +367,28 @@ export class AutonomiClient {
     file: string | PublicFile,
     options: OperationOptions = {},
   ): Promise<PublicFileReader> {
-    this.#assertOpen();
-    const report = this.#reporter("open-file", options.onProgress);
+    const operation = this.#startOperation(options.signal);
+    const report = this.#reporter("open-file", options.onProgress, operation.signal);
+    let raw: Awaited<ReturnType<RawNetworkClient["openPublicFile"]>> | undefined;
     try {
-      const raw = await this.#network.openPublicFile(file, report);
+      throwIfAborted(operation.signal);
+      raw = await abortable(
+        this.#network.openPublicFile(file, report),
+        operation.signal,
+        undefined,
+        closeReader,
+      );
+      throwIfAborted(operation.signal);
       const address = typeof file === "string" ? normalizeAddress(file) : file.address;
-      return new PublicFileReader(raw, address);
+      const reader = new PublicFileReader(raw, address);
+      raw = undefined;
+      return reader;
     } catch (error) {
+      if (raw) closeReader(raw);
+      if (isAbort(error, operation.signal)) throw error;
       throw wrapError("OPEN_FILE_FAILED", "Could not open the public file", error);
+    } finally {
+      operation.finish();
     }
   }
 
@@ -323,20 +402,34 @@ export class AutonomiClient {
     file: string | PublicFile,
     options: MediaOptions = {},
   ): Promise<MediaSource> {
-    this.#assertOpen();
-    const report = this.#reporter("media", options.onProgress);
-    report("Opening an Autonomi random-access media reader");
-    const reader = await this.openFile(file, {
-      onProgress: (event) => report(event.message),
-    });
+    const operation = this.#startOperation(options.signal);
+    const report = this.#reporter("media", options.onProgress, operation.signal);
+    let reader: PublicFileReader | undefined;
+    let source: MediaSource | undefined;
     try {
+      report("Opening an Autonomi random-access media reader");
+      reader = await this.openFile(file, {
+        onProgress: (event) => report(event.message),
+        signal: operation.signal,
+      });
       this.#media ??= new MediaBridge();
-      const source = await this.#media.attach(reader, options);
+      source = await this.#media.attach(reader, {
+        ...options,
+        signal: operation.signal,
+      });
       report(`Media source ready for ${source.file.name}`);
       return source;
     } catch (error) {
-      reader.close();
+      try {
+        if (source) source.close();
+        else reader?.close();
+      } catch {
+        // Preserve the media setup or cancellation error.
+      }
+      if (isAbort(error, operation.signal)) throw error;
       throw wrapError("MEDIA_FAILED", "Could not create the media source", error);
+    } finally {
+      operation.finish();
     }
   }
 
@@ -344,21 +437,52 @@ export class AutonomiClient {
   close(): void {
     if (this.#closed) return;
     this.#closed = true;
-    this.#media?.close();
-    this.#network.close();
-    this.#network.free();
-    this.#listeners.clear();
+    const reason = new DOMException("The Autonomi client was closed", "AbortError");
+    for (const operation of this.#operations) operation.abort(reason);
+    this.#operations.clear();
+    try {
+      this.#media?.close();
+    } catch {
+      // Continue closing the network if a media reader cleanup failed.
+    } finally {
+      closeNetwork(this.#network);
+      this.#listeners.clear();
+    }
   }
 
   #assertOpen(): void {
     if (this.#closed) throw new AutonomiError("CLIENT_CLOSED", "Autonomi client is closed");
   }
 
-  #reporter(operation: Operation, local?: ProgressListener): (message: string) => void {
+  #reporter(
+    operation: Operation,
+    local?: ProgressListener,
+    signal?: AbortSignal,
+  ): (message: string) => void {
     return (message: string): void => {
+      throwIfAborted(signal);
       const event: ProgressEvent = { operation, message };
       for (const listener of this.#listeners) safelyNotify(listener, event);
       if (local && !this.#listeners.has(local)) safelyNotify(local, event);
+    };
+  }
+
+  #startOperation(externalSignal?: AbortSignal): OperationScope {
+    this.#assertOpen();
+    const controller = new AbortController();
+    const forwardAbort = (): void => controller.abort(externalSignal?.reason);
+    if (externalSignal?.aborted) forwardAbort();
+    else externalSignal?.addEventListener("abort", forwardAbort, { once: true });
+    this.#operations.add(controller);
+    let finished = false;
+    return {
+      signal: controller.signal,
+      finish: () => {
+        if (finished) return;
+        finished = true;
+        externalSignal?.removeEventListener("abort", forwardAbort);
+        this.#operations.delete(controller);
+      },
     };
   }
 
@@ -366,6 +490,84 @@ export class AutonomiClient {
     const index = this.connection.files.findIndex((known) => known.address === file.address);
     if (index === -1) this.connection.files.push(file);
     else this.connection.files[index] = file;
+  }
+}
+
+async function prepareWorkerWasmSource(
+  source: ClientOptions["wasm"],
+  signal?: AbortSignal,
+): Promise<WorkerWasmSource | undefined> {
+  if (source === undefined) return undefined;
+  try {
+    const resolved = await abortable(Promise.resolve(source), signal);
+    throwIfAborted(signal);
+    if (
+      typeof WebAssembly === "object" &&
+      resolved instanceof WebAssembly.Module
+    ) {
+      return resolved;
+    }
+    if (resolved instanceof ArrayBuffer) return resolved.slice(0);
+    if (ArrayBuffer.isView(resolved)) {
+      return new Uint8Array(
+        resolved.buffer,
+        resolved.byteOffset,
+        resolved.byteLength,
+      ).slice().buffer;
+    }
+
+    let response: Response;
+    if (typeof Response === "function" && resolved instanceof Response) {
+      response = resolved;
+    } else {
+      response = await abortable(
+        fetch(
+          resolved as RequestInfo | URL,
+          signal === undefined ? undefined : { signal },
+        ),
+        signal,
+      );
+    }
+    if (!response.ok) {
+      throw new Error(
+        `Could not load the Autonomi WASM override (${response.status} ${response.statusText})`,
+      );
+    }
+    throwIfAborted(signal);
+    return await abortable(response.arrayBuffer(), signal);
+  } catch (error) {
+    if (isAbort(error, signal)) throw error;
+    throw new AutonomiError(
+      "INITIALIZATION_FAILED",
+      "Could not initialize the Autonomi WASM core",
+      error,
+    );
+  }
+}
+
+function closeReader(reader: Awaited<ReturnType<RawNetworkClient["openPublicFile"]>>): void {
+  try {
+    reader.close();
+  } catch {
+    // Best-effort cleanup for a reader that resolved after its operation aborted.
+  }
+  try {
+    reader.free();
+  } catch {
+    // Best-effort cleanup for a reader that resolved after its operation aborted.
+  }
+}
+
+function closeNetwork(network: RawNetworkClient): void {
+  try {
+    network.close();
+  } catch {
+    // Continue releasing the WASM allocation even if transport shutdown failed.
+  }
+  try {
+    network.free();
+  } catch {
+    // Closing is idempotent and best effort.
   }
 }
 
