@@ -1,6 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ManualPaymentRequest } from "../src/manual-payment.js";
-import type { PaymentProvider, PublicFile } from "../src/types.js";
+import type {
+  PaymentProvider,
+  PublicFile,
+  SaveFileHandle,
+} from "../src/types.js";
 
 const state = vi.hoisted(() => ({
   hello: {
@@ -98,6 +102,10 @@ const file: PublicFile = {
 
 beforeEach(() => {
   state.networks.length = 0;
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe("AutonomiClient", () => {
@@ -243,6 +251,156 @@ describe("AutonomiClient", () => {
     expect(result.bytes).toEqual(bytes);
     expect(result.blob.type).toBe("text/plain");
     expect(new Uint8Array(await result.blob.arrayBuffer())).toEqual(bytes);
+    client.close();
+  });
+
+  it("selects a save destination before starting the download", async () => {
+    const events: string[] = [];
+    const writable = {
+      write: vi.fn(async () => undefined),
+      close: vi.fn(async () => undefined),
+      abort: vi.fn(async () => undefined),
+    };
+    const handle: SaveFileHandle = {
+      name: "selected.txt",
+      createWritable: vi.fn(async () => writable),
+    };
+    const showSaveFilePicker = vi.fn(async () => {
+      events.push("picker");
+      return handle;
+    });
+    vi.stubGlobal("window", { showSaveFilePicker });
+
+    const client = await AutonomiClient.connect(endpoint);
+    const bytes = Uint8Array.of(1, 2, 3);
+    state.networks[0]!.downloadPublicFile.mockImplementation(async () => {
+      events.push("download");
+      return {
+        content: bytes,
+        hash: file.blake3,
+        file,
+        dataMapNode: {
+          peer_id: "77".repeat(32),
+          native_addresses: [],
+          reliability: 1,
+        },
+      };
+    });
+
+    const result = await client.downloadAndSave(file);
+
+    expect(events).toEqual(["picker", "download"]);
+    expect(showSaveFilePicker).toHaveBeenCalledWith({ suggestedName: file.name });
+    expect(writable.write).toHaveBeenCalledWith(result.download.blob);
+    expect(writable.close).toHaveBeenCalledOnce();
+    expect(result.save).toEqual({ method: "file-picker", name: "selected.txt" });
+    client.close();
+  });
+
+  it("uses a previously selected file handle without opening the picker", async () => {
+    const writable = {
+      write: vi.fn(async () => undefined),
+      close: vi.fn(async () => undefined),
+      abort: vi.fn(async () => undefined),
+    };
+    const fileHandle: SaveFileHandle = {
+      createWritable: vi.fn(async () => writable),
+    };
+    const showSaveFilePicker = vi.fn();
+    vi.stubGlobal("window", { showSaveFilePicker });
+
+    const client = await AutonomiClient.connect(endpoint);
+    state.networks[0]!.downloadPublicFile.mockResolvedValue({
+      content: Uint8Array.of(1, 2, 3),
+      hash: file.blake3,
+      file,
+      dataMapNode: {
+        peer_id: "77".repeat(32),
+        native_addresses: [],
+        reliability: 1,
+      },
+    });
+
+    const result = await client.downloadAndSave(file.address, { fileHandle });
+
+    expect(showSaveFilePicker).not.toHaveBeenCalled();
+    expect(fileHandle.createWritable).toHaveBeenCalledOnce();
+    expect(result.save).toEqual({ method: "file-picker", name: file.name });
+    client.close();
+  });
+
+  it("falls back to an ordinary download when the picker lacks activation", async () => {
+    const events: string[] = [];
+    const securityError = new Error("User activation is required");
+    securityError.name = "SecurityError";
+    const showSaveFilePicker = vi.fn(async () => {
+      events.push("picker");
+      throw securityError;
+    });
+    vi.stubGlobal("window", { showSaveFilePicker });
+
+    const client = await AutonomiClient.connect(endpoint);
+    state.networks[0]!.downloadPublicFile.mockImplementation(async () => {
+      events.push("download");
+      return {
+        content: Uint8Array.of(1, 2, 3),
+        hash: file.blake3,
+        file,
+        dataMapNode: {
+          peer_id: "77".repeat(32),
+          native_addresses: [],
+          reliability: 1,
+        },
+      };
+    });
+
+    const anchor = {
+      href: "",
+      download: "",
+      hidden: false,
+      click: vi.fn(),
+      remove: vi.fn(),
+    };
+    const append = vi.fn();
+    vi.stubGlobal("document", {
+      createElement: vi.fn(() => anchor),
+      body: { append },
+    });
+    const createObjectURL = vi.fn(() => "blob:download");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", { createObjectURL, revokeObjectURL });
+    vi.stubGlobal(
+      "setTimeout",
+      vi.fn((callback: () => void) => {
+        callback();
+        return 1;
+      }),
+    );
+
+    const result = await client.downloadAndSave(file.address);
+
+    expect(events).toEqual(["picker", "download"]);
+    expect(showSaveFilePicker).toHaveBeenCalledWith({});
+    expect(result.save).toEqual({ method: "download", name: file.name });
+    expect(anchor.click).toHaveBeenCalledOnce();
+    expect(append).toHaveBeenCalledWith(anchor);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:download");
+    client.close();
+  });
+
+  it("does not start downloading when the user cancels the save picker", async () => {
+    const abortError = new Error("The user aborted a request");
+    abortError.name = "AbortError";
+    vi.stubGlobal("window", {
+      showSaveFilePicker: vi.fn(async () => {
+        throw abortError;
+      }),
+    });
+
+    const client = await AutonomiClient.connect(endpoint);
+
+    await expect(client.downloadAndSave(file)).rejects.toBe(abortError);
+    expect(state.networks[0]!.downloadPublicFile).not.toHaveBeenCalled();
     client.close();
   });
 

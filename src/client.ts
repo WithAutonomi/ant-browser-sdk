@@ -8,7 +8,7 @@ import {
   stageBlob,
   type StagedUpload,
 } from "./internal/staging.js";
-import { saveDownload } from "./save.js";
+import { requestSaveFileHandle, saveDownload } from "./save.js";
 import type {
   ClientOptions,
   ConnectionInfo,
@@ -268,13 +268,32 @@ export class AutonomiClient {
     }
   }
 
-  /** Download and immediately open the browser save flow. */
+  /** Choose a destination, then download, verify, and save a public file. */
   async downloadAndSave(
     file: string | PublicFile,
     options: DownloadOptions & SaveOptions = {},
   ): Promise<{ download: DownloadResult; save: SaveResult }> {
+    this.#assertOpen();
+    const knownFile =
+      typeof file === "string"
+        ? this.files.find(
+            (candidate) => normalizeAddress(candidate.address) === normalizeAddress(file),
+          )
+        : file;
+    const suggestedName =
+      options.suggestedName ?? knownFile?.name;
+    const fileHandle =
+      options.fileHandle ??
+      (options.useFilePicker === false
+        ? undefined
+        : await requestSaveFileHandle(suggestedName));
     const download = await this.download(file, options);
-    const save = await saveDownload(download, options);
+    const save = await saveDownload(
+      download,
+      fileHandle
+        ? { ...options, fileHandle }
+        : { ...options, useFilePicker: false },
+    );
     return { download, save };
   }
 

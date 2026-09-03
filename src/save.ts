@@ -1,14 +1,13 @@
 import { AutonomiError, wrapError } from "./errors.js";
-import type { DownloadResult, SaveOptions, SaveResult } from "./types.js";
+import type {
+  DownloadResult,
+  SaveFileHandle,
+  SaveOptions,
+  SaveResult,
+} from "./types.js";
 
 interface SaveFilePickerWindow extends Window {
-  showSaveFilePicker?: (options: { suggestedName: string }) => Promise<{
-    createWritable(): Promise<{
-      write(data: Blob): Promise<void>;
-      close(): Promise<void>;
-      abort(reason?: unknown): Promise<void>;
-    }>;
-  }>;
+  showSaveFilePicker?: (options?: { suggestedName?: string }) => Promise<SaveFileHandle>;
 }
 
 /** Save a completed download through the File System Access API or an anchor fallback. */
@@ -17,13 +16,11 @@ export async function saveDownload(
   options: SaveOptions = {},
 ): Promise<SaveResult> {
   const name = options.suggestedName ?? download.file.name;
-  if (typeof window === "undefined" || typeof document === "undefined") {
-    throw new AutonomiError("SAVE_FAILED", "Saving a file requires a browser document");
-  }
-  const browserWindow = window as SaveFilePickerWindow;
   try {
-    if (options.useFilePicker !== false && browserWindow.showSaveFilePicker) {
-      const handle = await browserWindow.showSaveFilePicker({ suggestedName: name });
+    const handle =
+      options.fileHandle ??
+      (options.useFilePicker === false ? undefined : await requestSaveFileHandle(name));
+    if (handle) {
       const writable = await handle.createWritable();
       try {
         await writable.write(download.blob);
@@ -36,7 +33,11 @@ export async function saveDownload(
         }
         throw error;
       }
-      return { method: "file-picker", name };
+      return { method: "file-picker", name: handle.name ?? name };
+    }
+
+    if (typeof document === "undefined") {
+      throw new AutonomiError("SAVE_FAILED", "Saving a file requires a browser document");
     }
 
     const url = URL.createObjectURL(download.blob);
@@ -50,7 +51,37 @@ export async function saveDownload(
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
     return { method: "download", name };
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    if (hasErrorName(error, "AbortError")) throw error;
     throw wrapError("SAVE_FAILED", `Could not save ${name}`, error);
   }
+}
+
+/** Request a destination while transient user activation is still available. */
+export async function requestSaveFileHandle(
+  suggestedName?: string,
+): Promise<SaveFileHandle | undefined> {
+  if (typeof window === "undefined") return undefined;
+  const browserWindow = window as SaveFilePickerWindow;
+  if (!browserWindow.showSaveFilePicker) return undefined;
+
+  try {
+    return await browserWindow.showSaveFilePicker(
+      suggestedName === undefined ? {} : { suggestedName },
+    );
+  } catch (error) {
+    if (hasErrorName(error, "AbortError")) throw error;
+    // A picker invoked without transient activation cannot open. The ordinary
+    // browser download remains usable, so let the caller take that path.
+    if (hasErrorName(error, "SecurityError")) return undefined;
+    throw wrapError("SAVE_FAILED", "Could not choose a save destination", error);
+  }
+}
+
+function hasErrorName(error: unknown, name: string): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    (error as { name?: unknown }).name === name
+  );
 }

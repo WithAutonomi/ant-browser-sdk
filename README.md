@@ -189,13 +189,22 @@ the reported total and only afterward starts storing records. See the complete
 
 ## Download and save
 
+Call `downloadAndSave()` directly from a user action so the native save picker
+can use that action's transient activation.
+
 ```ts
 const download = await client.download(address, { concurrency: 3 });
 image.src = URL.createObjectURL(download.blob);
 
-// Uses showSaveFilePicker where available, then falls back to an <a download>.
+// Opens showSaveFilePicker before starting the network download.
 await client.downloadAndSave(address);
+
+// A previously selected FileSystemFileHandle skips the picker.
+await client.downloadAndSave(address, { fileHandle });
 ```
+
+Browsers without the picker, and picker `SecurityError` failures, fall back to an
+ordinary `<a download>` flow.
 
 Complete downloads are reconstructed and BLAKE3-verified before being returned.
 They are memory-bound; use a random-access reader for large media or range-based

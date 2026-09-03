@@ -148,9 +148,24 @@ export interface DownloadResult {
   dataMapNode: NetworkNode;
 }
 
+/** Minimal writable surface returned by a browser file-system handle. */
+export interface SaveFileWritable {
+  write(data: Blob): Promise<void>;
+  close(): Promise<void>;
+  abort(reason?: unknown): Promise<void>;
+}
+
+/** A previously selected destination, such as a FileSystemFileHandle. */
+export interface SaveFileHandle {
+  readonly name?: string;
+  createWritable(): Promise<SaveFileWritable>;
+}
+
 export interface SaveOptions {
   suggestedName?: string;
-  /** Set false to always use an ordinary browser download. */
+  /** Skip the picker and write to a destination selected by the application. */
+  fileHandle?: SaveFileHandle;
+  /** Set false to skip opening the picker; an explicit fileHandle still takes precedence. */
   useFilePicker?: boolean;
 }
 
