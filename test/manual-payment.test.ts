@@ -11,8 +11,8 @@ import type {
 
 const network: PaymentNetwork = {
   chainId: 31337,
-  payment_token_address: `0x${"11".repeat(20)}`,
-  payment_vault_address: `0x${"22".repeat(20)}`,
+  paymentTokenAddress: `0x${"11".repeat(20)}`,
+  paymentVaultAddress: `0x${"22".repeat(20)}`,
 };
 const quotes: VerifiedStorageQuote[] = [
   {

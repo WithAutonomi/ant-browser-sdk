@@ -93,8 +93,8 @@ Applications can pin their own payment identity when connecting:
 const client = await AutonomiClient.connect(bootstrapMultiaddr, {
   expectedPaymentNetwork: {
     chainId: applicationChainId,
-    payment_token_address: applicationTokenAddress,
-    payment_vault_address: applicationVaultAddress,
+    paymentTokenAddress: applicationTokenAddress,
+    paymentVaultAddress: applicationVaultAddress,
   },
 });
 ```
@@ -529,6 +529,19 @@ A site can have only one controlling service worker per scope. Media sources
 refuse to replace a different worker already registered for their exact scope.
 They also require a secure context (HTTPS or localhost), and the packaged bridge
 accepts files up to 1,000,000,000 bytes (1 GB).
+
+## Public metadata names
+
+SDK metadata uses camelCase throughout, including `contentType`, `dataMapSize`,
+`dstHash`, `srcHash`, `srcSize`, `peerId`, `nativeAddresses`, `webrtcDirect`,
+`maxChunkSize`, `paymentTokenAddress`, and `paymentVaultAddress`. Readers and
+media sources use the same `contentType` name as `PublicFile`.
+
+Pass SDK `PublicFile` objects or address strings to downloads and readers.
+Snake_case is confined to the private Rust/WASM wire representation; the SDK
+converts at that boundary. `VerifiedStorageQuote.quote` remains an opaque proof
+artifact and is not renamed. Applications persisting metadata from earlier SDK
+versions must migrate the renamed fields before passing it to this API.
 
 ## Errors, progress, and cleanup
 

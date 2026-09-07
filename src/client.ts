@@ -1,3 +1,7 @@
+import {
+  corePublicFile, helloFromCore, lookupFromCore, nodeFromCore, publicFileFromCore,
+  type CoreHelloInfo, type CoreLookupResult, type CoreNetworkNode, type CorePublicFile,
+} from "./internal/protocol.js";
 import { AutonomiError, UploadError, wrapError } from "./errors.js";
 import { createPublicFileReader, type PublicFileReader } from "./file-reader.js";
 import { abortable, isAbort, throwIfAborted } from "./internal/abort.js";
@@ -23,7 +27,6 @@ import type {
   ConnectionInfo,
   DownloadOptions,
   DownloadResult,
-  HelloInfo,
   LookupResult,
   MediaOptions,
   MediaSource,
@@ -47,8 +50,8 @@ import type {
 interface RawDownloadResult {
   content: Uint8Array;
   hash: string;
-  file: PublicFile;
-  dataMapNode: DownloadResult["dataMapNode"];
+  file: CorePublicFile;
+  dataMapNode: CoreNetworkNode;
 }
 
 interface OperationScope {
@@ -115,7 +118,7 @@ export class AutonomiClient {
       report(`Authenticating bootstrap node from ${endpoint.multiaddr}`, { phase: "connecting" });
 
       const probe = new BrowserNodeClient(endpoint);
-      let hello: Omit<HelloInfo, "payment"> & { payment: unknown };
+      let hello: CoreHelloInfo;
       try {
         hello = (await abortable(probe.hello(), options.signal)) as typeof hello;
       } finally {
@@ -128,12 +131,12 @@ export class AutonomiClient {
       const identity = normalizePaymentNetwork(hello.payment);
       const paymentNetwork = {
         chainId: identity.chain_id,
-        payment_token_address: identity.payment_token_address,
-        payment_vault_address: identity.payment_vault_address,
+        paymentTokenAddress: identity.payment_token_address,
+        paymentVaultAddress: identity.payment_vault_address,
       };
       if (expected && (expected.chainId !== paymentNetwork.chainId ||
-          expected.payment_token_address !== paymentNetwork.payment_token_address ||
-          expected.payment_vault_address !== paymentNetwork.payment_vault_address)) {
+          expected.paymentTokenAddress !== paymentNetwork.paymentTokenAddress ||
+          expected.paymentVaultAddress !== paymentNetwork.paymentVaultAddress)) {
         throw new AutonomiError("NETWORK_MISMATCH", "Authenticated payment network does not match expectedPaymentNetwork");
       }
       const endpoints = [endpoint];
@@ -142,7 +145,7 @@ export class AutonomiClient {
       const connection: ConnectionInfo = {
         bootstrapMultiaddr: endpoint.multiaddr,
         paymentNetwork,
-        bootstrap: { ...hello, payment: paymentNetwork },
+        bootstrap: helloFromCore(hello, paymentNetwork),
         files: [],
       };
       report(`Connected to authenticated peer ${hello.peer_id}`, { phase: "complete" });
@@ -203,9 +206,9 @@ export class AutonomiClient {
       const result = (await abortable(
         this.#network.findClosest(target, report),
         operation.signal,
-      )) as LookupResult;
+      )) as CoreLookupResult;
       report("Closest-node lookup complete", { phase: "complete" });
-      return result;
+      return lookupFromCore(result);
     } catch (error) {
       const failure = isAbort(error, operation.signal) ? error : wrapError("LOOKUP_FAILED", "Closest-node lookup failed", error);
       operation.fail(failure);
@@ -358,7 +361,8 @@ export class AutonomiClient {
               state.bytes!, state.name, state.contentType, corePaymentNetwork(state.network), payForQuotes, report,
             );
         state.work = Promise.resolve(raw).then((result) => {
-          state.result = uploadResult(state, result as UploadResult);
+          const rawResult = result as Omit<UploadResult, "file" | "payments"> & { file: CorePublicFile };
+          state.result = uploadResult(state, { ...rawResult, file: publicFileFromCore(rawResult.file) });
           return state.result;
         });
         await abortable(state.work, operation.signal);
@@ -406,11 +410,12 @@ export class AutonomiClient {
       }
       throwIfAborted(operation.signal);
       const raw = (await abortable(
-        this.#network.downloadPublicFile(file, concurrency, report),
+        this.#network.downloadPublicFile(typeof file === "string" ? file : corePublicFile(file), concurrency, report),
         operation.signal,
       )) as RawDownloadResult;
       throwIfAborted(operation.signal);
-      this.#rememberFile(raw.file);
+      const publicFile = publicFileFromCore(raw.file);
+      this.#rememberFile(publicFile);
       report(`Downloaded ${raw.file.name}`, { phase: "complete", completed: raw.content.byteLength, total: raw.content.byteLength, unit: "bytes" });
       const blobBytes = new Uint8Array(raw.content.byteLength);
       blobBytes.set(raw.content);
@@ -420,8 +425,8 @@ export class AutonomiClient {
           type: raw.file.content_type || "application/octet-stream",
         }),
         hash: raw.hash,
-        file: raw.file,
-        dataMapNode: raw.dataMapNode,
+        file: publicFile,
+        dataMapNode: nodeFromCore(raw.dataMapNode),
       };
     } catch (error) {
       const failure = isAbort(error, operation.signal) ? error : wrapError("DOWNLOAD_FAILED", "Public file download failed", error);
@@ -492,7 +497,7 @@ export class AutonomiClient {
       this.#assertOpen();
       throwIfAborted(operation.signal);
       raw = await abortable(
-        this.#network.openPublicFile(file, report),
+        this.#network.openPublicFile(typeof file === "string" ? file : corePublicFile(file), report),
         operation.signal,
         undefined,
         closeReader,
@@ -707,8 +712,8 @@ function normalizeExpectedNetwork(value: PaymentNetwork): PaymentNetwork {
     assertPaymentChainId(value.chainId);
     return {
       chainId: value.chainId,
-      payment_token_address: normalizeEvmAddress(value.payment_token_address),
-      payment_vault_address: normalizeEvmAddress(value.payment_vault_address),
+      paymentTokenAddress: normalizeEvmAddress(value.paymentTokenAddress),
+      paymentVaultAddress: normalizeEvmAddress(value.paymentVaultAddress),
     };
   } catch (error) {
     throw new AutonomiError("INVALID_SOURCE", "expectedPaymentNetwork requires a valid chain ID and both EVM contract addresses", error);

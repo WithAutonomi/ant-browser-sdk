@@ -135,10 +135,10 @@ async function submitPayment(
     (total, quote) => total + BigInt(quote.amount),
     0n,
   );
-  const token = new Contract(network.payment_token_address, TOKEN_ABI, signer);
-  const vault = new Contract(network.payment_vault_address, VAULT_ABI, signer);
+  const token = new Contract(network.paymentTokenAddress, TOKEN_ABI, signer);
+  const vault = new Contract(network.paymentVaultAddress, VAULT_ABI, signer);
   const allowance = (await abortable(
-    token.getFunction("allowance")(walletAddress, network.payment_vault_address),
+    token.getFunction("allowance")(walletAddress, network.paymentVaultAddress),
     context.signal,
   )) as bigint;
   if (allowance < totalAmount) {
@@ -150,7 +150,7 @@ async function submitPayment(
     // task queued until its receipt settles so a later private-key payment
     // cannot race ahead with another signer or provider instance.
     const transaction = await token.getFunction("approve")(
-      network.payment_vault_address,
+      network.paymentVaultAddress,
       amount,
     );
     await confirmedHash(transaction, "Payment-token approval transaction reverted");

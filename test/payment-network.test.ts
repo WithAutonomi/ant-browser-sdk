@@ -5,8 +5,8 @@ import {
 
 const network = Object.freeze({
   chainId: 31337,
-  payment_token_address: `0x${"11".repeat(20)}`,
-  payment_vault_address: `0x${"22".repeat(20)}`,
+  paymentTokenAddress: `0x${"11".repeat(20)}`,
+  paymentVaultAddress: `0x${"22".repeat(20)}`,
 });
 
 it.each([0, 42161, Number.MAX_SAFE_INTEGER])("accepts precise chain ID %s", (chainId) => {
@@ -19,8 +19,8 @@ it("passes only chain identity and contracts to the core and restores the SDK re
   const core = corePaymentNetwork(network);
   expect(core).toEqual({
     chain_id: 31337,
-    payment_token_address: network.payment_token_address,
-    payment_vault_address: network.payment_vault_address,
+    payment_token_address: network.paymentTokenAddress,
+    payment_vault_address: network.paymentVaultAddress,
   });
   expect(core).not.toHaveProperty("rpc_url");
   expect(paymentNetworkFromCore(core, network)).toBe(network);

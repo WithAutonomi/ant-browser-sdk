@@ -25,7 +25,7 @@ connectButton.addEventListener("click", async () => {
     client = await AutonomiClient.connect(bootstrap.value.trim(), {
       onProgress: ({ operation, message }) => write(`[${operation}] ${message}`),
     });
-    connection.value = `Connected to ${client.connection.bootstrap.peer_id.slice(0, 16)}…`;
+    connection.value = `Connected to ${client.connection.bootstrap.peerId.slice(0, 16)}…`;
     uploadButton.disabled = false;
     downloadButton.disabled = false;
     streamButton.disabled = false;

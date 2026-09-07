@@ -30,8 +30,8 @@ import { createWagmiPaymentProvider } from "../src/wagmi.js";
 const walletAddress = `0x${"33".repeat(20)}`;
 const network: PaymentNetwork = {
   chainId: 42161,
-  payment_token_address: `0x${"11".repeat(20)}`,
-  payment_vault_address: `0x${"22".repeat(20)}`,
+  paymentTokenAddress: `0x${"11".repeat(20)}`,
+  paymentVaultAddress: `0x${"22".repeat(20)}`,
 };
 const quotes: VerifiedStorageQuote[] = [
   {
@@ -95,9 +95,9 @@ describe("createWagmiPaymentProvider", () => {
     expect(mocks.readContract).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        address: network.payment_token_address,
+        address: network.paymentTokenAddress,
         functionName: "allowance",
-        args: [walletAddress, network.payment_vault_address],
+        args: [walletAddress, network.paymentVaultAddress],
       }),
     );
     expect(mocks.writeContract).toHaveBeenNthCalledWith(
@@ -105,14 +105,14 @@ describe("createWagmiPaymentProvider", () => {
       expect.anything(),
       expect.objectContaining({
         functionName: "approve",
-        args: [network.payment_vault_address, 42n],
+        args: [network.paymentVaultAddress, 42n],
       }),
     );
     expect(mocks.writeContract).toHaveBeenNthCalledWith(
       2,
       expect.anything(),
       expect.objectContaining({
-        address: network.payment_vault_address,
+        address: network.paymentVaultAddress,
         functionName: "payForQuotes",
         args: [
           [

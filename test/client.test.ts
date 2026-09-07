@@ -88,15 +88,20 @@ import {
 } from "../src/index.js";
 
 const endpoint = "/ip4/127.0.0.1/udp/24000/webrtc-direct/mock";
-const file: PublicFile = {
+const wireFile: import("../src/internal/protocol.js").CorePublicFile = {
   name: "hello.txt",
   address: "33".repeat(32),
   size: 12,
   content_type: "text/plain",
   blake3: "44".repeat(32),
   data_map_size: 100,
-  chunks: [],
+  chunks: [{ index: 0, dst_hash: "55".repeat(32), src_hash: "66".repeat(32), src_size: 12 }],
   replicas: 5,
+};
+const file: PublicFile = {
+  name: "hello.txt", address: "33".repeat(32), size: 12, contentType: "text/plain",
+  blake3: "44".repeat(32), dataMapSize: 100,
+  chunks: [{ index: 0, dstHash: "55".repeat(32), srcHash: "66".repeat(32), srcSize: 12 }], replicas: 5,
 };
 
 beforeEach(() => {
@@ -115,11 +120,11 @@ describe("AutonomiClient", () => {
       onProgress: ({ message }) => progress.push(message),
     });
 
-    expect(client.connection.bootstrap.peer_id).toBe("ab".repeat(32));
+    expect(client.connection.bootstrap.peerId).toBe("ab".repeat(32));
     expect(client.connection.bootstrapMultiaddr).toBe(endpoint);
     expect(client.connection.paymentNetwork).toEqual({
-      chainId: 31337, payment_token_address: state.hello.payment.payment_token_address,
-      payment_vault_address: state.hello.payment.payment_vault_address,
+      chainId: 31337, paymentTokenAddress: state.hello.payment.payment_token_address,
+      paymentVaultAddress: state.hello.payment.payment_vault_address,
     });
     expect(client.connection.bootstrap.payment).toEqual(client.connection.paymentNetwork);
     expect(fetch).not.toHaveBeenCalled();
@@ -248,7 +253,7 @@ describe("AutonomiClient", () => {
           },
         ]);
         return {
-          file,
+          file: wireFile,
           transactionHash: "0xpayment",
           storageCostAtto: "42",
           records: 4,
@@ -302,7 +307,7 @@ describe("AutonomiClient", () => {
         ]);
         continuedAfterPayment = true;
         return {
-          file,
+          file: wireFile,
           transactionHash: "0xpayment",
           storageCostAtto: "42",
           records: 4,
@@ -327,7 +332,7 @@ describe("AutonomiClient", () => {
     state.networks[0]!.downloadPublicFile.mockResolvedValue({
       content: bytes,
       hash: file.blake3,
-      file,
+      file: wireFile,
       dataMapNode: {
         peer_id: "77".repeat(32),
         native_addresses: [],
@@ -366,7 +371,7 @@ describe("AutonomiClient", () => {
       return {
         content: bytes,
         hash: file.blake3,
-        file,
+        file: wireFile,
         dataMapNode: {
           peer_id: "77".repeat(32),
           native_addresses: [],
@@ -401,7 +406,7 @@ describe("AutonomiClient", () => {
     state.networks[0]!.downloadPublicFile.mockResolvedValue({
       content: Uint8Array.of(1, 2, 3),
       hash: file.blake3,
-      file,
+      file: wireFile,
       dataMapNode: {
         peer_id: "77".repeat(32),
         native_addresses: [],
@@ -433,7 +438,7 @@ describe("AutonomiClient", () => {
       return {
         content: Uint8Array.of(1, 2, 3),
         hash: file.blake3,
-        file,
+        file: wireFile,
         dataMapNode: {
           peer_id: "77".repeat(32),
           native_addresses: [],
@@ -529,7 +534,7 @@ describe("connection snapshots", () => {
     expect(Object.isFrozen(before.bootstrap.endpoint)).toBe(true);
     expect(() => Object.assign(before.paymentNetwork, { rpc_url: "https://wrong.example" })).toThrow();
     state.networks[0]!.downloadPublicFile.mockResolvedValue({
-      content: Uint8Array.of(1), hash: file.blake3, file: { ...file },
+      content: Uint8Array.of(1), hash: file.blake3, file: { ...wireFile },
       dataMapNode: { peer_id: "aa".repeat(32), native_addresses: [], reliability: 1 },
     });
     const downloaded = await client.download(file.address);
@@ -552,7 +557,7 @@ describe("structured operation progress", () => {
     state.networks[0]!.uploadPublicFile.mockImplementation(async (_bytes, name, _type, _network, _pay, report) => {
       report("An opaque Rust diagnostic");
       await Promise.resolve();
-      return { file: { ...file, name }, storageCostAtto: "0", records: 1 };
+      return { file: { ...wireFile, name }, storageCostAtto: "0", records: 1 };
     });
     await Promise.all([
       client.upload(Uint8Array.of(1), { name: "first" }),
@@ -584,7 +589,7 @@ const recoveryQuotes = [
   { quote: {}, quoteHash: "55".repeat(32), rewardsAddress: `0x${"66".repeat(20)}`, amount: "40" },
   { quote: {}, quoteHash: "77".repeat(32), rewardsAddress: `0x${"66".repeat(20)}`, amount: "2" },
 ];
-const successfulUpload = { file, transactionHash: "0xpayment", storageCostAtto: "42", records: 4 };
+const successfulUpload = { file: wireFile, transactionHash: "0xpayment", storageCostAtto: "42", records: 4 };
 const recoveryPayment = (): PaymentProvider => ({
   pay: vi.fn<PaymentProvider["pay"]>(async (_network, quotes) => ({
     transactionHash: "0xpayment",
@@ -752,12 +757,12 @@ it("cancels a resume waiting for settlement without claiming or discarding its i
 
 it.each([
   { chainId: 1 },
-  { payment_token_address: `0x${"aa".repeat(20)}` },
-  { payment_vault_address: `0x${"bb".repeat(20)}` },
+  { paymentTokenAddress: `0x${"aa".repeat(20)}` },
+  { paymentVaultAddress: `0x${"bb".repeat(20)}` },
 ])("rejects authenticated metadata outside the application's network policy: %o", async (changed) => {
   const expectedPaymentNetwork = { chainId: state.hello.payment.chain_id,
-    payment_token_address: state.hello.payment.payment_token_address,
-    payment_vault_address: state.hello.payment.payment_vault_address, ...changed };
+    paymentTokenAddress: state.hello.payment.payment_token_address,
+    paymentVaultAddress: state.hello.payment.payment_vault_address, ...changed };
   await expect(AutonomiClient.connect(endpoint, { expectedPaymentNetwork })).rejects.toMatchObject({ code: "NETWORK_MISMATCH" });
   expect(state.networks).toHaveLength(0);
   expect(fetch).not.toHaveBeenCalled();
@@ -765,8 +770,8 @@ it.each([
 
 it("copies the expected identity before setup and connects without an RPC", async () => {
   const expectedPaymentNetwork = { chainId: state.hello.payment.chain_id,
-    payment_token_address: state.hello.payment.payment_token_address.toUpperCase(),
-    payment_vault_address: state.hello.payment.payment_vault_address };
+    paymentTokenAddress: state.hello.payment.payment_token_address.toUpperCase(),
+    paymentVaultAddress: state.hello.payment.payment_vault_address };
   const client = await AutonomiClient.connect(endpoint, { expectedPaymentNetwork,
     onProgress: () => { expectedPaymentNetwork.chainId = 1; },
   });
@@ -826,7 +831,7 @@ describe("terminal operation events", () => {
 
   it("correlates download and save children with one successful parent", async () => {
     const client = await AutonomiClient.connect(endpoint);
-    state.networks[0]!.downloadPublicFile.mockResolvedValue({ content: Uint8Array.of(1), hash: file.blake3, file,
+    state.networks[0]!.downloadPublicFile.mockResolvedValue({ content: Uint8Array.of(1), hash: file.blake3, file: wireFile,
       dataMapNode: { peer_id: "aa".repeat(32), native_addresses: [], reliability: 1 } });
     const events: import("../src/types.js").ProgressEvent[] = [];
     const writable = { write: vi.fn(), close: vi.fn(), abort: vi.fn() };
@@ -865,7 +870,7 @@ describe("terminal operation events", () => {
 
 it("fails the composed operation when saving fails after a successful download", async () => {
   const client = await AutonomiClient.connect(endpoint);
-  state.networks[0]!.downloadPublicFile.mockResolvedValue({ content: Uint8Array.of(1), hash: file.blake3, file,
+  state.networks[0]!.downloadPublicFile.mockResolvedValue({ content: Uint8Array.of(1), hash: file.blake3, file: wireFile,
     dataMapNode: { peer_id: "aa".repeat(32), native_addresses: [], reliability: 1 } });
   const events: import("../src/types.js").ProgressEvent[] = [];
   const error = await client.downloadAndSave(file, { onProgress: (event) => events.push(event),
@@ -877,5 +882,27 @@ it("fails the composed operation when saving fails after a successful download",
   ]);
   expect(terminal[1]).toMatchObject({ error });
   expect(terminal[2]).toMatchObject({ error });
+  client.close();
+});
+
+it("translates public file metadata into the existing wire format for downloads and readers", async () => {
+  const client = await AutonomiClient.connect(endpoint);
+  const raw = state.networks[0]!;
+  const rawNode = { peer_id: "77".repeat(32), native_addresses: ["/native"], reliability: 1, webrtc_direct: { multiaddr: endpoint } };
+  raw.downloadPublicFile.mockResolvedValue({ content: Uint8Array.of(1), hash: file.blake3, file: wireFile, dataMapNode: rawNode });
+  const downloaded = await client.download(file);
+  expect(raw.downloadPublicFile).toHaveBeenCalledWith(wireFile, 3, expect.any(Function));
+  expect(downloaded.file).toEqual(file);
+  expect(downloaded.dataMapNode).toEqual({ peerId: rawNode.peer_id, nativeAddresses: ["/native"], reliability: 1, webrtcDirect: { multiaddr: endpoint } });
+  expect(downloaded.file).not.toHaveProperty("content_type");
+  expect(client.connection.bootstrap).not.toHaveProperty("peer_id");
+  expect(client.connection.bootstrap.maxChunkSize).toBe(state.hello.max_chunk_size);
+  raw.openPublicFile.mockResolvedValue({ size: file.size, name: file.name, contentType: file.contentType,
+    readRange: vi.fn(), close: vi.fn(), free: vi.fn() });
+  const reader = await client.openFile(file);
+  expect(raw.openPublicFile).toHaveBeenCalledWith(wireFile, expect.any(Function));
+  reader.close();
+  raw.findClosest.mockResolvedValue({ nodes: [rawNode], queried: ["peer"], failures: [{ peerId: "failed-peer", message: "timeout" }] } as never);
+  expect(await client.findClosest(file.address)).toEqual({ nodes: [downloaded.dataMapNode], queried: ["peer"], failures: [{ peerId: "failed-peer", message: "timeout" }] });
   client.close();
 });

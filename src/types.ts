@@ -2,15 +2,15 @@
 export interface PaymentNetwork {
   /** Node-advertised EVM chain ID; payment adapters verify their provider uses this chain. */
   readonly chainId: number;
-  readonly payment_token_address: string;
-  readonly payment_vault_address: string;
+  readonly paymentTokenAddress: string;
+  readonly paymentVaultAddress: string;
 }
 
 export interface ChunkInfo {
   readonly index: number;
-  readonly dst_hash: string;
-  readonly src_hash: string;
-  readonly src_size: number;
+  readonly dstHash: string;
+  readonly srcHash: string;
+  readonly srcSize: number;
 }
 
 /** Metadata needed to retrieve and verify a public file. */
@@ -18,9 +18,9 @@ export interface PublicFile {
   readonly name: string;
   readonly address: string;
   readonly size: number;
-  readonly content_type: string;
+  readonly contentType: string;
   readonly blake3: string;
-  readonly data_map_size: number;
+  readonly dataMapSize: number;
   readonly chunks: readonly ChunkInfo[];
   readonly replicas: number;
 }
@@ -28,18 +28,18 @@ export interface PublicFile {
 export interface HelloInfo {
   readonly type: string;
   readonly protocol: string;
-  readonly peer_id: string;
+  readonly peerId: string;
   readonly endpoint: { readonly multiaddr: string };
-  readonly max_chunk_size: number;
+  readonly maxChunkSize: number;
   readonly capabilities: readonly string[];
   readonly payment: PaymentNetwork;
 }
 
 export interface NetworkNode {
-  peer_id: string;
-  native_addresses: string[];
+  peerId: string;
+  nativeAddresses: string[];
   reliability: number;
-  webrtc_direct?: { multiaddr: string };
+  webrtcDirect?: { multiaddr: string };
 }
 
 export interface LookupFailure {
@@ -312,6 +312,6 @@ export interface MediaOptions extends OperationOptions {
 
 export interface MediaSource {
   url: string;
-  file: Pick<PublicFile, "name" | "size" | "content_type" | "address">;
+  file: Pick<PublicFile, "name" | "size" | "contentType" | "address">;
   close(): void;
 }

@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { PaymentProvider, PublicFile } from "../src/types.js";
+import type { PaymentProvider } from "../src/types.js";
 import type { StagedUpload } from "../src/internal/staging.js";
 const mocks = vi.hoisted(() => ({
   staged: undefined as StagedUpload | undefined,
@@ -14,7 +14,7 @@ vi.mock("../src/internal/runtime.js", () => ({
   initializeClientWasm: async () => undefined,
   getBindings: () => ({
     BrowserNodeClient: class {
-      async hello() { return { peer_id: "ab".repeat(32), payment: mocks.network }; }
+      async hello() { return { type: "hello", protocol: "autonomi.web.poc.v5", peer_id: "ab".repeat(32), endpoint: { multiaddr: "/mock" }, max_chunk_size: 4194304, capabilities: [], payment: mocks.network }; }
       close() {} free() {}
     },
     BrowserNetworkClient: class { uploadStagedPublicFile = mocks.upload; close() {} free() {} },
@@ -27,7 +27,7 @@ vi.mock("../src/internal/staging.js", async (original) => ({
 }));
 import { AutonomiClient, UploadError, createPaymentSubmission } from "../src/index.js";
 import { getStagedRecord, putStagedRecord } from "../src/internal/record-store.js";
-const file: PublicFile = {
+const file: import("../src/internal/protocol.js").CorePublicFile = {
   name: "file.bin", address: "aa".repeat(32), size: 3, content_type: "application/octet-stream", blake3: "bb".repeat(32), data_map_size: 1, chunks: [], replicas: 1,
 };
 const quotes = [{ quote: {}, quoteHash: "cc".repeat(32), rewardsAddress: `0x${"dd".repeat(20)}`, amount: "42" }];

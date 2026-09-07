@@ -43,7 +43,7 @@ export class MediaBridge {
         address: reader.address,
         name: reader.name,
         size: reader.size,
-        content_type: reader.contentType,
+        contentType: reader.contentType,
       },
       close: () => {
         if (closed) return;

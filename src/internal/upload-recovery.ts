@@ -246,8 +246,8 @@ export function uploadResult(
 
 function sameNetwork(a: PaymentNetwork, b: PaymentNetwork): boolean {
   return a.chainId === b.chainId &&
-    a.payment_token_address.toLowerCase() === b.payment_token_address.toLowerCase() &&
-    a.payment_vault_address.toLowerCase() === b.payment_vault_address.toLowerCase();
+    a.paymentTokenAddress.toLowerCase() === b.paymentTokenAddress.toLowerCase() &&
+    a.paymentVaultAddress.toLowerCase() === b.paymentVaultAddress.toLowerCase();
 }
 
 function normalizedHash(hash: string): string {

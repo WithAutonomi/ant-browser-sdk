@@ -100,8 +100,8 @@ export function createWagmiPaymentProvider<config extends Config>(
       }
 
       const walletAddress = walletClient.account.address;
-      const tokenAddress = network.payment_token_address as Address;
-      const vaultAddress = network.payment_vault_address as Address;
+      const tokenAddress = network.paymentTokenAddress as Address;
+      const vaultAddress = network.paymentVaultAddress as Address;
       const totalAmount = quotes.reduce(
         (total, quote) => total + BigInt(quote.amount),
         0n,

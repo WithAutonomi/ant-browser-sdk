@@ -1,13 +1,17 @@
 import type { PaymentNetwork } from "../types.js";
 
 /** Public payment identity in the shared node/WASM protocol. */
-export type CorePaymentNetwork = Omit<PaymentNetwork, "chainId"> & { chain_id: number };
+export interface CorePaymentNetwork {
+  chain_id: number;
+  payment_token_address: string;
+  payment_vault_address: string;
+}
 
 export function corePaymentNetwork(network: PaymentNetwork): CorePaymentNetwork {
   return {
     chain_id: network.chainId,
-    payment_token_address: network.payment_token_address,
-    payment_vault_address: network.payment_vault_address,
+    payment_token_address: network.paymentTokenAddress,
+    payment_vault_address: network.paymentVaultAddress,
   };
 }
 
