@@ -557,6 +557,8 @@ explicit resume or discard; closing the client does not discard them.
 - `FileReaderSync` and IndexedDB for staged `File` and `Blob` uploads
 - Autonomi nodes exposing a WebRTC Direct listener and complete multiaddresses
   containing `/webrtc-direct/certhash/.../p2p/...`
+- For uploads, at least seven discoverable initial peers and enough eligible
+  witnesses to support the paid quote; four successful stores complete delivery
 - Enough IndexedDB quota to stage encrypted records for `File` and `Blob` uploads
 - CORS access to the application's payment RPC when the payment adapter queries
   it directly; injected wallets manage their own provider access
@@ -638,6 +640,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution requirements.
 - Rust/WASM owns WebRTC, protocol framing, HELLO authentication, discovery,
   self-encryption, record verification, quote verification, payment planning,
   storage workflows, and range reads.
+- Upload policy follows native `ant-client`: quote and commitment validation,
+  witnessed quote eligibility, upper-median selection with a 3× payment,
+  existing-holder voting, and storage-target ordering. The PUT neighbourhood
+  widens to twenty peers when available, and fallback reuses the paid proof.
+  Payment providers receive the selected verified quotes and amounts from Rust.
 - This package owns initialization, TypeScript types, browser file staging,
   wallet adapters, save flows, media bridging, errors, and lifecycle management.
 - Applications own UI, wallet and chain switching, policy, bootstrap distribution,
