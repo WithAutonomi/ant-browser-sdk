@@ -782,3 +782,100 @@ it("rejects an incomplete network policy before initializing a connection", asyn
   })).rejects.toMatchObject({ code: "INVALID_SOURCE" });
   expect(state.networks).toHaveLength(0);
 });
+
+describe("terminal operation events", () => {
+  it("emits a single failure with the promise's error for early validation", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    for (const run of [
+      (onProgress: import("../src/types.js").ProgressListener) => client.upload(Uint8Array.of(1), { onProgress }),
+      (onProgress: import("../src/types.js").ProgressListener) => client.download(file, { concurrency: 0, onProgress }),
+    ]) {
+      const events: import("../src/types.js").ProgressEvent[] = [];
+      const error = await run((event) => events.push(event)).catch((error: unknown) => error);
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({ status: "failed", error });
+    }
+    client.close();
+    const onProgress = vi.fn();
+    await expect(client.findClosest(file.address, { onProgress })).rejects.toMatchObject({ code: "CLIENT_CLOSED" });
+    expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({ status: "failed", error: expect.objectContaining({ code: "CLIENT_CLOSED" }) }));
+  });
+
+  it("reports cancellation with direct recovery ownership and ignores late diagnostics", async () => {
+    const events: import("../src/types.js").ProgressEvent[] = [];
+    const client = await AutonomiClient.connect(endpoint, { payment: recoveryPayment(), onProgress: (event) => events.push(event) });
+    let rejectWork!: (error: unknown) => void;
+    let diagnostic!: (message: string) => void;
+    state.networks[0]!.uploadPublicFile.mockImplementation((_bytes, _name, _type, _network, _pay, report) => {
+      diagnostic = report;
+      return new Promise((_resolve, reject) => { rejectWork = reject; });
+    });
+    const uploading = client.upload(Uint8Array.of(1));
+    const rejected = expect(uploading).rejects.toMatchObject({ name: "AbortError" });
+    client.close();
+    await rejected;
+    const terminal = events.filter((event) => event.operation === "upload" && event.status !== "running");
+    expect(terminal).toHaveLength(1);
+    const recovery = client.pendingUploads[0]!;
+    expect(terminal[0]).toMatchObject({ status: "cancelled", operationId: recovery.id, recovery });
+    diagnostic("late progress");
+    expect(events.filter((event) => event.message === "late progress")).toEqual([]);
+    rejectWork(new Error("network closed"));
+    await recovery.discard();
+  });
+
+  it("correlates download and save children with one successful parent", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    state.networks[0]!.downloadPublicFile.mockResolvedValue({ content: Uint8Array.of(1), hash: file.blake3, file,
+      dataMapNode: { peer_id: "aa".repeat(32), native_addresses: [], reliability: 1 } });
+    const events: import("../src/types.js").ProgressEvent[] = [];
+    const writable = { write: vi.fn(), close: vi.fn(), abort: vi.fn() };
+    await client.downloadAndSave(file, { parentOperationId: "application-task", onProgress: (event) => events.push(event),
+      fileHandle: { createWritable: async () => writable } });
+    const terminals = events.filter((event) => event.status !== "running");
+    expect(terminals.map((event) => event.operation)).toEqual(["download", "save", "download-and-save"]);
+    expect(terminals.every((event) => event.status === "succeeded")).toBe(true);
+    const parent = terminals[2]!;
+    expect(parent.parentOperationId).toBe("application-task");
+    expect(terminals.slice(0, 2).map((event) => event.parentOperationId)).toEqual([parent.operationId, parent.operationId]);
+    client.close();
+  });
+
+  it("ends both media setup and its open-file child when opening fails", async () => {
+    const events: import("../src/types.js").ProgressEvent[] = [];
+    const onProgress = (event: import("../src/types.js").ProgressEvent) => events.push(event);
+    const client = await AutonomiClient.connect(endpoint, { onProgress });
+    events.length = 0;
+    await expect(client.createMediaSource(file, { onProgress })).rejects.toMatchObject({ code: "OPEN_FILE_FAILED" });
+    const terminal = events.filter((event) => event.status !== "running");
+    expect(terminal.map((event) => event.operation)).toEqual(["open-file", "media"]);
+    expect(terminal[0]!.parentOperationId).toBe(terminal[1]!.operationId);
+    expect(terminal.every((event) => event.status === "failed")).toBe(true);
+    client.close();
+  });
+
+  it("reports a cancelled connection even when its signal was already aborted", async () => {
+    const controller = new AbortController(); controller.abort("stop");
+    const onProgress = vi.fn();
+    await expect(AutonomiClient.connect(endpoint, { onProgress, signal: controller.signal })).rejects.toBe("stop");
+    expect(onProgress).toHaveBeenCalledOnce();
+    expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({ status: "cancelled", error: "stop" }));
+  });
+});
+
+it("fails the composed operation when saving fails after a successful download", async () => {
+  const client = await AutonomiClient.connect(endpoint);
+  state.networks[0]!.downloadPublicFile.mockResolvedValue({ content: Uint8Array.of(1), hash: file.blake3, file,
+    dataMapNode: { peer_id: "aa".repeat(32), native_addresses: [], reliability: 1 } });
+  const events: import("../src/types.js").ProgressEvent[] = [];
+  const error = await client.downloadAndSave(file, { onProgress: (event) => events.push(event),
+    fileHandle: { createWritable: async () => { throw new Error("disk full"); } },
+  }).catch((error: unknown) => error);
+  const terminal = events.filter((event) => event.status !== "running");
+  expect(terminal.map((event) => [event.operation, event.status])).toEqual([
+    ["download", "succeeded"], ["save", "failed"], ["download-and-save", "failed"],
+  ]);
+  expect(terminal[1]).toMatchObject({ error });
+  expect(terminal[2]).toMatchObject({ error });
+  client.close();
+});

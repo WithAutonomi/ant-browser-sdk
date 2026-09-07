@@ -8,7 +8,7 @@ import {
   stageBlob,
   type WorkerWasmSource,
 } from "./internal/staging.js";
-import { operationId, progressReporter, type Reporter } from "./internal/progress.js";
+import { operationId, progressReporter, type Reporter, type OperationOutcome } from "./internal/progress.js";
 import {
   awaitUploadSettlement, claimUpload, paidReceipt, releaseUpload, retainUpload,
   uploadResult, uploadSettlement, recordPayment, reconcilePayments, trackPayment, type RetainedUpload, type TrackedPayment,
@@ -55,6 +55,9 @@ interface OperationScope {
   id: string;
   reporters: Reporter[];
   signal: AbortSignal;
+  parentOperationId?: string;
+  recovery?: UploadRecovery;
+  fail(error: unknown): void;
   finish(): void;
 }
 
@@ -98,7 +101,7 @@ export class AutonomiClient {
   ): Promise<AutonomiClient> {
     const report = progressReporter("connect", operationId(), "initializing", (event) => {
       if (options.onProgress) safelyNotify(options.onProgress, event);
-    }, options.signal);
+    }, options.signal, options.parentOperationId);
     let network: RawNetworkClient | undefined;
     try {
       throwIfAborted(options.signal);
@@ -144,13 +147,14 @@ export class AutonomiClient {
       };
       report(`Connected to authenticated peer ${hello.peer_id}`, { phase: "complete" });
       throwIfAborted(options.signal);
+      const client = new AutonomiClient(network, connection, options, workerWasm);
       report.finish();
-      return new AutonomiClient(network, connection, options, workerWasm);
+      return client;
     } catch (error) {
-      report.finish();
       if (network) closeNetwork(network);
-      if (isAbort(error, options.signal)) throw error;
-      throw wrapError("CONNECTION_FAILED", "Could not connect to Autonomi", error);
+      const failure = isAbort(error, options.signal) ? error : wrapError("CONNECTION_FAILED", "Could not connect to Autonomi", error);
+      report.finish({ status: isAbort(failure, options.signal) ? "cancelled" : "failed", error: failure });
+      throw failure;
     }
   }
 
@@ -191,9 +195,10 @@ export class AutonomiClient {
     target: string = randomHex(32),
     options: OperationOptions = {},
   ): Promise<LookupResult> {
-    const operation = this.#startOperation(options.signal);
+    const operation = this.#startOperation(options);
     const report = this.#reporter("lookup", options.onProgress, operation);
     try {
+      this.#assertOpen();
       report(`Finding nodes closest to ${target}`);
       const result = (await abortable(
         this.#network.findClosest(target, report),
@@ -202,8 +207,9 @@ export class AutonomiClient {
       report("Closest-node lookup complete", { phase: "complete" });
       return result;
     } catch (error) {
-      if (isAbort(error, operation.signal)) throw error;
-      throw wrapError("LOOKUP_FAILED", "Closest-node lookup failed", error);
+      const failure = isAbort(error, operation.signal) ? error : wrapError("LOOKUP_FAILED", "Closest-node lookup failed", error);
+      operation.fail(failure);
+      throw failure;
     } finally {
       operation.finish();
     }
@@ -219,16 +225,16 @@ export class AutonomiClient {
     input: File | Blob | Uint8Array,
     options: UploadOptions = {},
   ): Promise<UploadResult> {
-    this.#assertOpen();
-    const payment = options.payment ?? this.#payment;
-    if (!payment) {
-      throw new AutonomiError(
-        "PAYMENT_REQUIRED", "Uploading requires a PaymentProvider; pass one to connect() or upload()",
-      );
-    }
-    const operation = this.#startOperation(options.signal);
+    const operation = this.#startOperation(options);
     const report = this.#reporter("upload", options.onProgress, operation);
     try {
+      this.#assertOpen();
+      const payment = options.payment ?? this.#payment;
+      if (!payment) {
+        throw new AutonomiError(
+          "PAYMENT_REQUIRED", "Uploading requires a PaymentProvider; pass one to connect() or upload()",
+        );
+      }
       throwIfAborted(operation.signal);
       let retained: RetainedUpload;
       if (input instanceof Uint8Array) {
@@ -252,8 +258,9 @@ export class AutonomiClient {
         retained, payment, false, options.retainOnFailure !== false, operation, report, options.onPaymentSubmitted,
       );
     } catch (error) {
-      if (isAbort(error, operation.signal)) throw error;
-      throw wrapError("UPLOAD_FAILED", "Public file upload failed", error);
+      const failure = isAbort(error, operation.signal) ? error : wrapError("UPLOAD_FAILED", "Public file upload failed", error);
+      operation.fail(failure);
+      throw failure;
     } finally {
       operation.finish();
     }
@@ -264,13 +271,19 @@ export class AutonomiClient {
     recovery: UploadRecovery,
     options: ResumeUploadOptions = {},
   ): Promise<UploadResult> {
-    const operation = this.#startOperation(options.signal);
+    const operation = this.#startOperation(options);
     const report = this.#reporter("upload", options.onProgress, operation);
     try {
-      await abortable(uploadSettlement(recovery), operation.signal);
+      this.#assertOpen();
+      const settled = uploadSettlement(recovery);
+      operation.recovery = recovery;
+      await abortable(settled, operation.signal);
       throwIfAborted(operation.signal);
       const state = claimUpload(recovery, this.#connection.paymentNetwork);
       return await this.#runUpload(state, options.payment, true, true, operation, report, options.onPaymentSubmitted);
+    } catch (error) {
+      operation.fail(error);
+      throw error;
     } finally {
       operation.finish();
     }
@@ -285,6 +298,7 @@ export class AutonomiClient {
     report: Reporter,
     onPaymentSubmitted?: (payment: PendingPayment) => void,
   ): Promise<UploadResult> {
+    operation.recovery = state.handle;
     let paymentFailure: unknown;
     const payForQuotes = async (networkValue: unknown, quoteValue: unknown) => {
       try {
@@ -379,17 +393,17 @@ export class AutonomiClient {
     file: string | PublicFile,
     options: DownloadOptions = {},
   ): Promise<DownloadResult> {
-    this.#assertOpen();
-    const concurrency = options.concurrency ?? 3;
-    if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 6) {
-      throw new AutonomiError(
-        "DOWNLOAD_FAILED",
-        "Download concurrency must be an integer from 1 through 6",
-      );
-    }
-    const operation = this.#startOperation(options.signal);
+    const operation = this.#startOperation(options);
     const report = this.#reporter("download", options.onProgress, operation);
     try {
+      this.#assertOpen();
+      const concurrency = options.concurrency ?? 3;
+      if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 6) {
+        throw new AutonomiError(
+          "DOWNLOAD_FAILED",
+          "Download concurrency must be an integer from 1 through 6",
+        );
+      }
       throwIfAborted(operation.signal);
       const raw = (await abortable(
         this.#network.downloadPublicFile(file, concurrency, report),
@@ -410,8 +424,9 @@ export class AutonomiClient {
         dataMapNode: raw.dataMapNode,
       };
     } catch (error) {
-      if (isAbort(error, operation.signal)) throw error;
-      throw wrapError("DOWNLOAD_FAILED", "Public file download failed", error);
+      const failure = isAbort(error, operation.signal) ? error : wrapError("DOWNLOAD_FAILED", "Public file download failed", error);
+      operation.fail(failure);
+      throw failure;
     } finally {
       operation.finish();
     }
@@ -422,8 +437,11 @@ export class AutonomiClient {
     file: string | PublicFile,
     options: DownloadOptions & SaveOptions = {},
   ): Promise<{ download: DownloadResult; save: SaveResult }> {
-    const operation = this.#startOperation(options.signal);
+    const operation = this.#startOperation(options);
+    const report = this.#reporter("download-and-save", options.onProgress, operation);
     try {
+      this.#assertOpen();
+      report("Choosing a download destination", { phase: "saving" });
       const knownFile =
         typeof file === "string"
           ? this.files.find(
@@ -438,15 +456,25 @@ export class AutonomiClient {
           : await requestSaveFileHandle(suggestedName, operation.signal));
       const download = await this.download(file, {
         ...options,
+        parentOperationId: operation.id,
         signal: operation.signal,
       });
+      report(`Saving ${download.file.name}`, { phase: "saving" });
       const save = await saveDownload(
         download,
-        fileHandle
-          ? { ...options, fileHandle, signal: operation.signal }
-          : { ...options, useFilePicker: false, signal: operation.signal },
+        {
+          ...options,
+          ...(fileHandle ? { fileHandle } : { useFilePicker: false }),
+          parentOperationId: operation.id,
+          onProgress: (event) => this.#notify(options.onProgress, event),
+          signal: operation.signal,
+        },
       );
+      report(`Saved ${download.file.name}`, { phase: "complete" });
       return { download, save };
+    } catch (error) {
+      operation.fail(error);
+      throw error;
     } finally {
       operation.finish();
     }
@@ -457,10 +485,11 @@ export class AutonomiClient {
     file: string | PublicFile,
     options: OperationOptions = {},
   ): Promise<PublicFileReader> {
-    const operation = this.#startOperation(options.signal);
+    const operation = this.#startOperation(options);
     const report = this.#reporter("open-file", options.onProgress, operation);
     let raw: Awaited<ReturnType<RawNetworkClient["openPublicFile"]>> | undefined;
     try {
+      this.#assertOpen();
       throwIfAborted(operation.signal);
       raw = await abortable(
         this.#network.openPublicFile(file, report),
@@ -476,8 +505,9 @@ export class AutonomiClient {
       return reader;
     } catch (error) {
       if (raw) closeReader(raw);
-      if (isAbort(error, operation.signal)) throw error;
-      throw wrapError("OPEN_FILE_FAILED", "Could not open the public file", error);
+      const failure = isAbort(error, operation.signal) ? error : wrapError("OPEN_FILE_FAILED", "Could not open the public file", error);
+      operation.fail(failure);
+      throw failure;
     } finally {
       operation.finish();
     }
@@ -493,14 +523,16 @@ export class AutonomiClient {
     file: string | PublicFile,
     options: MediaOptions = {},
   ): Promise<MediaSource> {
-    const operation = this.#startOperation(options.signal);
+    const operation = this.#startOperation(options);
     const report = this.#reporter("media", options.onProgress, operation);
     let reader: PublicFileReader | undefined;
     let source: MediaSource | undefined;
     try {
+      this.#assertOpen();
       report("Opening an Autonomi random-access media reader");
       reader = await this.openFile(file, {
-        onProgress: (event) => report(event.message),
+        ...(options.onProgress ? { onProgress: options.onProgress } : {}),
+        parentOperationId: operation.id,
         signal: operation.signal,
       });
       this.#media ??= new MediaBridge();
@@ -517,8 +549,9 @@ export class AutonomiClient {
       } catch {
         // Preserve the media setup or cancellation error.
       }
-      if (isAbort(error, operation.signal)) throw error;
-      throw wrapError("MEDIA_FAILED", "Could not create the media source", error);
+      const failure = isAbort(error, operation.signal) ? error : wrapError("MEDIA_FAILED", "Could not create the media source", error);
+      operation.fail(failure);
+      throw failure;
     } finally {
       operation.finish();
     }
@@ -530,14 +563,13 @@ export class AutonomiClient {
     this.#closed = true;
     const reason = new DOMException("The Autonomi client was closed", "AbortError");
     for (const operation of this.#operations) operation.abort(reason);
-    this.#operations.clear();
     try {
       this.#media?.close();
     } catch {
       // Continue closing the network if a media reader cleanup failed.
     } finally {
       closeNetwork(this.#network);
-      this.#listeners.clear();
+      if (this.#operations.size === 0) this.#listeners.clear();
     }
   }
 
@@ -553,37 +585,49 @@ export class AutonomiClient {
   ): Reporter {
     const phases = {
       connect: "connecting", lookup: "lookup", upload: "preparing",
-      download: "downloading", "open-file": "opening", media: "media",
+      download: "downloading", "open-file": "opening", media: "media", "download-and-save": "downloading", save: "saving",
     } as const;
     const report = progressReporter(operation, scope.id, phases[operation], (event) => {
-      for (const listener of this.#listeners) safelyNotify(listener, event);
-      if (local && !this.#listeners.has(local)) safelyNotify(local, event);
-    }, cancellable ? scope.signal : undefined);
+      this.#notify(local, event);
+    }, cancellable ? scope.signal : undefined, scope.parentOperationId);
     scope.reporters.push(report);
     return report;
   }
 
-  #startOperation(externalSignal?: AbortSignal): OperationScope {
-    this.#assertOpen();
+  #notify(local: ProgressListener | undefined, event: ProgressEvent): void {
+    for (const listener of this.#listeners) safelyNotify(listener, event);
+    if (local && !this.#listeners.has(local)) safelyNotify(local, event);
+  }
+
+  #startOperation(options: OperationOptions): OperationScope {
+    const externalSignal = options.signal;
     const controller = new AbortController();
     const forwardAbort = (): void => controller.abort(externalSignal?.reason);
     if (externalSignal?.aborted) forwardAbort();
     else externalSignal?.addEventListener("abort", forwardAbort, { once: true });
     this.#operations.add(controller);
     let finished = false;
+    let outcome: OperationOutcome = { status: "succeeded" };
     const reporters: Reporter[] = [];
-    return {
+    const scope: OperationScope = {
       id: operationId(),
+      ...(options.parentOperationId === undefined ? {} : { parentOperationId: options.parentOperationId }),
       reporters,
       signal: controller.signal,
+      fail: (error) => { outcome = {
+        status: isAbort(error, controller.signal) ? "cancelled" : "failed", error,
+        ...(scope.recovery === undefined ? {} : { recovery: scope.recovery }),
+      }; },
       finish: () => {
         if (finished) return;
         finished = true;
-        reporters.forEach((reporter) => reporter.finish());
+        reporters.forEach((reporter) => reporter.finish(outcome));
         externalSignal?.removeEventListener("abort", forwardAbort);
         this.#operations.delete(controller);
+        if (this.#closed && this.#operations.size === 0) this.#listeners.clear();
       },
     };
+    return scope;
   }
 
   #rememberFile(file: PublicFile): void {

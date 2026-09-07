@@ -1,4 +1,4 @@
-import type { Operation, ProgressDetails, ProgressEvent, ProgressListener, ProgressPhase } from "../types.js";
+import type { Operation, ProgressDetails, ProgressEvent, ProgressListener, ProgressPhase, UploadRecovery } from "../types.js";
 import { throwIfAborted } from "./abort.js";
 
 let sequence = 0;
@@ -7,8 +7,11 @@ export function operationId(): string { return `${prefix}-${++sequence}`; }
 
 export interface Reporter {
   (message: string, details?: ProgressDetails): void;
-  finish(): void;
+  finish(outcome?: OperationOutcome): void;
 }
+
+export type OperationOutcome = { status: "succeeded" } |
+  { status: "failed" | "cancelled"; error: unknown; recovery?: UploadRecovery };
 
 export function progressReporter(
   operation: Operation,
@@ -16,18 +19,29 @@ export function progressReporter(
   phase: ProgressPhase,
   notify: ProgressListener,
   signal?: AbortSignal,
+  parentOperationId?: string,
 ): Reporter {
   let finished = false;
+  let lastMessage = `${operation} started`;
   let current: ProgressDetails = { phase };
+  const emit = (event: ProgressEvent): void => {
+    try { notify(Object.freeze(event)); } catch { /* UI callbacks do not affect operation results. */ }
+  };
+  const identity = { operation, operationId: id, ...(parentOperationId === undefined ? {} : { parentOperationId }) };
   const report: Reporter = (message, details) => {
     if (finished) return;
     throwIfAborted(signal);
     if (details) current = details;
-    const event: ProgressEvent = Object.freeze({ operation, operationId: id, message, ...current });
-    notify(event);
+    lastMessage = message;
+    emit({ ...identity, message, ...current, status: "running" });
     // A listener may synchronously cancel this operation.
     throwIfAborted(signal);
   };
-  report.finish = () => { finished = true; };
+  report.finish = (outcome = { status: "succeeded" }) => {
+    if (finished) return;
+    finished = true;
+    emit({ ...identity, ...current, message: lastMessage,
+      ...(outcome.status === "succeeded" ? { phase: "complete" as const } : {}), ...outcome });
+  };
   return report;
 }

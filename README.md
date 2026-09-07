@@ -208,9 +208,10 @@ confirmed payment across attempts, and `storageCostAtto` is their total.
 `transactionHash` identifies the final storage transaction when one exists; use
 `payments` for the complete history.
 
-Cancellation preserves the signal's original reason, so use
-`client.pendingUploads` to find recoveries after an aborted upload; `recovery.id`
-matches the initial upload's progress `operationId`. A submitted
+Cancellation preserves the signal's original reason. Failed and cancelled upload
+progress events carry their retained `recovery` directly when input was prepared;
+`recovery.id` matches the initial upload's `operationId`. `client.pendingUploads`
+also lists retained uploads. A submitted
 payment can still confirm afterward: `recovery.settled` waits for the previous
 attempt and its payment to settle, and `recovery.payments` then includes its
 receipt. `resumeUpload()` waits for settlement too and rejects concurrent resumes.
@@ -552,13 +553,15 @@ application to treat cancellation separately from a failed save.
 
 Register a client-wide progress listener through `connect()` or
 `client.onProgress()`, and pass `onProgress` to an individual operation when
-needed. Each event has a stable `operationId`, `operation`, `phase`, and human
+needed. Each event has a stable `operationId`, `operation`, `status`, `phase`, and human
 readable `message`. `completed`, `total`, and `unit` (`bytes`, `records`, or
 `quotes`) are present where measured or known. Track concurrent operations by ID:
 
 ```ts
 const unsubscribe = client.onProgress((event) => {
   updateOperation(event.operationId, {
+    status: event.status,
+    parentOperationId: event.parentOperationId,
     phase: event.phase,
     message: event.message,
     completed: event.completed,
@@ -567,6 +570,20 @@ const unsubscribe = client.onProgress((event) => {
   });
 });
 ```
+
+Each operation emits exactly one terminal `status`: `succeeded`, `failed`, or
+`cancelled`. Earlier events have `status: "running"`; a `complete` phase alone is
+not a terminal result. Failure/cancellation events carry the same `error` as the
+rejected promise, plus `recovery` for an upload that retained input. This includes
+cancellation caused by `client.close()` and failures during argument validation.
+Terminal listener callbacks cannot alter a completed result.
+
+`downloadAndSave()` emits its own events and child `download` and `save` events.
+`createMediaSource()` similarly includes an `open-file` child. Children expose
+`parentOperationId`, and the parent succeeds only after all its steps succeed.
+Applications can also supply `parentOperationId` to group SDK calls under their
+own task. Standalone `saveDownload()` accepts `onProgress` too; a successful anchor
+save means the browser download was triggered, not that the user saved it to disk.
 
 Phases identify SDK boundaries: initialization/connection, lookup, preparation,
 staging, approval, payment, upload/download, opening, media, and completion.

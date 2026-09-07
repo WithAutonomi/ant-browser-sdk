@@ -1,5 +1,6 @@
 import { AutonomiError, wrapError } from "./errors.js";
 import { abortable, isAbort, throwIfAborted } from "./internal/abort.js";
+import { operationId, progressReporter } from "./internal/progress.js";
 import type {
   DownloadResult,
   SaveFileHandle,
@@ -18,8 +19,9 @@ export async function saveDownload(
   options: SaveOptions = {},
 ): Promise<SaveResult> {
   const name = options.suggestedName ?? download.file.name;
+  const report = progressReporter("save", operationId(), "saving", (event) => options.onProgress?.(event), options.signal, options.parentOperationId);
   try {
-    throwIfAborted(options.signal);
+    report(`Saving ${name}`);
     const handle =
       options.fileHandle ??
       (options.useFilePicker === false
@@ -70,8 +72,11 @@ export async function saveDownload(
     setTimeout(() => URL.revokeObjectURL(url), 60_000);
     return { method: "download", name };
   } catch (error) {
-    if (isAbort(error, options.signal)) throw error;
-    throw wrapError("SAVE_FAILED", `Could not save ${name}`, error);
+    const failure = isAbort(error, options.signal) ? error : wrapError("SAVE_FAILED", `Could not save ${name}`, error);
+    report.finish({ status: isAbort(failure, options.signal) ? "cancelled" : "failed", error: failure });
+    throw failure;
+  } finally {
+    report.finish();
   }
 }
 

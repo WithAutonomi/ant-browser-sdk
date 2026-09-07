@@ -127,6 +127,8 @@ export type Operation =
   | "lookup"
   | "upload"
   | "download"
+  | "download-and-save"
+  | "save"
   | "open-file"
   | "media";
 
@@ -134,7 +136,7 @@ export type Operation =
 export type ProgressPhase =
   | "initializing" | "connecting" | "lookup" | "preparing" | "staging"
   | "approval" | "payment" | "uploading" | "downloading" | "opening"
-  | "media" | "complete" | "cleanup";
+  | "media" | "saving" | "complete" | "cleanup";
 
 export interface ProgressDetails {
   readonly phase: ProgressPhase;
@@ -144,11 +146,18 @@ export interface ProgressDetails {
   readonly unit?: "bytes" | "records" | "quotes";
 }
 
-export interface ProgressEvent extends ProgressDetails {
+interface ProgressEventBase extends ProgressDetails {
   readonly operationId: string;
+  readonly parentOperationId?: string;
   readonly operation: Operation;
   readonly message: string;
 }
+
+/** Exactly one terminal event follows running events, including for rejected operations. */
+export type ProgressEvent = ProgressEventBase & (
+  | { readonly status: "running" | "succeeded" }
+  | { readonly status: "failed" | "cancelled"; readonly error: unknown; readonly recovery?: UploadRecovery }
+);
 
 export type ProgressListener = (event: ProgressEvent) => void;
 
@@ -164,6 +173,7 @@ export interface ClientOptions {
   /** Reject authenticated metadata unless its chain and both contracts match this identity. */
   expectedPaymentNetwork?: PaymentNetwork;
   onProgress?: ProgressListener;
+  parentOperationId?: string;
   /** First page-wide WASM source. Later explicit sources must match the shared module. */
   wasm?: WasmSource | Promise<WasmSource>;
   /** Cancel connection setup. A connected client is unaffected by later aborts. */
@@ -179,6 +189,8 @@ export interface ConnectionInfo {
 
 export interface OperationOptions {
   onProgress?: ProgressListener;
+  /** Associate this operation with an application operation; composed SDK calls set child IDs automatically. */
+  parentOperationId?: string;
   /** Cancel only this operation. */
   signal?: AbortSignal;
 }
@@ -261,7 +273,7 @@ export interface SaveFileHandle {
   createWritable(): Promise<SaveFileWritable>;
 }
 
-export interface SaveOptions {
+export interface SaveOptions extends OperationOptions {
   suggestedName?: string;
   /** Skip the picker and write to a destination selected by the application. */
   fileHandle?: SaveFileHandle;
