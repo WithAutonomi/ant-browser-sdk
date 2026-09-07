@@ -749,3 +749,36 @@ it("cancels a resume waiting for settlement without claiming or discarding its i
   await recovery.discard();
   client.close();
 });
+
+it.each([
+  { chainId: 1 },
+  { payment_token_address: `0x${"aa".repeat(20)}` },
+  { payment_vault_address: `0x${"bb".repeat(20)}` },
+])("rejects authenticated metadata outside the application's network policy: %o", async (changed) => {
+  const expectedPaymentNetwork = { chainId: state.hello.payment.chain_id,
+    payment_token_address: state.hello.payment.payment_token_address,
+    payment_vault_address: state.hello.payment.payment_vault_address, ...changed };
+  await expect(AutonomiClient.connect(endpoint, { expectedPaymentNetwork })).rejects.toMatchObject({ code: "NETWORK_MISMATCH" });
+  expect(state.networks).toHaveLength(0);
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it("copies the expected identity before setup and connects without an RPC", async () => {
+  const expectedPaymentNetwork = { chainId: state.hello.payment.chain_id,
+    payment_token_address: state.hello.payment.payment_token_address.toUpperCase(),
+    payment_vault_address: state.hello.payment.payment_vault_address };
+  const client = await AutonomiClient.connect(endpoint, { expectedPaymentNetwork,
+    onProgress: () => { expectedPaymentNetwork.chainId = 1; },
+  });
+  expect(client.connection.paymentNetwork.chainId).toBe(31337);
+  expect(fetch).not.toHaveBeenCalled();
+  client.close();
+});
+
+it("rejects an incomplete network policy before initializing a connection", async () => {
+  await expect(AutonomiClient.connect(endpoint, {
+    // @ts-expect-error A pinned network includes both contracts, not only the chain.
+    expectedPaymentNetwork: { chainId: 1 },
+  })).rejects.toMatchObject({ code: "INVALID_SOURCE" });
+  expect(state.networks).toHaveLength(0);
+});

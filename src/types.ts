@@ -161,6 +161,8 @@ export type WasmSource =
 
 export interface ClientOptions {
   payment?: PaymentProvider;
+  /** Reject authenticated metadata unless its chain and both contracts match this identity. */
+  expectedPaymentNetwork?: PaymentNetwork;
   onProgress?: ProgressListener;
   /** First page-wide WASM source. Later explicit sources must match the shared module. */
   wasm?: WasmSource | Promise<WasmSource>;

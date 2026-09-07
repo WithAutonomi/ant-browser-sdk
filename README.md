@@ -87,6 +87,25 @@ integer. Nodes never advertise an RPC URL. Connecting and reading files require
 no EVM RPC access; payment adapters use the application's or wallet's provider
 and verify its chain before approval or payment.
 
+Applications can pin their own payment identity when connecting:
+
+```ts
+const client = await AutonomiClient.connect(bootstrapMultiaddr, {
+  expectedPaymentNetwork: {
+    chainId: applicationChainId,
+    payment_token_address: applicationTokenAddress,
+    payment_vault_address: applicationVaultAddress,
+  },
+});
+```
+
+All three fields must match the authenticated HELLO; contract comparison ignores
+case. A mismatch rejects with `NETWORK_MISMATCH` before creating the network
+client or invoking a payment provider. The policy is copied when `connect()` is
+called. Omitting it accepts the authenticated node's advertised payment identity.
+Authentication establishes who advertised the identity; this optional policy
+establishes which identity the application expects. Neither path needs an EVM RPC.
+
 This SDK uses browser protocol v5 and browser manifest v6. Upgrade the node,
 Rust/WASM client, and SDK together; older protocol versions are rejected.
 

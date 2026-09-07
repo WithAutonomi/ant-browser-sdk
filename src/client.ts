@@ -30,6 +30,7 @@ import type {
   Operation,
   OperationOptions,
   PaymentProvider,
+  PaymentNetwork,
   PendingPayment,
   ProgressEvent,
   ProgressListener,
@@ -101,6 +102,9 @@ export class AutonomiClient {
     let network: RawNetworkClient | undefined;
     try {
       throwIfAborted(options.signal);
+      // Copy policy before asynchronous setup or application callbacks can mutate it.
+      const expected = options.expectedPaymentNetwork === undefined
+        ? undefined : normalizeExpectedNetwork(options.expectedPaymentNetwork);
       report("Initializing the Autonomi browser core");
       const workerWasm = await abortable(initializeClientWasm(options.wasm), options.signal);
       const { BrowserNodeClient, BrowserNetworkClient } = getBindings();
@@ -124,6 +128,11 @@ export class AutonomiClient {
         payment_token_address: identity.payment_token_address,
         payment_vault_address: identity.payment_vault_address,
       };
+      if (expected && (expected.chainId !== paymentNetwork.chainId ||
+          expected.payment_token_address !== paymentNetwork.payment_token_address ||
+          expected.payment_vault_address !== paymentNetwork.payment_vault_address)) {
+        throw new AutonomiError("NETWORK_MISMATCH", "Authenticated payment network does not match expectedPaymentNetwork");
+      }
       const endpoints = [endpoint];
       throwIfAborted(options.signal);
       network = new BrowserNetworkClient(endpoints);
@@ -647,6 +656,19 @@ function normalizePaymentNetwork(value: unknown): CorePaymentNetwork {
       requiredString(payment.payment_vault_address, "payment vault address"),
     ),
   };
+}
+
+function normalizeExpectedNetwork(value: PaymentNetwork): PaymentNetwork {
+  try {
+    assertPaymentChainId(value.chainId);
+    return {
+      chainId: value.chainId,
+      payment_token_address: normalizeEvmAddress(value.payment_token_address),
+      payment_vault_address: normalizeEvmAddress(value.payment_vault_address),
+    };
+  } catch (error) {
+    throw new AutonomiError("INVALID_SOURCE", "expectedPaymentNetwork requires a valid chain ID and both EVM contract addresses", error);
+  }
 }
 
 function requiredString(value: unknown, name: string): string {
