@@ -120,8 +120,10 @@ export function validateReceipt(receipt: PaymentReceipt, quotes: readonly Verifi
   if (!/^\d+$/u.test(receipt.totalAmount) || receipt.totalAmount !== quoteTotal(quotes)) {
     throw new Error("Payment provider returned a totalAmount that does not match the verified quotes");
   }
-  if (quotes.length > 0 && !receipt.transactionHash) {
-    throw new Error("Payment provider returned no transactionHash");
+  if (quotes.length > 0 || receipt.transactionHash !== undefined) {
+    if (typeof receipt.transactionHash !== "string" || receipt.transactionHash.trim() === "") {
+      throw new Error("Payment provider must return a non-empty transactionHash for a paid plan");
+    }
   }
 }
 
@@ -131,9 +133,11 @@ export function paidReceipt(
   network: PaymentNetwork,
   quotes: readonly VerifiedStorageQuote[],
 ): PaymentReceipt | undefined {
+  if (quotes.length === 0) return { totalAmount: "0" };
   for (const payment of state.payments) {
     if (!sameNetwork(payment.network, network)) continue;
     try { validateReceipt(payment.receipt, payment.quotes); } catch { continue; }
+    if (payment.receipt.transactionHash === undefined) continue;
     const paid = new Map(payment.quotes.map((quote) => [normalizedHash(quote.quoteHash), quote]));
     const seen = new Set<string>();
     if (quotes.every((quote) => {

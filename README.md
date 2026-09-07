@@ -313,6 +313,11 @@ const payment: PaymentProvider = {
 };
 ```
 
+`PaymentReceipt` is either a `PaidPaymentReceipt` with a required
+`transactionHash`, or a `NoPaymentReceipt` with `totalAmount: "0"` and no
+transaction hash. Return the latter only for an empty quote list. A nonempty
+plan still requires a transaction hash when its quotes total zero tokens.
+
 `totalAmount` must be a base-10 integer string that exactly matches the sum
 calculated by the Rust core. The upload stops if the provider reports a different
 amount. Providers should observe `context.signal` during pre-submission work and

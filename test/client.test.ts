@@ -195,7 +195,7 @@ describe("AutonomiClient", () => {
     vi.stubGlobal("Worker", PendingWorker);
     const wasm = Uint8Array.of(0, 97, 115, 109).buffer;
     const payment: PaymentProvider = {
-      pay: vi.fn(async () => ({ totalAmount: "0" })),
+      pay: vi.fn<PaymentProvider["pay"]>(async () => ({ totalAmount: "0" })),
     };
     const client = await AutonomiClient.connect(endpoint, { payment, wasm });
 

@@ -60,12 +60,23 @@ export interface VerifiedStorageQuote {
   amount: string;
 }
 
-export interface PaymentReceipt {
-  transactionHash?: string;
+/** A confirmed storage transaction, including transactions paying zero tokens. */
+export interface PaidPaymentReceipt {
+  transactionHash: string;
   walletAddress?: string;
   /** Decimal sum of every quote paid by this transaction. */
   totalAmount: string;
 }
+
+/** No transaction was needed because the payment plan contained no quotes. */
+export interface NoPaymentReceipt {
+  transactionHash?: never;
+  walletAddress?: string;
+  totalAmount: "0";
+}
+
+/** A paid plan requires a transaction hash; only an empty plan may omit it. */
+export type PaymentReceipt = PaidPaymentReceipt | NoPaymentReceipt;
 
 export interface PaymentContext {
   report(message: string, progress?: ProgressDetails): void;
