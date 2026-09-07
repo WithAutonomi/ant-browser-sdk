@@ -1,5 +1,5 @@
 import { AutonomiError, UploadError, wrapError } from "./errors.js";
-import { PublicFileReader } from "./file-reader.js";
+import { createPublicFileReader, type PublicFileReader } from "./file-reader.js";
 import { abortable, isAbort, throwIfAborted } from "./internal/abort.js";
 import { getBindings, initializeClientWasm, type RawNetworkClient } from "./internal/runtime.js";
 import { MediaBridge } from "./internal/media.js";
@@ -449,7 +449,7 @@ export class AutonomiClient {
       );
       throwIfAborted(operation.signal);
       const address = typeof file === "string" ? normalizeAddress(file) : file.address;
-      const reader = new PublicFileReader(raw, address);
+      const reader = createPublicFileReader(raw, address);
       report(`Opened ${reader.name}`, { phase: "complete" });
       raw = undefined;
       return reader;

@@ -6,6 +6,9 @@ import type { ReadOptions, StreamOptions } from "./types.js";
 const MAX_RANGE_BYTES = 4 * 1024 * 1024;
 const DEFAULT_STREAM_CHUNK_BYTES = 1024 * 1024;
 
+/** @internal Only the SDK may wrap a WASM reader. Not exported by the package. */
+export let createPublicFileReader: (raw: RawFileReader, address: string) => PublicFileReader;
+
 /** Bounded random-access reader backed by direct WebRTC record fetches. */
 export class PublicFileReader {
   readonly address: string;
@@ -16,13 +19,16 @@ export class PublicFileReader {
   #raw: RawFileReader;
   #closed = false;
 
-  /** @internal Construct readers with `AutonomiClient.openFile`. */
-  constructor(raw: RawFileReader, address: string) {
+  private constructor(raw: RawFileReader, address: string) {
     this.#raw = raw;
     this.address = address;
     this.name = raw.name;
     this.size = raw.size;
     this.contentType = raw.contentType;
+  }
+
+  static {
+    createPublicFileReader = (raw, address) => new PublicFileReader(raw, address);
   }
 
   get closed(): boolean {

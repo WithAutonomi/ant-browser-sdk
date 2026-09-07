@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { PublicFileReader } from "../src/file-reader.js";
+import { createPublicFileReader, PublicFileReader } from "../src/file-reader.js";
 
 describe("PublicFileReader", () => {
   it("turns bounded range reads into a sequential ReadableStream", async () => {
@@ -14,7 +14,8 @@ describe("PublicFileReader", () => {
       close: vi.fn(),
       free: vi.fn(),
     };
-    const reader = new PublicFileReader(raw, "11".repeat(32));
+    const reader = createPublicFileReader(raw, "11".repeat(32));
+    expect(reader).toBeInstanceOf(PublicFileReader);
     const stream = reader.stream({ start: 2, end: 9, chunkSize: 3 });
     const chunks: number[] = [];
     for await (const chunk of stream) chunks.push(...chunk);
@@ -35,7 +36,7 @@ describe("PublicFileReader", () => {
       close: vi.fn(),
       free: vi.fn(),
     };
-    const reader = new PublicFileReader(raw, "11".repeat(32));
+    const reader = createPublicFileReader(raw, "11".repeat(32));
     await expect(reader.read(0, 4 * 1024 * 1024 + 1)).rejects.toMatchObject({
       code: "OPEN_FILE_FAILED",
     });
@@ -52,7 +53,7 @@ describe("PublicFileReader", () => {
       close: vi.fn(),
       free: vi.fn(),
     };
-    const reader = new PublicFileReader(raw, "11".repeat(32));
+    const reader = createPublicFileReader(raw, "11".repeat(32));
     const controller = new AbortController();
 
     const read = reader.read(0, 100, { signal: controller.signal });

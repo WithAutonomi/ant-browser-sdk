@@ -430,6 +430,10 @@ try {
 }
 ```
 
+Create readers through `client.openFile()`. `PublicFileReader` remains exported
+for type annotations and `instanceof` checks, with a private constructor and no
+WASM reader types in its public declaration.
+
 ## Seekable media
 
 Native `<video>` and `<audio>` seeking requires the packaged service worker.

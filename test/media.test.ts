@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PublicFileReader } from "../src/file-reader.js";
+import { createPublicFileReader, type PublicFileReader } from "../src/file-reader.js";
 import { MediaBridge } from "../src/internal/media.js";
 import type { RawFileReader } from "../src/internal/runtime.js";
 
@@ -147,5 +147,5 @@ function fileReader(): PublicFileReader {
     close: vi.fn(),
     free: vi.fn(),
   };
-  return new PublicFileReader(raw, "ab".repeat(32));
+  return createPublicFileReader(raw, "ab".repeat(32));
 }
