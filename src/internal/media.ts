@@ -79,6 +79,9 @@ export class MediaBridge {
       length?: number;
     };
     if (data?.type !== "autonomi-file-range") return;
+    // Every bridge on this page receives this event. Only the owner may reply
+    // through the shared response port.
+    if (typeof data.sessionId !== "string" || !this.#sessions.has(data.sessionId)) return;
     const port = event.ports[0];
     if (!port) return;
     try {
@@ -95,7 +98,7 @@ export class MediaBridge {
         throw new Error("The service worker requested an invalid file range");
       }
       const session = this.#sessions.get(data.sessionId);
-      if (!session) throw new Error("The requested media session is closed");
+      if (!session) return;
       const bytes = await session.reader.read(start, length);
       const owned =
         bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength

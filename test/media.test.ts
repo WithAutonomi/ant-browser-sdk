@@ -69,6 +69,36 @@ describe("MediaBridge service-worker registration", () => {
 
     expect(container.register).toHaveBeenCalledWith(defaultWorkerUrl, { scope: "/" });
   });
+  it("routes each range only to its owning bridge when clients share a page", async () => {
+    const worker = serviceWorker(defaultWorkerUrl);
+    const sdkRegistration = registration(rootScopeUrl, worker);
+    const container = serviceWorkerContainer({
+      registrations: [sdkRegistration], ready: sdkRegistration, controller: worker,
+    });
+    const listeners = new Set<(event: unknown) => Promise<void>>();
+    vi.mocked(container.addEventListener).mockImplementation((type, listener) => {
+      if (type === "message") listeners.add(listener as unknown as (event: unknown) => Promise<void>);
+    });
+    vi.mocked(container.removeEventListener).mockImplementation((type, listener) => {
+      if (type === "message") listeners.delete(listener as unknown as (event: unknown) => Promise<void>);
+    });
+    stubBrowser(container);
+    const bridges = [new MediaBridge(), new MediaBridge()];
+    const sources = await Promise.all(bridges.map((bridge) => bridge.attach(fileReader(), {})));
+    for (const source of sources) {
+      const postMessage = vi.fn();
+      const sessionId = new URL(source.url).pathname.split("/")[2];
+      await Promise.all([...listeners].map((listener) => listener({
+        data: { type: "autonomi-file-range", sessionId, start: 0, length: 0 },
+        ports: [{ postMessage }],
+      })));
+      expect(postMessage).toHaveBeenCalledOnce();
+      expect(postMessage.mock.calls[0]![0]).toMatchObject({ ok: true });
+    }
+    bridges.forEach((bridge) => bridge.close());
+    expect(listeners.size).toBe(0);
+  });
+
 });
 
 function stubBrowser(container: ServiceWorkerContainer): void {
