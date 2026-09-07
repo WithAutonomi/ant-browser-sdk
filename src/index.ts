@@ -1,4 +1,6 @@
 export { AutonomiClient } from "./client.js";
+export { SDK_LIMITS } from "./limits.js";
+export { getBrowserCapabilities, type BrowserCapabilities, type BrowserFeature, type BrowserOperation, type CapabilitySupport } from "./capabilities.js";
 export { AutonomiError, UploadError, type AutonomiErrorCode } from "./errors.js";
 export { PublicFileReader } from "./file-reader.js";
 export {

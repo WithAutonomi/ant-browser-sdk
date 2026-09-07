@@ -102,6 +102,7 @@ describe("MediaBridge service-worker registration", () => {
 });
 
 function stubBrowser(container: ServiceWorkerContainer): void {
+  vi.stubGlobal("isSecureContext", true);
   vi.stubGlobal("location", {
     href: `${origin}/player`,
     origin,
@@ -149,3 +150,13 @@ function fileReader(): PublicFileReader {
   };
   return createPublicFileReader(raw, "ab".repeat(32));
 }
+
+it("rejects unsupported media sizes before registering a service worker", async () => {
+  const container = { register: vi.fn() } as unknown as ServiceWorkerContainer;
+  stubBrowser(container);
+  const reader = fileReader();
+  Object.defineProperty(reader, "size", { value: 1_000_000_001 });
+  await expect(new MediaBridge().attach(reader, {})).rejects.toMatchObject({ code: "MEDIA_FAILED" });
+  expect(container.register).not.toHaveBeenCalled();
+  reader.close();
+});

@@ -2,9 +2,7 @@ import { AutonomiError, wrapError } from "./errors.js";
 import { abortable, abortReason, isAbort, throwIfAborted } from "./internal/abort.js";
 import type { RawFileReader } from "./internal/runtime.js";
 import type { ReadOptions, StreamOptions } from "./types.js";
-
-const MAX_RANGE_BYTES = 4 * 1024 * 1024;
-const DEFAULT_STREAM_CHUNK_BYTES = 1024 * 1024;
+import { SDK_LIMITS } from "./limits.js";
 
 /** @internal Only the SDK may wrap a WASM reader. Not exported by the package. */
 export let createPublicFileReader: (raw: RawFileReader, address: string) => PublicFileReader;
@@ -46,10 +44,10 @@ export class PublicFileReader {
     if (!Number.isSafeInteger(start) || start < 0) {
       throw new AutonomiError("OPEN_FILE_FAILED", "Range start must be a non-negative integer");
     }
-    if (!Number.isSafeInteger(length) || length < 0 || length > MAX_RANGE_BYTES) {
+    if (!Number.isSafeInteger(length) || length < 0 || length > SDK_LIMITS.maxRangeBytes) {
       throw new AutonomiError(
         "OPEN_FILE_FAILED",
-        `Range length must be an integer from 0 through ${MAX_RANGE_BYTES}`,
+        `Range length must be an integer from 0 through ${SDK_LIMITS.maxRangeBytes}`,
       );
     }
     try {
@@ -66,7 +64,7 @@ export class PublicFileReader {
     throwIfAborted(options.signal);
     const start = options.start ?? 0;
     const end = options.end ?? this.size;
-    const chunkSize = options.chunkSize ?? DEFAULT_STREAM_CHUNK_BYTES;
+    const chunkSize = options.chunkSize ?? SDK_LIMITS.defaultStreamChunkBytes;
     if (
       !Number.isSafeInteger(start) ||
       !Number.isSafeInteger(end) ||
@@ -79,10 +77,10 @@ export class PublicFileReader {
         "Stream bounds must describe a valid half-open file range",
       );
     }
-    if (!Number.isSafeInteger(chunkSize) || chunkSize <= 0 || chunkSize > MAX_RANGE_BYTES) {
+    if (!Number.isSafeInteger(chunkSize) || chunkSize <= 0 || chunkSize > SDK_LIMITS.maxRangeBytes) {
       throw new AutonomiError(
         "OPEN_FILE_FAILED",
-        `Stream chunkSize must be an integer from 1 through ${MAX_RANGE_BYTES}`,
+        `Stream chunkSize must be an integer from 1 through ${SDK_LIMITS.maxRangeBytes}`,
       );
     }
 

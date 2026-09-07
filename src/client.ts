@@ -1,3 +1,4 @@
+import { assertFileSize, SDK_LIMITS } from "./limits.js";
 import {
   corePublicFile, helloFromCore, lookupFromCore, nodeFromCore, publicFileFromCore,
   type CoreHelloInfo, type CoreLookupResult, type CoreNetworkNode, type CorePublicFile,
@@ -241,12 +242,14 @@ export class AutonomiClient {
       throwIfAborted(operation.signal);
       let retained: RetainedUpload;
       if (input instanceof Uint8Array) {
+        assertFileSize(input.byteLength);
         const name = options.name ?? "public-file.bin";
         report(`Preparing ${name}`);
         retained = retainUpload(this.#connection.paymentNetwork, {
           bytes: input.slice(), name, contentType: options.contentType ?? "application/octet-stream",
         }, operation.id);
-      } else if (input instanceof Blob) {
+      } else if (typeof Blob === "function" && input instanceof Blob) {
+        assertFileSize(input.size);
         const isFile = typeof File === "function" && input instanceof File;
         const staged = await stageBlob(
           input, options.name ?? (isFile ? input.name : "public-file.bin"),
@@ -401,14 +404,16 @@ export class AutonomiClient {
     const report = this.#reporter("download", options.onProgress, operation);
     try {
       this.#assertOpen();
-      const concurrency = options.concurrency ?? 3;
-      if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 6) {
+      const limits = SDK_LIMITS.downloadConcurrency;
+      const concurrency = options.concurrency ?? limits.default;
+      if (!Number.isInteger(concurrency) || concurrency < limits.min || concurrency > limits.max) {
         throw new AutonomiError(
           "DOWNLOAD_FAILED",
-          "Download concurrency must be an integer from 1 through 6",
+          `Download concurrency must be an integer from ${limits.min} through ${limits.max}`,
         );
       }
       throwIfAborted(operation.signal);
+      if (typeof file !== "string") assertFileSize(file.size);
       const raw = (await abortable(
         this.#network.downloadPublicFile(typeof file === "string" ? file : corePublicFile(file), concurrency, report),
         operation.signal,
@@ -446,6 +451,7 @@ export class AutonomiClient {
     const report = this.#reporter("download-and-save", options.onProgress, operation);
     try {
       this.#assertOpen();
+      if (typeof file !== "string") assertFileSize(file.size);
       report("Choosing a download destination", { phase: "saving" });
       const knownFile =
         typeof file === "string"
@@ -496,6 +502,7 @@ export class AutonomiClient {
     try {
       this.#assertOpen();
       throwIfAborted(operation.signal);
+      if (typeof file !== "string") assertFileSize(file.size);
       raw = await abortable(
         this.#network.openPublicFile(typeof file === "string" ? file : corePublicFile(file), report),
         operation.signal,
@@ -534,6 +541,7 @@ export class AutonomiClient {
     let source: MediaSource | undefined;
     try {
       this.#assertOpen();
+      if (typeof file !== "string") assertFileSize(file.size);
       report("Opening an Autonomi random-access media reader");
       reader = await this.openFile(file, {
         ...(options.onProgress ? { onProgress: options.onProgress } : {}),

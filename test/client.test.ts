@@ -85,6 +85,7 @@ import {
   AutonomiError,
   UploadError,
   createManualPaymentProvider,
+  SDK_LIMITS,
 } from "../src/index.js";
 
 const endpoint = "/ip4/127.0.0.1/udp/24000/webrtc-direct/mock";
@@ -560,8 +561,8 @@ describe("structured operation progress", () => {
       return { file: { ...wireFile, name }, storageCostAtto: "0", records: 1 };
     });
     await Promise.all([
-      client.upload(Uint8Array.of(1), { name: "first" }),
-      client.upload(Uint8Array.of(2), { name: "second" }),
+      client.upload(Uint8Array.of(1, 2, 3), { name: "first" }),
+      client.upload(Uint8Array.of(2, 3, 4), { name: "second" }),
     ]);
     const uploads = events.filter((event) => event.operation === "upload");
     const ids = new Set(uploads.map((event) => event.operationId));
@@ -577,7 +578,7 @@ describe("structured operation progress", () => {
   it("checks abort after notifying listeners before starting upload work", async () => {
     const client = await AutonomiClient.connect(endpoint, { payment: { pay: async () => ({ totalAmount: "0" }) } });
     const controller = new AbortController();
-    await expect(client.upload(Uint8Array.of(1), {
+    await expect(client.upload(Uint8Array.of(1, 2, 3), {
       signal: controller.signal, onProgress: () => controller.abort(),
     })).rejects.toMatchObject({ name: "AbortError" });
     expect(state.networks[0]!.uploadPublicFile).not.toHaveBeenCalled();
@@ -636,7 +637,7 @@ describe("upload recovery", () => {
     const client = await AutonomiClient.connect(endpoint, { payment });
     const network = state.networks[0]!;
     paidThenFailed(network);
-    await expect(client.upload(Uint8Array.of(1))).rejects.toBeInstanceOf(UploadError);
+    await expect(client.upload(Uint8Array.of(1, 2, 3))).rejects.toBeInstanceOf(UploadError);
     const recovery = client.pendingUploads[0]!;
     const changed = [{ ...recoveryQuotes[0]!, quoteHash: "88".repeat(32), amount: "43" }];
     network.uploadPublicFile.mockImplementation(async (_bytes, _name, _type, paymentNetwork, pay) => {
@@ -656,7 +657,7 @@ describe("upload recovery", () => {
     const client = await AutonomiClient.connect(endpoint, { payment });
     const network = state.networks[0]!;
     paidThenFailed(network);
-    await expect(client.upload(Uint8Array.of(1))).rejects.toBeInstanceOf(UploadError);
+    await expect(client.upload(Uint8Array.of(1, 2, 3))).rejects.toBeInstanceOf(UploadError);
     network.uploadPublicFile.mockImplementationOnce(async (_bytes, _name, _type, paymentNetwork, pay) => {
       expect(await pay(paymentNetwork, [recoveryQuotes[1]!])).toMatchObject({ transactionHash: "0xpayment", totalAmount: "2" });
       return successfulUpload;
@@ -672,7 +673,7 @@ describe("upload recovery", () => {
     const client = await AutonomiClient.connect(endpoint, { payment });
     paidThenFailed(state.networks[0]!);
     const controller = new AbortController();
-    const upload = client.upload(Uint8Array.of(1), { signal: controller.signal });
+    const upload = client.upload(Uint8Array.of(1, 2, 3), { signal: controller.signal });
     const failure = expect(upload).rejects.toMatchObject({ name: "AbortError" });
     await vi.waitFor(() => expect(payment.pay).toHaveBeenCalledOnce());
     controller.abort(); await failure;
@@ -700,7 +701,7 @@ describe("upload recovery", () => {
     let complete!: (result: typeof successfulUpload) => void;
     network.uploadPublicFile.mockReturnValueOnce(new Promise((resolve) => { complete = resolve; }));
     const controller = new AbortController();
-    const upload = client.upload(Uint8Array.of(1), { signal: controller.signal });
+    const upload = client.upload(Uint8Array.of(1, 2, 3), { signal: controller.signal });
     const failure = expect(upload).rejects.toMatchObject({ name: "AbortError" });
     controller.abort(); await failure;
     const recovery = client.pendingUploads[0]!;
@@ -714,7 +715,7 @@ describe("upload recovery", () => {
     const client = await AutonomiClient.connect(endpoint, { payment: recoveryPayment() });
     const network = state.networks[0]!;
     paidThenFailed(network);
-    await expect(client.upload(Uint8Array.of(1))).rejects.toBeInstanceOf(UploadError);
+    await expect(client.upload(Uint8Array.of(1, 2, 3))).rejects.toBeInstanceOf(UploadError);
     const recovery = client.pendingUploads[0]!;
     let fail!: (error: Error) => void;
     network.uploadPublicFile.mockReturnValueOnce(new Promise((_resolve, reject) => { fail = reject; }));
@@ -738,7 +739,7 @@ it("cancels a resume waiting for settlement without claiming or discarding its i
   let fail!: (error: Error) => void;
   network.uploadPublicFile.mockReturnValueOnce(new Promise((_resolve, reject) => { fail = reject; }));
   const firstController = new AbortController();
-  const upload = client.upload(Uint8Array.of(1), { signal: firstController.signal });
+  const upload = client.upload(Uint8Array.of(1, 2, 3), { signal: firstController.signal });
   const failed = expect(upload).rejects.toMatchObject({ name: "AbortError" });
   firstController.abort(); await failed;
   const recovery = client.pendingUploads[0]!;
@@ -792,7 +793,7 @@ describe("terminal operation events", () => {
   it("emits a single failure with the promise's error for early validation", async () => {
     const client = await AutonomiClient.connect(endpoint);
     for (const run of [
-      (onProgress: import("../src/types.js").ProgressListener) => client.upload(Uint8Array.of(1), { onProgress }),
+      (onProgress: import("../src/types.js").ProgressListener) => client.upload(Uint8Array.of(1, 2, 3), { onProgress }),
       (onProgress: import("../src/types.js").ProgressListener) => client.download(file, { concurrency: 0, onProgress }),
     ]) {
       const events: import("../src/types.js").ProgressEvent[] = [];
@@ -815,7 +816,7 @@ describe("terminal operation events", () => {
       diagnostic = report;
       return new Promise((_resolve, reject) => { rejectWork = reject; });
     });
-    const uploading = client.upload(Uint8Array.of(1));
+    const uploading = client.upload(Uint8Array.of(1, 2, 3));
     const rejected = expect(uploading).rejects.toMatchObject({ name: "AbortError" });
     client.close();
     await rejected;
@@ -904,5 +905,40 @@ it("translates public file metadata into the existing wire format for downloads 
   reader.close();
   raw.findClosest.mockResolvedValue({ nodes: [rawNode], queried: ["peer"], failures: [{ peerId: "failed-peer", message: "timeout" }] } as never);
   expect(await client.findClosest(file.address)).toEqual({ nodes: [downloaded.dataMapNode], queried: ["peer"], failures: [{ peerId: "failed-peer", message: "timeout" }] });
+  client.close();
+});
+
+it("rejects unsupported file sizes before copying, staging, or opening the network", async () => {
+  const client = await AutonomiClient.connect(endpoint, { payment: recoveryPayment() });
+  const tooSmall = new Uint8Array(SDK_LIMITS.minFileBytes - 1);
+  const copy = vi.spyOn(tooSmall, "slice");
+  await expect(client.upload(tooSmall)).rejects.toMatchObject({ code: "INVALID_SOURCE" });
+  expect(copy).not.toHaveBeenCalled();
+  const tooLarge = new Blob(["abc"]);
+  Object.defineProperty(tooLarge, "size", { value: SDK_LIMITS.maxFileBytes + 1 });
+  await expect(client.upload(tooLarge)).rejects.toMatchObject({ code: "INVALID_SOURCE" });
+  await expect(client.download({ ...file, size: SDK_LIMITS.maxFileBytes + 1 })).rejects.toMatchObject({ code: "INVALID_SOURCE" });
+  await expect(client.createMediaSource({ ...file, size: SDK_LIMITS.mediaMaxFileBytes + 1 })).rejects.toMatchObject({ code: "INVALID_SOURCE" });
+  expect(state.networks[0]!.uploadPublicFile).not.toHaveBeenCalled();
+  expect(state.networks[0]!.uploadStagedPublicFile).not.toHaveBeenCalled();
+  expect(state.networks[0]!.downloadPublicFile).not.toHaveBeenCalled();
+  expect(state.networks[0]!.openPublicFile).not.toHaveBeenCalled();
+  expect(client.pendingUploads).toEqual([]);
+  client.close();
+});
+
+it("accepts the advertised concurrency bounds and rejects values outside them", async () => {
+  const client = await AutonomiClient.connect(endpoint);
+  const download = state.networks[0]!.downloadPublicFile;
+  download.mockResolvedValue({ content: Uint8Array.of(1), hash: file.blake3, file: wireFile,
+    dataMapNode: { peer_id: "aa".repeat(32), native_addresses: [], reliability: 1 } });
+  for (const concurrency of [SDK_LIMITS.downloadConcurrency.min, SDK_LIMITS.downloadConcurrency.max]) {
+    await client.download(file, { concurrency });
+    expect(download).toHaveBeenLastCalledWith(wireFile, concurrency, expect.any(Function));
+  }
+  for (const concurrency of [SDK_LIMITS.downloadConcurrency.min - 1, SDK_LIMITS.downloadConcurrency.max + 1, 1.5]) {
+    await expect(client.download(file, { concurrency })).rejects.toMatchObject({ code: "DOWNLOAD_FAILED" });
+  }
+  expect(download).toHaveBeenCalledTimes(2);
   client.close();
 });

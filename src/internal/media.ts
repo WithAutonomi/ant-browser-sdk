@@ -1,6 +1,8 @@
 import { AutonomiError, errorMessage } from "../errors.js";
 import type { PublicFileReader } from "../file-reader.js";
 import type { MediaOptions, MediaSource } from "../types.js";
+import { SDK_LIMITS } from "../limits.js";
+import { getBrowserCapabilities } from "../capabilities.js";
 import { abortable, abortReason, throwIfAborted } from "./abort.js";
 
 interface MediaSession {
@@ -18,6 +20,13 @@ export class MediaBridge {
 
   async attach(reader: PublicFileReader, options: MediaOptions): Promise<MediaSource> {
     throwIfAborted(options.signal);
+    if (!Number.isSafeInteger(reader.size) || reader.size < SDK_LIMITS.minFileBytes || reader.size > SDK_LIMITS.mediaMaxFileBytes) {
+      throw new AutonomiError("MEDIA_FAILED", `Media file size must be from ${SDK_LIMITS.minFileBytes} through ${SDK_LIMITS.mediaMaxFileBytes} bytes`);
+    }
+    const { features } = getBrowserCapabilities();
+    if (!features.secureContext || !features.serviceWorker) {
+      throw new AutonomiError("MEDIA_FAILED", "Media streaming requires a secure context (HTTPS; localhost is allowed) with service-worker support");
+    }
     const workerUrl = new URL(
       options.serviceWorkerUrl ?? "/autonomi-stream-sw.js",
       location.href,

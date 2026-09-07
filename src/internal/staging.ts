@@ -1,4 +1,6 @@
 import type { ProgressDetails } from "../types.js";
+import { getBrowserCapabilities } from "../capabilities.js";
+import { assertFileSize } from "../limits.js";
 import {
   deleteStagedRecords,
   deleteStagedSession,
@@ -63,7 +65,9 @@ export async function stageBlob(
   signal?: AbortSignal,
 ): Promise<StagedUpload> {
   throwIfAborted(signal);
-  if (typeof Worker !== "function" || typeof indexedDB !== "object") {
+  assertFileSize(blob.size);
+  const { features } = getBrowserCapabilities();
+  if (!features.worker || !features.indexedDb) {
     throw new Error("File uploads require Web Workers and IndexedDB in this browser");
   }
   await abortable(ensureUploadStorage(blob.size), signal);

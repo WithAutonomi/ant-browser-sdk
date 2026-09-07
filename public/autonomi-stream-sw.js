@@ -1,4 +1,5 @@
 const STREAM_MARKER = "/__autonomi_stream/";
+// Keep standalone-worker limits aligned with SDK_LIMITS; test/limits.test.ts checks them.
 const STREAM_BLOCK_BYTES = 1024 * 1024;
 const RANGE_REQUEST_TIMEOUT_MS = 45_000;
 const MAX_STREAM_FILE_BYTES = 1_000_000_000;

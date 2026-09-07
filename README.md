@@ -628,6 +628,47 @@ closes its WebRTC associations and media sources; independently opened file
 readers must still be closed by the application. Retained upload recoveries need
 explicit resume or discard; closing the client does not discard them.
 
+## Limits and capability discovery
+
+Use `SDK_LIMITS` to configure file pickers, ranges, and concurrency controls:
+
+```ts
+import { SDK_LIMITS, getBrowserCapabilities } from "@autonomi/browser-sdk";
+
+const capabilities = getBrowserCapabilities();
+uploadButton.disabled = !capabilities.operations.uploadBlob.available;
+console.log(capabilities.operations.uploadBlob.missing);
+console.log(SDK_LIMITS.maxFileBytes, SDK_LIMITS.maxRangeBytes);
+```
+
+| Limit | Value |
+| --- | --- |
+| `minFileBytes` / `maxFileBytes` | 3 / 1,000,000,000 bytes |
+| `maxRangeBytes` | 4 MiB per read or stream chunk |
+| `defaultStreamChunkBytes` | 1 MiB |
+| `downloadConcurrency.min` / `.max` / `.default` | 1 / 6 / 3 |
+| `mediaMaxFileBytes` | 1,000,000,000 bytes |
+
+The limits and capability reports are immutable. Unsupported input sizes are
+rejected before copying byte arrays, staging Blobs, or opening files from supplied
+metadata. Address-only reads learn the size from the core; media setup checks it
+before registering a worker or creating a URL. These are protocol ceilings;
+whole-file transfers still need sufficient memory and staging needs storage quota.
+
+`getBrowserCapabilities()` safely runs outside a browser and makes no network
+requests, allocations of workers, or permission prompts. `features` reports each
+API's presence. `operations` reports requirements for `connect`, `uploadBytes`,
+`uploadBlob`, `download`, `read`, `stream`, `media`, `saveWithPicker`, and
+`saveWithDownload`, including missing features for each. Call it again to get a
+fresh snapshot.
+
+`available` means required APIs are present. It does not probe permissions,
+storage quota, CSP, media codecs, network access, or wallet availability. In
+particular, `FileReaderSync` can only be checked inside the actual upload worker;
+a positive Blob-upload report does not bypass that check. File-picker saving
+still needs user activation. Read-only connections do not require a wallet,
+IndexedDB, an upload worker, or payment RPC access.
+
 ## Browser and deployment requirements
 
 - A current browser with WebAssembly, `RTCPeerConnection`, Web Workers, Web
@@ -653,6 +694,8 @@ and traffic policy remain deployment responsibilities.
 
 | API | Purpose |
 | --- | --- |
+| `SDK_LIMITS` | Inspect bundled file, range, concurrency, and media limits |
+| `getBrowserCapabilities()` | Inspect browser API availability without prompting |
 | `AutonomiClient.connect()` | Initialize WASM and authenticate a bootstrap node |
 | `client.findClosest()` | Discover nodes closest to a 32-byte hex target |
 | `client.upload()` | Self-encrypt, pay for, and publish a public file |
