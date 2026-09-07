@@ -10,6 +10,7 @@ import {
   type StagedUpload,
   type WorkerWasmSource,
 } from "./internal/staging.js";
+import { operationId, progressReporter, type Reporter } from "./internal/progress.js";
 import { snapshot } from "./internal/snapshot.js";
 import { requestSaveFileHandle, saveDownload } from "./save.js";
 import type {
@@ -43,6 +44,8 @@ interface RawDownloadResult {
 }
 
 interface OperationScope {
+  id: string;
+  reporters: Reporter[];
   signal: AbortSignal;
   finish(): void;
 }
@@ -84,11 +87,9 @@ export class AutonomiClient {
     bootstrapMultiaddr: string,
     options: ClientOptions = {},
   ): Promise<AutonomiClient> {
-    const report = (message: string): void => {
-      if (options.onProgress) {
-        safelyNotify(options.onProgress, { operation: "connect", message });
-      }
-    };
+    const report = progressReporter("connect", operationId(), "initializing", (event) => {
+      if (options.onProgress) safelyNotify(options.onProgress, event);
+    }, options.signal);
     let network: RawNetworkClient | undefined;
     try {
       throwIfAborted(options.signal);
@@ -96,7 +97,7 @@ export class AutonomiClient {
       const workerWasm = await abortable(initializeClientWasm(options.wasm), options.signal);
       const { BrowserNodeClient, BrowserNetworkClient } = getBindings();
       const endpoint = parseBootstrapMultiaddr(bootstrapMultiaddr);
-      report(`Authenticating bootstrap node from ${endpoint.multiaddr}`);
+      report(`Authenticating bootstrap node from ${endpoint.multiaddr}`, { phase: "connecting" });
 
       const probe = new BrowserNodeClient(endpoint);
       let hello: HelloInfo;
@@ -120,10 +121,12 @@ export class AutonomiClient {
         bootstrap: hello,
         files: [],
       };
-      report(`Connected to authenticated peer ${hello.peer_id}`);
+      report(`Connected to authenticated peer ${hello.peer_id}`, { phase: "complete" });
       throwIfAborted(options.signal);
+      report.finish();
       return new AutonomiClient(network, connection, options, workerWasm);
     } catch (error) {
+      report.finish();
       if (network) closeNetwork(network);
       if (isAbort(error, options.signal)) throw error;
       throw wrapError("CONNECTION_FAILED", "Could not connect to Autonomi", error);
@@ -160,13 +163,15 @@ export class AutonomiClient {
     options: OperationOptions = {},
   ): Promise<LookupResult> {
     const operation = this.#startOperation(options.signal);
-    const report = this.#reporter("lookup", options.onProgress, operation.signal);
+    const report = this.#reporter("lookup", options.onProgress, operation);
     try {
       report(`Finding nodes closest to ${target}`);
-      return (await abortable(
+      const result = (await abortable(
         this.#network.findClosest(target, report),
         operation.signal,
       )) as LookupResult;
+      report("Closest-node lookup complete", { phase: "complete" });
+      return result;
     } catch (error) {
       if (isAbort(error, operation.signal)) throw error;
       throw wrapError("LOOKUP_FAILED", "Closest-node lookup failed", error);
@@ -194,14 +199,15 @@ export class AutonomiClient {
       );
     }
     const operation = this.#startOperation(options.signal);
-    const report = this.#reporter("upload", options.onProgress, operation.signal);
-    const cleanupReport = this.#reporter("upload", options.onProgress);
+    const report = this.#reporter("upload", options.onProgress, operation);
+    const cleanupReport = this.#reporter("upload", options.onProgress, operation, false);
     const payForQuotes = async (
       network: unknown,
       quotes: unknown,
     ): Promise<{ transactionHash?: string; totalAmount: string }> => {
       try {
         throwIfAborted(operation.signal);
+        report("Waiting for storage payment", { phase: "payment", total: (quotes as VerifiedStorageQuote[]).length, unit: "quotes" });
         const receipt = await abortable(
           payment.pay(
             network as PaymentNetwork,
@@ -213,6 +219,7 @@ export class AutonomiClient {
         if (!/^\d+$/u.test(receipt.totalAmount)) {
           throw new Error("payment provider returned a non-decimal totalAmount");
         }
+        report("Storage payment confirmed", { phase: "uploading" });
         return receipt.transactionHash
           ? { transactionHash: receipt.transactionHash, totalAmount: receipt.totalAmount }
           : { totalAmount: receipt.totalAmount };
@@ -277,6 +284,7 @@ export class AutonomiClient {
       throwIfAborted(operation.signal);
       const upload = result as UploadResult;
       this.#rememberFile(upload.file);
+      report(`Uploaded ${upload.file.name}`, { phase: "complete", completed: upload.file.size, total: upload.file.size, unit: "bytes" });
       return upload;
     } catch (error) {
       if (isAbort(error, operation.signal)) throw error;
@@ -286,7 +294,7 @@ export class AutonomiClient {
         try {
           await clearStagedUpload(staged);
         } catch (error) {
-          cleanupReport(`Could not clear temporary upload records: ${String(error)}`);
+          cleanupReport(`Could not clear temporary upload records: ${String(error)}`, { phase: "cleanup" });
         }
       }
       operation.finish();
@@ -307,7 +315,7 @@ export class AutonomiClient {
       );
     }
     const operation = this.#startOperation(options.signal);
-    const report = this.#reporter("download", options.onProgress, operation.signal);
+    const report = this.#reporter("download", options.onProgress, operation);
     try {
       throwIfAborted(operation.signal);
       const raw = (await abortable(
@@ -316,6 +324,7 @@ export class AutonomiClient {
       )) as RawDownloadResult;
       throwIfAborted(operation.signal);
       this.#rememberFile(raw.file);
+      report(`Downloaded ${raw.file.name}`, { phase: "complete", completed: raw.content.byteLength, total: raw.content.byteLength, unit: "bytes" });
       const blobBytes = new Uint8Array(raw.content.byteLength);
       blobBytes.set(raw.content);
       return {
@@ -376,7 +385,7 @@ export class AutonomiClient {
     options: OperationOptions = {},
   ): Promise<PublicFileReader> {
     const operation = this.#startOperation(options.signal);
-    const report = this.#reporter("open-file", options.onProgress, operation.signal);
+    const report = this.#reporter("open-file", options.onProgress, operation);
     let raw: Awaited<ReturnType<RawNetworkClient["openPublicFile"]>> | undefined;
     try {
       throwIfAborted(operation.signal);
@@ -389,6 +398,7 @@ export class AutonomiClient {
       throwIfAborted(operation.signal);
       const address = typeof file === "string" ? normalizeAddress(file) : file.address;
       const reader = new PublicFileReader(raw, address);
+      report(`Opened ${reader.name}`, { phase: "complete" });
       raw = undefined;
       return reader;
     } catch (error) {
@@ -411,7 +421,7 @@ export class AutonomiClient {
     options: MediaOptions = {},
   ): Promise<MediaSource> {
     const operation = this.#startOperation(options.signal);
-    const report = this.#reporter("media", options.onProgress, operation.signal);
+    const report = this.#reporter("media", options.onProgress, operation);
     let reader: PublicFileReader | undefined;
     let source: MediaSource | undefined;
     try {
@@ -425,7 +435,7 @@ export class AutonomiClient {
         ...options,
         signal: operation.signal,
       });
-      report(`Media source ready for ${source.file.name}`);
+      report(`Media source ready for ${source.file.name}`, { phase: "complete" });
       return source;
     } catch (error) {
       try {
@@ -464,15 +474,20 @@ export class AutonomiClient {
 
   #reporter(
     operation: Operation,
-    local?: ProgressListener,
-    signal?: AbortSignal,
-  ): (message: string) => void {
-    return (message: string): void => {
-      throwIfAborted(signal);
-      const event: ProgressEvent = { operation, message };
+    local: ProgressListener | undefined,
+    scope: OperationScope,
+    cancellable = true,
+  ): Reporter {
+    const phases = {
+      connect: "connecting", lookup: "lookup", upload: "preparing",
+      download: "downloading", "open-file": "opening", media: "media",
+    } as const;
+    const report = progressReporter(operation, scope.id, phases[operation], (event) => {
       for (const listener of this.#listeners) safelyNotify(listener, event);
       if (local && !this.#listeners.has(local)) safelyNotify(local, event);
-    };
+    }, cancellable ? scope.signal : undefined);
+    scope.reporters.push(report);
+    return report;
   }
 
   #startOperation(externalSignal?: AbortSignal): OperationScope {
@@ -483,11 +498,15 @@ export class AutonomiClient {
     else externalSignal?.addEventListener("abort", forwardAbort, { once: true });
     this.#operations.add(controller);
     let finished = false;
+    const reporters: Reporter[] = [];
     return {
+      id: operationId(),
+      reporters,
       signal: controller.signal,
       finish: () => {
         if (finished) return;
         finished = true;
+        reporters.forEach((reporter) => reporter.finish());
         externalSignal?.removeEventListener("abort", forwardAbort);
         this.#operations.delete(controller);
       },

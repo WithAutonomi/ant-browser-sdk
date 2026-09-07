@@ -120,7 +120,7 @@ async function submitPayment(
   )) as bigint;
   if (allowance < totalAmount) {
     throwIfAborted(context.signal);
-    context.report(`Approving the payment vault from wallet ${walletAddress}`);
+    context.report(`Approving the payment vault from wallet ${walletAddress}`, { phase: "approval" });
     throwIfAborted(context.signal);
     const amount = approval === "exact" ? totalAmount : MaxUint256;
     // Once a transaction submission starts it cannot be cancelled. Keep this
@@ -135,11 +135,11 @@ async function submitPayment(
 
   throwIfAborted(context.signal);
   const payments = quotePayments(quotes);
-  context.report(`Submitting one payment for ${payments.length} storage quote(s)`);
+  context.report(`Submitting one payment for ${payments.length} storage quote(s)`, { phase: "payment", total: payments.length, unit: "quotes" });
   throwIfAborted(context.signal);
   const transaction = await vault.getFunction("payForQuotes")(payments);
   const transactionHash = await confirmedHash(transaction, "Storage payment transaction reverted");
-  if (!context.signal?.aborted) context.report(`Payment confirmed in ${transactionHash}`);
+  try { if (!context.signal?.aborted) context.report(`Payment confirmed in ${transactionHash}`); } catch { /* The receipt is already confirmed. */ }
   return {
     transactionHash,
     walletAddress,

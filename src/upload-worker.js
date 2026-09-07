@@ -28,6 +28,7 @@ self.addEventListener("message", async (event) => {
       self.postMessage({
         type: "progress",
         message: `Encrypted and staged record ${storedRecords}`,
+        completed: storedRecords,
       });
     }
     const staged = encryptor.finish(name, contentType);

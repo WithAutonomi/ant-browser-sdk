@@ -108,7 +108,7 @@ export function createWagmiPaymentProvider<config extends Config>(
       }), context.signal);
 
       if (allowance < totalAmount) {
-        context.report(`Approving the payment vault from wallet ${walletAddress}`);
+        context.report(`Approving the payment vault from wallet ${walletAddress}`, { phase: "approval" });
         throwIfAborted(context.signal);
         const amount = approval === "exact" ? totalAmount : maxUint256;
         const transactionHash = await writeContract(walletClient, {
@@ -126,7 +126,7 @@ export function createWagmiPaymentProvider<config extends Config>(
 
       const payments = quotePayments(quotes);
       throwIfAborted(context.signal);
-      context.report(`Submitting one payment for ${payments.length} storage quote(s)`);
+      context.report(`Submitting one payment for ${payments.length} storage quote(s)`, { phase: "payment", total: payments.length, unit: "quotes" });
       throwIfAborted(context.signal);
       const transactionHash = await writeContract(walletClient, {
         address: vaultAddress,
@@ -139,7 +139,7 @@ export function createWagmiPaymentProvider<config extends Config>(
         transactionHash,
         "Storage payment transaction reverted",
       );
-      if (!context.signal?.aborted) context.report(`Payment confirmed in ${confirmedTransactionHash}`);
+      try { if (!context.signal?.aborted) context.report(`Payment confirmed in ${confirmedTransactionHash}`); } catch { /* The receipt is already confirmed. */ }
       return {
         transactionHash: confirmedTransactionHash,
         walletAddress,

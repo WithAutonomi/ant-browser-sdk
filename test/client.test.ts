@@ -512,3 +512,41 @@ describe("connection snapshots", () => {
     client.close();
   });
 });
+
+describe("structured operation progress", () => {
+  it("correlates overlapping uploads and reports measured completion", async () => {
+    const events: import("../src/types.js").ProgressEvent[] = [];
+    const client = await AutonomiClient.connect(endpoint, {
+      payment: { pay: async () => ({ totalAmount: "0" }) },
+      onProgress: (event) => events.push(event),
+    });
+    state.networks[0]!.uploadPublicFile.mockImplementation(async (_bytes, name, _type, _network, _pay, report) => {
+      report("An opaque Rust diagnostic");
+      await Promise.resolve();
+      return { file: { ...file, name }, storageCostAtto: "0", records: 1 };
+    });
+    await Promise.all([
+      client.upload(Uint8Array.of(1), { name: "first" }),
+      client.upload(Uint8Array.of(2), { name: "second" }),
+    ]);
+    const uploads = events.filter((event) => event.operation === "upload");
+    const ids = new Set(uploads.map((event) => event.operationId));
+    expect(ids.size).toBe(2);
+    for (const id of ids) {
+      const group = uploads.filter((event) => event.operationId === id);
+      expect(group[0]!.phase).toBe("preparing");
+      expect(group.at(-1)).toMatchObject({ phase: "complete", completed: file.size, total: file.size, unit: "bytes" });
+      expect(Object.isFrozen(group[0])).toBe(true);
+    }
+    client.close();
+  });
+  it("checks abort after notifying listeners before starting upload work", async () => {
+    const client = await AutonomiClient.connect(endpoint, { payment: { pay: async () => ({ totalAmount: "0" }) } });
+    const controller = new AbortController();
+    await expect(client.upload(Uint8Array.of(1), {
+      signal: controller.signal, onProgress: () => controller.abort(),
+    })).rejects.toMatchObject({ name: "AbortError" });
+    expect(state.networks[0]!.uploadPublicFile).not.toHaveBeenCalled();
+    client.close();
+  });
+});

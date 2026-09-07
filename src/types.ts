@@ -68,7 +68,7 @@ export interface PaymentReceipt {
 }
 
 export interface PaymentContext {
-  report(message: string): void;
+  report(message: string, progress?: ProgressDetails): void;
   /** Aborts the upload waiting on this payment, when cancellation is supported. */
   readonly signal?: AbortSignal;
 }
@@ -90,9 +90,24 @@ export type Operation =
   | "open-file"
   | "media";
 
-export interface ProgressEvent {
-  operation: Operation;
-  message: string;
+/** Phases are SDK boundaries; core diagnostic messages do not imply byte completion. */
+export type ProgressPhase =
+  | "initializing" | "connecting" | "lookup" | "preparing" | "staging"
+  | "approval" | "payment" | "uploading" | "downloading" | "opening"
+  | "media" | "complete" | "cleanup";
+
+export interface ProgressDetails {
+  readonly phase: ProgressPhase;
+  /** Actual completed work in the indicated unit; omitted when unknown. */
+  readonly completed?: number;
+  readonly total?: number;
+  readonly unit?: "bytes" | "records" | "quotes";
+}
+
+export interface ProgressEvent extends ProgressDetails {
+  readonly operationId: string;
+  readonly operation: Operation;
+  readonly message: string;
 }
 
 export type ProgressListener = (event: ProgressEvent) => void;

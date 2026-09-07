@@ -27,6 +27,8 @@ export type {
   PaymentNetwork,
   PaymentProvider,
   PaymentReceipt,
+  ProgressDetails,
+  ProgressPhase,
   ProgressEvent,
   ProgressListener,
   PublicFile,

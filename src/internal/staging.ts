@@ -1,3 +1,4 @@
+import type { ProgressDetails } from "../types.js";
 import {
   deleteStagedRecords,
   deleteStagedSession,
@@ -57,7 +58,7 @@ export async function stageBlob(
   blob: Blob,
   name: string,
   contentType: string,
-  report: (message: string) => void,
+  report: (message: string, progress?: ProgressDetails) => void,
   wasm?: WorkerWasmSource,
   signal?: AbortSignal,
 ): Promise<StagedUpload> {
@@ -94,12 +95,18 @@ export async function stageBlob(
     };
     worker.addEventListener("message", (event: MessageEvent<unknown>) => {
       const message = event.data as
-        | { type: "progress"; message: string }
+        | { type: "progress"; message: string; completed?: number }
         | { type: "complete"; staged: StagedFile }
         | { type: "error"; message: string };
-      if (message?.type === "progress") report(message.message);
+      if (message?.type === "progress" && !finished) {
+        try {
+          report(message.message, { phase: "staging", unit: "records", ...(message.completed === undefined ? {} : { completed: message.completed }) });
+        } catch (error) { fail(error); }
+      }
       if (message?.type === "complete") {
-        if (stop()) resolve({ sessionId, staged: message.staged });
+        if (stop()) {
+          resolve({ sessionId, staged: message.staged });
+        }
       }
       if (message?.type === "error") fail(new Error(message.message));
     });
