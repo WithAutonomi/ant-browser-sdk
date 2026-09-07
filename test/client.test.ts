@@ -83,6 +83,7 @@ vi.mock("../src/internal/runtime.js", () => {
 import {
   AutonomiClient,
   AutonomiError,
+  UploadError,
   createManualPaymentProvider,
 } from "../src/index.js";
 
@@ -549,4 +550,174 @@ describe("structured operation progress", () => {
     expect(state.networks[0]!.uploadPublicFile).not.toHaveBeenCalled();
     client.close();
   });
+});
+
+const recoveryQuotes = [
+  { quote: {}, quoteHash: "55".repeat(32), rewardsAddress: `0x${"66".repeat(20)}`, amount: "40" },
+  { quote: {}, quoteHash: "77".repeat(32), rewardsAddress: `0x${"66".repeat(20)}`, amount: "2" },
+];
+const successfulUpload = { file, transactionHash: "0xpayment", storageCostAtto: "42", records: 4 };
+const recoveryPayment = (): PaymentProvider => ({
+  pay: vi.fn<PaymentProvider["pay"]>(async (_network, quotes) => ({
+    transactionHash: "0xpayment",
+    totalAmount: quotes.reduce((sum, quote) => sum + BigInt(quote.amount), 0n).toString(),
+  })),
+});
+function paidThenFailed(network: (typeof state.networks)[number]) {
+  network.uploadPublicFile.mockImplementationOnce(async (_bytes, _name, _type, paymentNetwork, pay) => {
+    await pay(paymentNetwork, recoveryQuotes);
+    throw new Error("storage quorum failed after payment");
+  });
+}
+
+describe("upload recovery", () => {
+  it("retains immutable receipts and retries owned bytes without paying twice", async () => {
+    const payment = recoveryPayment();
+    const client = await AutonomiClient.connect(endpoint, { payment });
+    const network = state.networks[0]!;
+    paidThenFailed(network);
+    const bytes = Uint8Array.of(1, 2, 3);
+    const failure = await client.upload(bytes).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(UploadError);
+    const recovery = (failure as UploadError).recovery;
+    expect(client.pendingUploads).toEqual([recovery]);
+    await recovery.settled;
+    bytes.fill(9);
+    expect(recovery.payments[0]!.receipt.totalAmount).toBe("42");
+    expect(Object.isFrozen(recovery.payments[0]!.quotes[0])).toBe(true);
+    network.uploadPublicFile.mockImplementationOnce(async (retried, _name, _type, paymentNetwork, pay) => {
+      expect(retried).toEqual(Uint8Array.of(1, 2, 3));
+      expect(await pay(paymentNetwork, recoveryQuotes)).toMatchObject({ transactionHash: "0xpayment", totalAmount: "42" });
+      return successfulUpload;
+    });
+    const result = await client.resumeUpload(recovery);
+    expect(payment.pay).toHaveBeenCalledOnce();
+    expect(result.payments).toHaveLength(1);
+    expect(result.storageCostAtto).toBe("42");
+    expect(recovery.status).toBe("completed");
+    expect(client.pendingUploads).toEqual([]);
+    client.close();
+  });
+  it("requires explicit authorization for new quotes and includes every payment in the result", async () => {
+    const payment = recoveryPayment();
+    const client = await AutonomiClient.connect(endpoint, { payment });
+    const network = state.networks[0]!;
+    paidThenFailed(network);
+    await expect(client.upload(Uint8Array.of(1))).rejects.toBeInstanceOf(UploadError);
+    const recovery = client.pendingUploads[0]!;
+    const changed = [{ ...recoveryQuotes[0]!, quoteHash: "88".repeat(32), amount: "43" }];
+    network.uploadPublicFile.mockImplementation(async (_bytes, _name, _type, paymentNetwork, pay) => {
+      await pay(paymentNetwork, changed);
+      return successfulUpload;
+    });
+    await expect(client.resumeUpload(recovery)).rejects.toMatchObject({ code: "RECOVERY_PAYMENT_REQUIRED", recovery });
+    expect(payment.pay).toHaveBeenCalledOnce();
+    const result = await client.resumeUpload(recovery, { payment });
+    expect(payment.pay).toHaveBeenCalledTimes(2);
+    expect(result.payments).toHaveLength(2);
+    expect(result.storageCostAtto).toBe("85");
+    client.close();
+  });
+  it("reuses a payment covering only the remaining subset of quotes", async () => {
+    const payment = recoveryPayment();
+    const client = await AutonomiClient.connect(endpoint, { payment });
+    const network = state.networks[0]!;
+    paidThenFailed(network);
+    await expect(client.upload(Uint8Array.of(1))).rejects.toBeInstanceOf(UploadError);
+    network.uploadPublicFile.mockImplementationOnce(async (_bytes, _name, _type, paymentNetwork, pay) => {
+      expect(await pay(paymentNetwork, [recoveryQuotes[1]!])).toMatchObject({ transactionHash: "0xpayment", totalAmount: "2" });
+      return successfulUpload;
+    });
+    const result = await client.resumeUpload(client.pendingUploads[0]!);
+    expect(result.storageCostAtto).toBe("42");
+    expect(payment.pay).toHaveBeenCalledOnce();
+    client.close();
+  });
+  it("captures a payment confirming after cancellation and resumes on a replacement client", async () => {
+    let confirm!: (receipt: { transactionHash: string; totalAmount: string }) => void;
+    const payment: PaymentProvider = { pay: vi.fn<PaymentProvider["pay"]>(() => new Promise((resolve) => { confirm = resolve; })) };
+    const client = await AutonomiClient.connect(endpoint, { payment });
+    paidThenFailed(state.networks[0]!);
+    const controller = new AbortController();
+    const upload = client.upload(Uint8Array.of(1), { signal: controller.signal });
+    const failure = expect(upload).rejects.toMatchObject({ name: "AbortError" });
+    await vi.waitFor(() => expect(payment.pay).toHaveBeenCalledOnce());
+    controller.abort(); await failure;
+    const recovery = client.pendingUploads[0]!;
+    expect(recovery.status).toBe("settling");
+    expect(recovery.payments).toEqual([]);
+    client.close();
+    const replacement = await AutonomiClient.connect(endpoint);
+    state.networks[1]!.uploadPublicFile.mockImplementation(async (_bytes, _name, _type, paymentNetwork, pay) => {
+      await pay(paymentNetwork, recoveryQuotes); return successfulUpload;
+    });
+    const resumed = replacement.resumeUpload(recovery);
+    await Promise.resolve();
+    expect(state.networks[1]!.uploadPublicFile).not.toHaveBeenCalled();
+    confirm({ transactionHash: "0xpayment", totalAmount: "42" });
+    await expect(resumed).resolves.toMatchObject({ storageCostAtto: "42" });
+    expect(recovery.payments).toHaveLength(1);
+    expect(payment.pay).toHaveBeenCalledOnce();
+    expect(client.pendingUploads).toEqual([]);
+    replacement.close();
+  });
+  it("returns a late successful upload without sending its records again", async () => {
+    const client = await AutonomiClient.connect(endpoint, { payment: recoveryPayment() });
+    const network = state.networks[0]!;
+    let complete!: (result: typeof successfulUpload) => void;
+    network.uploadPublicFile.mockReturnValueOnce(new Promise((resolve) => { complete = resolve; }));
+    const controller = new AbortController();
+    const upload = client.upload(Uint8Array.of(1), { signal: controller.signal });
+    const failure = expect(upload).rejects.toMatchObject({ name: "AbortError" });
+    controller.abort(); await failure;
+    const recovery = client.pendingUploads[0]!;
+    complete(successfulUpload);
+    await recovery.settled;
+    await expect(client.resumeUpload(recovery)).resolves.toMatchObject({ file });
+    expect(network.uploadPublicFile).toHaveBeenCalledOnce();
+    client.close();
+  });
+  it("prevents concurrent resumes and makes discard idempotent", async () => {
+    const client = await AutonomiClient.connect(endpoint, { payment: recoveryPayment() });
+    const network = state.networks[0]!;
+    paidThenFailed(network);
+    await expect(client.upload(Uint8Array.of(1))).rejects.toBeInstanceOf(UploadError);
+    const recovery = client.pendingUploads[0]!;
+    let fail!: (error: Error) => void;
+    network.uploadPublicFile.mockReturnValueOnce(new Promise((_resolve, reject) => { fail = reject; }));
+    const first = client.resumeUpload(recovery);
+    const failure = expect(first).rejects.toBeInstanceOf(UploadError);
+    await vi.waitFor(() => expect(network.uploadPublicFile).toHaveBeenCalledTimes(2));
+    await expect(client.resumeUpload(recovery)).rejects.toMatchObject({ code: "UPLOAD_IN_PROGRESS" });
+    await expect(recovery.discard()).rejects.toMatchObject({ code: "UPLOAD_IN_PROGRESS" });
+    fail(new Error("network unavailable")); await failure;
+    await recovery.discard(); await recovery.discard();
+    expect(recovery.status).toBe("discarded");
+    expect(client.pendingUploads).toEqual([]);
+    await expect(client.resumeUpload(recovery)).rejects.toMatchObject({ code: "INVALID_SOURCE" });
+    client.close();
+  });
+});
+
+it("cancels a resume waiting for settlement without claiming or discarding its input", async () => {
+  const client = await AutonomiClient.connect(endpoint, { payment: recoveryPayment() });
+  const network = state.networks[0]!;
+  let fail!: (error: Error) => void;
+  network.uploadPublicFile.mockReturnValueOnce(new Promise((_resolve, reject) => { fail = reject; }));
+  const firstController = new AbortController();
+  const upload = client.upload(Uint8Array.of(1), { signal: firstController.signal });
+  const failed = expect(upload).rejects.toMatchObject({ name: "AbortError" });
+  firstController.abort(); await failed;
+  const recovery = client.pendingUploads[0]!;
+  const controller = new AbortController();
+  const resumed = client.resumeUpload(recovery, { signal: controller.signal });
+  const cancelled = expect(resumed).rejects.toMatchObject({ name: "AbortError" });
+  controller.abort(); await cancelled;
+  expect(network.uploadPublicFile).toHaveBeenCalledOnce();
+  expect(recovery.status).toBe("settling");
+  fail(new Error("original operation stopped"));
+  await recovery.settled;
+  expect(recovery.status).toBe("ready");
+  await recovery.discard();
+  client.close();
 });

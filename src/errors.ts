@@ -1,3 +1,5 @@
+import type { UploadRecovery } from "./types.js";
+
 export type AutonomiErrorCode =
   | "INITIALIZATION_FAILED"
   | "INVALID_SOURCE"
@@ -7,6 +9,8 @@ export type AutonomiErrorCode =
   | "PAYMENT_FAILED"
   | "LOOKUP_FAILED"
   | "UPLOAD_FAILED"
+  | "UPLOAD_IN_PROGRESS"
+  | "RECOVERY_PAYMENT_REQUIRED"
   | "DOWNLOAD_FAILED"
   | "OPEN_FILE_FAILED"
   | "SAVE_FAILED"
@@ -20,6 +24,16 @@ export class AutonomiError extends Error {
     super(message, cause === undefined ? undefined : { cause });
     this.name = "AutonomiError";
     this.code = code;
+  }
+}
+
+/** Upload failure with explicit recovery ownership and the original error code. */
+export class UploadError extends AutonomiError {
+  readonly recovery: UploadRecovery;
+  constructor(error: AutonomiError, recovery: UploadRecovery) {
+    super(error.code, error.message, error);
+    this.name = "UploadError";
+    this.recovery = recovery;
   }
 }
 

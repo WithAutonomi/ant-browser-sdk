@@ -1,16 +1,18 @@
-import { AutonomiError, wrapError } from "./errors.js";
+import { AutonomiError, UploadError, wrapError } from "./errors.js";
 import { PublicFileReader } from "./file-reader.js";
 import { abortable, isAbort, throwIfAborted } from "./internal/abort.js";
 import { getBindings, initializeClientWasm, type RawNetworkClient } from "./internal/runtime.js";
 import { MediaBridge } from "./internal/media.js";
 import {
-  clearStagedUpload,
   loadStagedRecord,
   stageBlob,
-  type StagedUpload,
   type WorkerWasmSource,
 } from "./internal/staging.js";
 import { operationId, progressReporter, type Reporter } from "./internal/progress.js";
+import {
+  awaitUploadSettlement, claimUpload, paidReceipt, releaseUpload, retainUpload,
+  uploadResult, uploadSettlement, validateReceipt, type RetainedUpload,
+} from "./internal/upload-recovery.js";
 import { snapshot } from "./internal/snapshot.js";
 import { requestSaveFileHandle, saveDownload } from "./save.js";
 import type {
@@ -31,6 +33,8 @@ import type {
   PublicFile,
   SaveOptions,
   SaveResult,
+  ResumeUploadOptions,
+  UploadRecovery,
   UploadOptions,
   UploadResult,
   VerifiedStorageQuote,
@@ -54,6 +58,7 @@ interface OperationScope {
 export class AutonomiClient {
   #connection: Omit<ConnectionInfo, "files">;
   #files: PublicFile[] = [];
+  #pendingUploads = new Set<UploadRecovery>();
 
   #network: RawNetworkClient;
   #payment: PaymentProvider | undefined;
@@ -146,6 +151,14 @@ export class AutonomiClient {
     return Object.freeze([...this.#files]);
   }
 
+  /** Failed/cancelled uploads whose retained input still needs resume or discard. */
+  get pendingUploads(): readonly UploadRecovery[] {
+    for (const recovery of this.#pendingUploads) {
+      if (recovery.status === "completed" || recovery.status === "discarded") this.#pendingUploads.delete(recovery);
+    }
+    return Object.freeze([...this.#pendingUploads]);
+  }
+
   /** Install or replace the wallet/payment adapter used by future uploads. */
   setPaymentProvider(payment?: PaymentProvider): void {
     this.#payment = payment;
@@ -194,110 +207,147 @@ export class AutonomiClient {
     const payment = options.payment ?? this.#payment;
     if (!payment) {
       throw new AutonomiError(
-        "PAYMENT_REQUIRED",
-        "Uploading requires a PaymentProvider; pass one to connect() or upload()",
+        "PAYMENT_REQUIRED", "Uploading requires a PaymentProvider; pass one to connect() or upload()",
       );
     }
     const operation = this.#startOperation(options.signal);
     const report = this.#reporter("upload", options.onProgress, operation);
-    const cleanupReport = this.#reporter("upload", options.onProgress, operation, false);
-    const payForQuotes = async (
-      network: unknown,
-      quotes: unknown,
-    ): Promise<{ transactionHash?: string; totalAmount: string }> => {
-      try {
-        throwIfAborted(operation.signal);
-        report("Waiting for storage payment", { phase: "payment", total: (quotes as VerifiedStorageQuote[]).length, unit: "quotes" });
-        const receipt = await abortable(
-          payment.pay(
-            network as PaymentNetwork,
-            quotes as VerifiedStorageQuote[],
-            { report, signal: operation.signal },
-          ),
-          operation.signal,
-        );
-        if (!/^\d+$/u.test(receipt.totalAmount)) {
-          throw new Error("payment provider returned a non-decimal totalAmount");
-        }
-        report("Storage payment confirmed", { phase: "uploading" });
-        return receipt.transactionHash
-          ? { transactionHash: receipt.transactionHash, totalAmount: receipt.totalAmount }
-          : { totalAmount: receipt.totalAmount };
-      } catch (error) {
-        if (isAbort(error, operation.signal)) throw error;
-        throw wrapError("PAYMENT_FAILED", "Storage payment failed", error);
-      }
-    };
-
-    let staged: StagedUpload | undefined;
     try {
-      let result: unknown;
+      throwIfAborted(operation.signal);
+      let retained: RetainedUpload;
       if (input instanceof Uint8Array) {
         const name = options.name ?? "public-file.bin";
-        const contentType = options.contentType ?? "application/octet-stream";
-        report(`Self-encrypting ${name}`);
-        result = await abortable(
-          this.#network.uploadPublicFile(
-            input,
-            name,
-            contentType,
-            this.#connection.paymentNetwork,
-            payForQuotes,
-            report,
-          ),
-          operation.signal,
-        );
+        report(`Preparing ${name}`);
+        retained = retainUpload(this.#connection.paymentNetwork, {
+          bytes: input.slice(), name, contentType: options.contentType ?? "application/octet-stream",
+        }, operation.id);
       } else if (input instanceof Blob) {
         const isFile = typeof File === "function" && input instanceof File;
-        const name = options.name ?? (isFile ? input.name : "public-file.bin");
-        const contentType =
-          options.contentType || input.type || "application/octet-stream";
-        staged = await stageBlob(
-          input,
-          name,
-          contentType,
-          report,
-          this.#workerWasm,
-          operation.signal,
+        const staged = await stageBlob(
+          input, options.name ?? (isFile ? input.name : "public-file.bin"),
+          options.contentType || input.type || "application/octet-stream",
+          report, this.#workerWasm, operation.signal,
         );
-        throwIfAborted(operation.signal);
-        result = await abortable(
-          this.#network.uploadStagedPublicFile(
-            staged.staged,
-            this.#connection.paymentNetwork,
-            (index: unknown, address: unknown, size: unknown) =>
-              loadStagedRecord(
-                staged!.sessionId,
-                Number(index),
-                String(address),
-                Number(size),
-                operation.signal,
-              ),
-            payForQuotes,
-            report,
-          ),
-          operation.signal,
-        );
+        retained = retainUpload(this.#connection.paymentNetwork, { staged }, operation.id);
       } else {
         throw new TypeError("upload input must be a File, Blob, or Uint8Array");
       }
-      throwIfAborted(operation.signal);
-      const upload = result as UploadResult;
-      this.#rememberFile(upload.file);
-      report(`Uploaded ${upload.file.name}`, { phase: "complete", completed: upload.file.size, total: upload.file.size, unit: "bytes" });
-      return upload;
+      return await this.#runUpload(
+        retained, payment, false, options.retainOnFailure !== false, operation, report,
+      );
     } catch (error) {
       if (isAbort(error, operation.signal)) throw error;
       throw wrapError("UPLOAD_FAILED", "Public file upload failed", error);
     } finally {
-      if (staged) {
-        try {
-          await clearStagedUpload(staged);
-        } catch (error) {
-          cleanupReport(`Could not clear temporary upload records: ${String(error)}`, { phase: "cleanup" });
-        }
-      }
       operation.finish();
+    }
+  }
+
+  /** Retry retained input. New payments require an explicit provider on this call. */
+  async resumeUpload(
+    recovery: UploadRecovery,
+    options: ResumeUploadOptions = {},
+  ): Promise<UploadResult> {
+    const operation = this.#startOperation(options.signal);
+    const report = this.#reporter("upload", options.onProgress, operation);
+    try {
+      await abortable(uploadSettlement(recovery), operation.signal);
+      throwIfAborted(operation.signal);
+      const state = claimUpload(recovery, this.#connection.paymentNetwork);
+      return await this.#runUpload(state, options.payment, true, true, operation, report);
+    } finally {
+      operation.finish();
+    }
+  }
+
+  async #runUpload(
+    state: RetainedUpload,
+    payment: PaymentProvider | undefined,
+    resuming: boolean,
+    retainOnFailure: boolean,
+    operation: OperationScope,
+    report: Reporter,
+  ): Promise<UploadResult> {
+    let paymentFailure: unknown;
+    const payForQuotes = async (networkValue: unknown, quoteValue: unknown) => {
+      try {
+        throwIfAborted(operation.signal);
+        const network = snapshot(networkValue as PaymentNetwork);
+        const quotes = snapshot(quoteValue as VerifiedStorageQuote[]);
+        const previous = resuming ? paidReceipt(state, network, quotes) : undefined;
+        if (previous) {
+          report("Reusing a confirmed storage payment", { phase: "uploading" });
+          return previous;
+        }
+        if (!payment) {
+          throw new AutonomiError(
+            "RECOVERY_PAYMENT_REQUIRED",
+            "Fresh quotes are not covered by a retained receipt; pass payment to resumeUpload() to authorize another payment",
+          );
+        }
+        report("Waiting for storage payment", { phase: "payment", total: quotes.length, unit: "quotes" });
+        throwIfAborted(operation.signal);
+        // Observe the actual provider promise, even after the upload stops waiting.
+        const pending = Promise.resolve(payment.pay(network, quotes, {
+          report, signal: operation.signal,
+        })).then((receipt) => {
+          validateReceipt(receipt, quotes);
+          const recorded = snapshot({ network, quotes, receipt });
+          state.payments.push(recorded);
+          return recorded.receipt;
+        });
+        state.pendingPayments.push(pending);
+        const receipt = await abortable(pending, operation.signal);
+        report("Storage payment confirmed", { phase: "uploading" });
+        return receipt;
+      } catch (error) {
+        paymentFailure = isAbort(error, operation.signal)
+          ? error : wrapError("PAYMENT_FAILED", "Storage payment failed", error);
+        throw paymentFailure;
+      }
+    };
+    try {
+      throwIfAborted(operation.signal);
+      if (!state.result) {
+        report(`Preparing storage for ${state.name}`, { phase: "preparing" });
+        const raw = state.staged
+          ? this.#network.uploadStagedPublicFile(
+              state.staged.staged, state.network,
+              (index: unknown, address: unknown, size: unknown) => loadStagedRecord(
+                state.staged!.sessionId, Number(index), String(address), Number(size), operation.signal,
+              ), payForQuotes, report,
+            )
+          : this.#network.uploadPublicFile(
+              state.bytes!, state.name, state.contentType, state.network, payForQuotes, report,
+            );
+        state.work = Promise.resolve(raw).then((result) => {
+          state.result = uploadResult(state, result as UploadResult);
+          return state.result;
+        });
+        await abortable(state.work, operation.signal);
+      }
+      throwIfAborted(operation.signal);
+      const result = state.result!;
+      this.#rememberFile(result.file);
+      report(`Uploaded ${result.file.name}`, {
+        phase: "complete", completed: result.file.size, total: result.file.size, unit: "bytes",
+      });
+      try {
+        await releaseUpload(state, "completed");
+        this.#pendingUploads.delete(state.handle);
+      } catch {
+        // The upload is complete. Retain cleanup ownership without paying again.
+        awaitUploadSettlement(state);
+        this.#pendingUploads.add(state.handle);
+      }
+      return result;
+    } catch (error) {
+      awaitUploadSettlement(state);
+      this.#pendingUploads.add(state.handle);
+      if (!retainOnFailure) void state.handle.discard().catch(() => undefined);
+      if (isAbort(error, operation.signal)) throw error;
+      const failure = wrapError("UPLOAD_FAILED", "Public file upload failed", paymentFailure ?? error);
+      throw new UploadError(failure, state.handle);
     }
   }
 

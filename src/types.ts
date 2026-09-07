@@ -69,7 +69,7 @@ export interface PaymentReceipt {
 
 export interface PaymentContext {
   report(message: string, progress?: ProgressDetails): void;
-  /** Aborts the upload waiting on this payment, when cancellation is supported. */
+  /** Cancel before submission; submitted storage payments must still return their receipt. */
   readonly signal?: AbortSignal;
 }
 
@@ -122,7 +122,7 @@ export type WasmSource =
 export interface ClientOptions {
   payment?: PaymentProvider;
   onProgress?: ProgressListener;
-  /** Override where the bundled WASM module is loaded from. */
+  /** First page-wide WASM source. Later explicit sources must match the shared module. */
   wasm?: WasmSource | Promise<WasmSource>;
   /** Cancel connection setup. A connected client is unaffected by later aborts. */
   signal?: AbortSignal;
@@ -142,16 +142,48 @@ export interface OperationOptions {
 }
 
 export interface UploadOptions extends OperationOptions {
-  /** Required for a Blob or byte array; a File supplies its own name. */
+  /** Retain prepared input after failure for resume/discard. Defaults to true. */
+  retainOnFailure?: boolean;
+  /** Defaults to the File name, otherwise public-file.bin. */
   name?: string;
   /** Defaults to the File/Blob type, then application/octet-stream. */
   contentType?: string;
   payment?: PaymentProvider;
 }
 
+export interface ResumeUploadOptions extends OperationOptions {
+  /** Explicitly authorize payment for quotes not covered by a retained receipt. */
+  payment?: PaymentProvider;
+}
+
+export interface UploadPayment {
+  readonly network: PaymentNetwork;
+  readonly quotes: readonly Readonly<VerifiedStorageQuote>[];
+  readonly receipt: Readonly<PaymentReceipt>;
+}
+
+/** Page-owned retry state. It survives client.close(), but not a page reload. */
+export interface UploadRecovery {
+  /** The initial upload's progress operationId. Resumed attempts receive new IDs. */
+  readonly id: string;
+  readonly name: string;
+  readonly size: number;
+  readonly contentType: string;
+  readonly status: "active" | "settling" | "ready" | "discarding" | "discarded" | "completed";
+  readonly payments: readonly UploadPayment[];
+  /** Wait for the previous attempt and any submitted payment to finish. Never rejects. */
+  readonly settled: Promise<void>;
+  /** Release retained bytes and staged records once the attempt has settled. */
+  discard(): Promise<void>;
+}
+
 export interface UploadResult {
+  /** All confirmed payments made by this upload and its resumed attempts. */
+  payments: readonly UploadPayment[];
   file: PublicFile;
+  /** Final storage transaction, when present. See payments for the complete history. */
   transactionHash?: string;
+  /** Total confirmed storage payments across this upload and its resumed attempts. */
   storageCostAtto: string;
   records: number;
 }

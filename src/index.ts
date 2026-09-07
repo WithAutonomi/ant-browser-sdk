@@ -1,5 +1,5 @@
 export { AutonomiClient } from "./client.js";
-export { AutonomiError, type AutonomiErrorCode } from "./errors.js";
+export { AutonomiError, UploadError, type AutonomiErrorCode } from "./errors.js";
 export { PublicFileReader } from "./file-reader.js";
 export {
   createManualPaymentProvider,
@@ -38,6 +38,9 @@ export type {
   SaveOptions,
   SaveResult,
   StreamOptions,
+  ResumeUploadOptions,
+  UploadPayment,
+  UploadRecovery,
   UploadOptions,
   UploadResult,
   VerifiedStorageQuote,
