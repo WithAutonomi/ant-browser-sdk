@@ -315,18 +315,30 @@ Implement `PaymentProvider` to integrate another wallet stack:
 Custom providers must verify that the wallet submits on `network.chainId`.
 
 ```ts
-import type { PaymentProvider } from "@autonomi/browser-sdk";
+import { createPaymentSubmission, type PaymentProvider } from "@autonomi/browser-sdk";
 
 const payment: PaymentProvider = {
-  async pay(network, verifiedQuotes, { report }) {
-    report("Confirm payment in your wallet");
-    const receipt = await submitStoragePayment(network, verifiedQuotes);
-
-    return {
-      transactionHash: receipt.transactionHash,
-      walletAddress: receipt.walletAddress,
-      totalAmount: receipt.totalAmount.toString(),
-    };
+  async pay(network, verifiedQuotes, context) {
+    if (verifiedQuotes.length === 0) return { totalAmount: "0" };
+    context.report("Confirm payment in your wallet");
+    context.signal?.throwIfAborted();
+    const transaction = await broadcastStoragePayment(network, verifiedQuotes);
+    const submission = createPaymentSubmission({
+      transactionHash: transaction.hash,
+      totalAmount: verifiedQuotes.reduce((sum, quote) => sum + BigInt(quote.amount), 0n).toString(),
+    }, async () => {
+      // Retry only observation of this transaction; never broadcast here.
+      const receipt = await observeStoragePayment(transaction);
+      if (receipt.reverted) return { status: "failed", reason: "Storage payment reverted" };
+      return { status: "confirmed", receipt: {
+        transactionHash: receipt.transactionHash,
+        totalAmount: submission.totalAmount,
+      } };
+    });
+    context.submitted(submission);
+    const settlement = await submission.wait();
+    if (settlement.status === "failed") throw new Error(settlement.reason);
+    return settlement.receipt;
   },
 };
 ```
@@ -342,7 +354,24 @@ amount. Providers should observe `context.signal` during pre-submission work and
 check it immediately before submitting. After submitting storage payment, keep
 observing its receipt and resolve with that receipt even if the signal aborts;
 the SDK stops the upload waiting promptly and records the later receipt for
-recovery. Throwing on cancellation after broadcast loses that recovery evidence.
+recovery. Call `context.submitted()` immediately after broadcast, even if cancellation
+occurred while the wallet was submitting. The observer must reject on an unknown
+outcome (such as an RPC timeout) and return `failed` only for a definitive failure.
+Successful repricing may return a different confirmed transaction hash.
+
+`upload()` and `resumeUpload()` accept `onPaymentSubmitted`, which receives a
+`PendingPayment` handle before confirmation. Its immutable `submission` records
+the broadcast hash and amount; `reconcile()` retries observation without paying
+again. Concurrent calls share one observation and definitive outcomes are cached.
+The callback can arrive after cancellation if broadcast was already in flight.
+
+An upload recovery exposes unresolved submissions in `pendingPayments`.
+`resumeUpload()` reconciles them before requesting quotes or invoking a wallet,
+including when a new provider is explicitly supplied. An observation failure
+produces `PAYMENT_UNRESOLVED`; confirmed payments join `recovery.payments` once,
+and a definitive failure permits a newly authorized payment. Handles are
+page-owned. Discarding retained file bytes does not erase transaction evidence
+from handles already held by the application.
 
 ### Review quotes before payment
 

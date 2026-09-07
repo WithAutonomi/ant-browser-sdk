@@ -60,7 +60,7 @@ const quotes: VerifiedStorageQuote[] = [{
   quote: {}, quoteHash: "33".repeat(32), rewardsAddress: `0x${"44".repeat(20)}`, amount: "1",
 }];
 const provider = () => createEthersPaymentProvider({ privateKey: `0x${"55".repeat(32)}`, rpcUrl: "http://127.0.0.1:8545/" });
-const context = () => ({ report: vi.fn() });
+const context = () => ({ submitted: vi.fn(), report: vi.fn() });
 async function waiting() { await vi.waitFor(() => expect(state.waits.length).toBeGreaterThan(0)); }
 function confirm(hash = "0xconfirmed") { state.waits.shift()!.resolve({ status: 1, hash }); }
 function replace(reason: "repriced" | "cancelled" | "replaced", status = 1) {
@@ -165,7 +165,7 @@ describe("Ethers payments", () => {
     state.allowance = allowance;
     const controller = new AbortController();
     await expect(provider().pay(network, quotes, {
-      signal: controller.signal, report: () => controller.abort(),
+      signal: controller.signal, submitted() {}, report: () => controller.abort(),
     })).rejects.toMatchObject({ name: "AbortError" });
     expect(state.submissions).toEqual([]);
   });
@@ -188,4 +188,19 @@ describe("Ethers payments", () => {
     await waiting(); controller.abort(); confirm(); await rejection;
     expect(state.submissions).toEqual(["approve"]);
   });
+});
+
+it("reports broadcast evidence and retries confirmation without another transaction", async () => {
+  const ctx = context();
+  const pending = provider().pay(network, quotes, ctx);
+  const rejected = expect(pending).rejects.toThrow("RPC timeout");
+  await waiting();
+  const submission = ctx.submitted.mock.calls[0]![0] as import("../src/types.js").PaymentSubmission;
+  expect(submission.transactionHash).toBe("0xtransaction1");
+  state.waits.shift()!.reject(new Error("RPC timeout"));
+  await rejected;
+  const confirmation = submission.wait();
+  await waiting(); confirm("0xtransaction1");
+  await expect(confirmation).resolves.toMatchObject({ status: "confirmed", receipt: { transactionHash: "0xtransaction1" } });
+  expect(state.submissions).toEqual(["payForQuotes"]);
 });

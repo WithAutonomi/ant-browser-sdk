@@ -79,8 +79,36 @@ export interface NoPaymentReceipt {
 /** A paid plan requires a transaction hash; only an empty plan may omit it. */
 export type PaymentReceipt = PaidPaymentReceipt | NoPaymentReceipt;
 
+/** Evidence of a broadcast storage transaction, before its outcome is known. */
+export interface PaymentSubmissionInfo {
+  readonly transactionHash: string;
+  readonly walletAddress?: string;
+  readonly totalAmount: string;
+}
+
+export type PaymentSettlement =
+  | { readonly status: "confirmed"; readonly receipt: Readonly<PaidPaymentReceipt> }
+  | { readonly status: "failed"; readonly reason: string; readonly cause?: unknown };
+
+export interface PaymentSubmission extends PaymentSubmissionInfo {
+  /** Observe the same transaction. Reject on observation failure; never broadcast. */
+  wait(): Promise<PaymentSettlement>;
+}
+
+/** Retained submission evidence; confirmation can be retried after an RPC failure. */
+export interface PendingPayment {
+  readonly network: PaymentNetwork;
+  readonly quotes: readonly Readonly<VerifiedStorageQuote>[];
+  readonly submission: Readonly<PaymentSubmissionInfo>;
+  readonly status: "pending" | "confirmed" | "failed";
+  /** Shares concurrent observations and caches a definitive outcome. */
+  reconcile(): Promise<PaymentSettlement>;
+}
+
 export interface PaymentContext {
   report(message: string, progress?: ProgressDetails): void;
+  /** Call immediately after broadcast, including if cancellation happened during submission. */
+  submitted(submission: PaymentSubmission): void;
   /** Cancel before submission; submitted storage payments must still return their receipt. */
   readonly signal?: AbortSignal;
 }
@@ -154,6 +182,8 @@ export interface OperationOptions {
 }
 
 export interface UploadOptions extends OperationOptions {
+  /** Receives submission evidence immediately; may run after cancellation during broadcast. */
+  onPaymentSubmitted?: (payment: PendingPayment) => void;
   /** Retain prepared input after failure for resume/discard. Defaults to true. */
   retainOnFailure?: boolean;
   /** Defaults to the File name, otherwise public-file.bin. */
@@ -164,6 +194,7 @@ export interface UploadOptions extends OperationOptions {
 }
 
 export interface ResumeUploadOptions extends OperationOptions {
+  onPaymentSubmitted?: (payment: PendingPayment) => void;
   /** Explicitly authorize payment for quotes not covered by a retained receipt. */
   payment?: PaymentProvider;
 }
@@ -183,6 +214,8 @@ export interface UploadRecovery {
   readonly contentType: string;
   readonly status: "active" | "settling" | "ready" | "discarding" | "discarded" | "completed";
   readonly payments: readonly UploadPayment[];
+  /** Submitted transactions without a definitive outcome. Resume reconciles these first. */
+  readonly pendingPayments: readonly PendingPayment[];
   /** Wait for the previous attempt and any submitted payment to finish. Never rejects. */
   readonly settled: Promise<void>;
   /** Release retained bytes and staged records once the attempt has settled. */

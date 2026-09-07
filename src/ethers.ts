@@ -10,6 +10,8 @@ import {
 } from "ethers";
 import { abortable, throwIfAborted } from "./internal/abort.js";
 import { assertPaymentChainId } from "./internal/payment-network.js";
+import { createPaymentSubmission, confirmedPayment } from "./payment.js";
+import { errorMessage } from "./errors.js";
 import type {
   PaymentContext,
   PaymentNetwork,
@@ -159,7 +161,22 @@ async function submitPayment(
   context.report(`Submitting one payment for ${payments.length} storage quote(s)`, { phase: "payment", total: payments.length, unit: "quotes" });
   throwIfAborted(context.signal);
   const transaction = await vault.getFunction("payForQuotes")(payments);
-  const transactionHash = await confirmedHash(transaction, "Storage payment transaction reverted");
+  const submission = createPaymentSubmission({ transactionHash: transaction.hash, walletAddress, totalAmount: totalAmount.toString() }, async () => {
+    try {
+      const transactionHash = await confirmedHash(transaction, "Storage payment transaction reverted");
+      return { status: "confirmed", receipt: { transactionHash, walletAddress, totalAmount: totalAmount.toString() } };
+    } catch (error) {
+      if (error instanceof RevertedTransaction || isError(error, "TRANSACTION_REPLACED") ||
+          (isError(error, "CALL_EXCEPTION") && error.receipt?.status === 0)) {
+        return { status: "failed", reason: errorMessage(error), cause: error };
+      }
+      throw error;
+    }
+  });
+  // A UI callback must not interrupt observation after funds have been broadcast.
+  try { context.submitted(submission); } catch { /* Continue observing the transaction. */ }
+  const receipt = await confirmedPayment(submission);
+  const transactionHash = receipt.transactionHash;
   try { if (!context.signal?.aborted) context.report(`Payment confirmed in ${transactionHash}`); } catch { /* The receipt is already confirmed. */ }
   return {
     transactionHash,
@@ -168,10 +185,13 @@ async function submitPayment(
   };
 }
 
+class RevertedTransaction extends Error {}
+
 async function confirmedHash(transaction: TransactionResponse, failure: string): Promise<string> {
   try {
     const receipt = await transaction.wait();
-    if (!receipt || receipt.status !== 1) throw new Error(failure);
+    if (!receipt) throw new Error("Transaction receipt is not yet available");
+    if (receipt.status !== 1) throw new RevertedTransaction(failure);
     return receipt.hash;
   } catch (error) {
     if (

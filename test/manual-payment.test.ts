@@ -49,7 +49,7 @@ describe("createManualPaymentProvider", () => {
     });
     const payment = createManualPaymentProvider({ payment: walletPayment, onRequest });
 
-    const uploadPayment = payment.pay(network, quotes, { report: vi.fn() });
+    const uploadPayment = payment.pay(network, quotes, { submitted: vi.fn(), report: vi.fn() });
 
     expect(onRequest).toHaveBeenCalledOnce();
     expect(request.totalAmountAtto).toBe("42");
@@ -74,7 +74,7 @@ describe("createManualPaymentProvider", () => {
         request = next;
       },
     });
-    const uploadPayment = payment.pay(network, quotes, { report: vi.fn() });
+    const uploadPayment = payment.pay(network, quotes, { submitted: vi.fn(), report: vi.fn() });
 
     expect(request.cancel("User declined the storage price")).toBe(true);
     expect(request.cancel()).toBe(false);
@@ -94,7 +94,7 @@ describe("createManualPaymentProvider", () => {
     });
 
     const uploadPayment = payment.pay(network, quotes, {
-      report: vi.fn(),
+      submitted: vi.fn(), report: vi.fn(),
       signal: controller.signal,
     });
     controller.abort();
@@ -114,7 +114,7 @@ describe("createManualPaymentProvider", () => {
         request = next;
       },
     });
-    const uploadPayment = payment.pay(network, quotes, { report: vi.fn() });
+    const uploadPayment = payment.pay(network, quotes, { submitted: vi.fn(), report: vi.fn() });
 
     await expect(request.pay()).rejects.toBe(rejection);
     await expect(uploadPayment).rejects.toBe(rejection);
@@ -125,7 +125,7 @@ describe("createManualPaymentProvider", () => {
     const onRequest = vi.fn();
     const payment = createManualPaymentProvider({ onRequest });
 
-    await expect(payment.pay(network, [], { report: vi.fn() })).resolves.toEqual({
+    await expect(payment.pay(network, [], { submitted: vi.fn(), report: vi.fn() })).resolves.toEqual({
       totalAmount: "0",
     });
     expect(onRequest).not.toHaveBeenCalled();
@@ -146,7 +146,7 @@ describe("createManualPaymentProvider", () => {
         request = next;
       },
     });
-    const uploadPayment = payment.pay(network, quotes, { report: vi.fn() });
+    const uploadPayment = payment.pay(network, quotes, { submitted: vi.fn(), report: vi.fn() });
 
     await expect(request.pay()).rejects.toThrow(
       "Select a wallet PaymentProvider before paying",

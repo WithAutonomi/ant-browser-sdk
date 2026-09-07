@@ -7,6 +7,7 @@ export type AutonomiErrorCode =
   | "CLIENT_CLOSED"
   | "PAYMENT_REQUIRED"
   | "PAYMENT_FAILED"
+  | "PAYMENT_UNRESOLVED"
   | "LOOKUP_FAILED"
   | "UPLOAD_FAILED"
   | "UPLOAD_IN_PROGRESS"

@@ -1,10 +1,11 @@
 import { AutonomiError } from "../errors.js";
 import type {
-  PaymentNetwork, PaymentReceipt, PublicFile, UploadPayment, UploadRecovery,
+  PaymentNetwork, PaymentReceipt, PaymentSettlement, PaymentSubmission, PendingPayment, PublicFile, UploadPayment, UploadRecovery,
   UploadResult, VerifiedStorageQuote,
 } from "../types.js";
 import { clearStagedUpload, type StagedUpload } from "./staging.js";
 import { snapshot } from "./snapshot.js";
+import { abortable, isAbort } from "./abort.js";
 
 export interface RetainedUpload {
   handle: UploadRecovery;
@@ -15,7 +16,8 @@ export interface RetainedUpload {
   bytes?: Uint8Array;
   staged?: StagedUpload;
   payments: UploadPayment[];
-  pendingPayments: Promise<unknown>[];
+  paymentTasks: Promise<unknown>[];
+  submissions: TrackedPayment[];
   work?: Promise<unknown>;
   result?: UploadResult;
   status: UploadRecovery["status"];
@@ -36,6 +38,7 @@ export function retainUpload(
     id, name, size, contentType,
     get status() { return state.status; },
     get payments() { return Object.freeze([...state.payments]); },
+    get pendingPayments() { return Object.freeze(state.submissions.filter(({ handle }) => handle.status === "pending").map(({ handle }) => handle)); },
     get settled() { return state.settled; },
     discard(): Promise<void> {
       if (state.status === "completed" || state.status === "discarded") return Promise.resolve();
@@ -56,10 +59,86 @@ export function retainUpload(
   });
   const state: RetainedUpload = {
     handle, network: snapshot(network), name, contentType, size,
-    ...input, payments: [], pendingPayments: [], status: "active", settled: Promise.resolve(),
+    ...input, payments: [], paymentTasks: [], submissions: [], status: "active", settled: Promise.resolve(),
   };
   states.set(handle, state);
   return state;
+}
+
+export interface TrackedPayment {
+  handle: PendingPayment;
+  confirm(receipt: PaymentReceipt): void;
+}
+
+export function recordPayment(state: RetainedUpload, network: PaymentNetwork, quotes: readonly VerifiedStorageQuote[], receipt: PaymentReceipt): UploadPayment {
+  validateReceipt(receipt, quotes);
+  const existing = state.payments.find((payment) => sameNetwork(payment.network, network) &&
+    payment.receipt.transactionHash === receipt.transactionHash && payment.receipt.totalAmount === receipt.totalAmount &&
+    payment.quotes.length === quotes.length && payment.quotes.every((quote, index) => {
+      const other = quotes[index]!;
+      return quote.quoteHash === other.quoteHash && quote.amount === other.amount && quote.rewardsAddress === other.rewardsAddress;
+    }));
+  if (existing) return existing;
+  const payment = snapshot({ network, quotes, receipt });
+  state.payments.push(payment);
+  return payment;
+}
+
+export function trackPayment(
+  state: RetainedUpload, network: PaymentNetwork, quotes: readonly VerifiedStorageQuote[], submission: PaymentSubmission,
+): TrackedPayment {
+  validateReceipt(submission, quotes);
+  if (typeof submission.wait !== "function") throw new TypeError("Payment submission requires a wait() observer");
+  let outcome: PaymentSettlement | undefined;
+  let observing: Promise<PaymentSettlement> | undefined;
+  const finish = (settlement: PaymentSettlement): PaymentSettlement => {
+    if (outcome) return outcome;
+    if (settlement.status === "confirmed") {
+      const recorded = recordPayment(state, network, quotes, settlement.receipt);
+      if (recorded.receipt.transactionHash === undefined) throw new Error("Submitted payment has no transaction hash");
+      outcome = Object.freeze({ status: "confirmed", receipt: recorded.receipt });
+    } else if (settlement.status === "failed") {
+      outcome = Object.freeze({ ...settlement });
+    } else {
+      throw new TypeError("Invalid payment settlement");
+    }
+    return outcome;
+  };
+  const handle: PendingPayment = Object.freeze({
+    network, quotes,
+    submission: snapshot({ transactionHash: submission.transactionHash, totalAmount: submission.totalAmount,
+      ...(submission.walletAddress === undefined ? {} : { walletAddress: submission.walletAddress }) }),
+    get status() { return outcome?.status ?? "pending"; },
+    reconcile(): Promise<PaymentSettlement> {
+      if (outcome) return Promise.resolve(outcome);
+      if (!observing) {
+        observing = Promise.resolve().then(() => submission.wait()).then(finish).finally(() => { observing = undefined; });
+        state.paymentTasks.push(observing);
+      }
+      return observing;
+    },
+  });
+  const tracked: TrackedPayment = {
+    handle,
+    confirm(receipt) {
+      if (receipt.transactionHash === undefined) throw new Error("Submitted payment has no transaction hash");
+      finish({ status: "confirmed", receipt });
+    },
+  };
+  state.submissions.push(tracked);
+  return tracked;
+}
+
+export async function reconcilePayments(state: RetainedUpload, signal: AbortSignal): Promise<void> {
+  for (const { handle } of state.submissions) {
+    if (handle.status !== "pending") continue;
+    try {
+      await abortable(handle.reconcile(), signal);
+    } catch (error) {
+      if (isAbort(error, signal)) throw error;
+      throw new AutonomiError("PAYMENT_UNRESOLVED", "A submitted storage payment is still unresolved; retry confirmation before paying again", error);
+    }
+  }
 }
 
 function retainedUpload(handle: UploadRecovery): RetainedUpload {
@@ -84,15 +163,15 @@ export function claimUpload(handle: UploadRecovery, network: PaymentNetwork): Re
     throw new AutonomiError("INVALID_SOURCE", "Resume on the original payment network and contracts");
   }
   state.status = "active";
-  state.pendingPayments = [];
+  state.paymentTasks = [];
   return state;
 }
 
 export function awaitUploadSettlement(state: RetainedUpload): void {
   state.status = "settling";
-  state.settled = Promise.allSettled([state.work, ...state.pendingPayments]).then(() => {
+  state.settled = Promise.allSettled([state.work, ...state.paymentTasks]).then(() => {
     if (state.status === "settling") state.status = "ready";
-    state.pendingPayments = [];
+    state.paymentTasks = [];
     delete state.work;
   });
 }
@@ -105,7 +184,7 @@ export async function releaseUpload(
   delete state.staged;
   delete state.bytes;
   delete state.work;
-  state.pendingPayments = [];
+  state.paymentTasks = [];
   state.status = status;
 }
 

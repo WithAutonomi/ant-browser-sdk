@@ -69,7 +69,7 @@ beforeEach(() => {
 describe("createWagmiPaymentProvider", () => {
   it("requires an application-configured public client for the advertised chain", async () => {
     mocks.getPublicClient.mockReturnValue(undefined);
-    await expect(createWagmiPaymentProvider({ config }).pay(network, quotes, { report() {} }))
+    await expect(createWagmiPaymentProvider({ config }).pay(network, quotes, { submitted() {}, report() {} }))
       .rejects.toThrow("Configure a Wagmi public client for payment chain 42161");
     expect(mocks.getConnectorClient).not.toHaveBeenCalled();
     expect(mocks.writeContract).not.toHaveBeenCalled();
@@ -78,7 +78,7 @@ describe("createWagmiPaymentProvider", () => {
   it("rejects an RPC and wallet that moved together to a different chain", async () => {
     mocks.getChainId.mockResolvedValue(1);
     mocks.getConnectorClient.mockResolvedValue({ account: { address: walletAddress }, chain: { id: 1 } });
-    await expect(createWagmiPaymentProvider({ config }).pay(network, quotes, { report() {} }))
+    await expect(createWagmiPaymentProvider({ config }).pay(network, quotes, { submitted() {}, report() {} }))
       .rejects.toThrow("expected payment chain 42161");
     expect(mocks.readContract).not.toHaveBeenCalled();
     expect(mocks.writeContract).not.toHaveBeenCalled();
@@ -88,7 +88,7 @@ describe("createWagmiPaymentProvider", () => {
     const report = vi.fn();
     const payment = createWagmiPaymentProvider({ config, approval: "exact" });
 
-    const receipt = await payment.pay(network, quotes, { report });
+    const receipt = await payment.pay(network, quotes, { submitted() {}, report });
 
     expect(mocks.getPublicClient).toHaveBeenCalledWith(config, { chainId: network.chainId });
     expect(mocks.getConnectorClient).toHaveBeenCalledWith(config);
@@ -144,7 +144,7 @@ describe("createWagmiPaymentProvider", () => {
     });
     const payment = createWagmiPaymentProvider({ config });
 
-    await payment.pay(network, quotes, { report: vi.fn() });
+    await payment.pay(network, quotes, { submitted: vi.fn(), report: vi.fn() });
 
     expect(mocks.writeContract).toHaveBeenCalledOnce();
     expect(mocks.writeContract).toHaveBeenCalledWith(
@@ -160,7 +160,7 @@ describe("createWagmiPaymentProvider", () => {
     });
     const payment = createWagmiPaymentProvider({ config });
 
-    await expect(payment.pay(network, quotes, { report: vi.fn() })).rejects.toThrow(
+    await expect(payment.pay(network, quotes, { submitted: vi.fn(), report: vi.fn() })).rejects.toThrow(
       "switch to payment chain 42161",
     );
     expect(mocks.readContract).not.toHaveBeenCalled();
@@ -176,7 +176,7 @@ describe("Wagmi replacement and cancellation handling", () => {
       options.onReplaced({ reason });
       return { status: "success", transactionHash: "0xcancellation" };
     });
-    await expect(createWagmiPaymentProvider({ config }).pay(network, quotes, { report() {} }))
+    await expect(createWagmiPaymentProvider({ config }).pay(network, quotes, { submitted() {}, report() {} }))
       .rejects.toThrow("cancelled or replaced");
   });
   it("uses the replacement hash after repricing approval and payment", async () => {
@@ -184,14 +184,14 @@ describe("Wagmi replacement and cancellation handling", () => {
       options.onReplaced({ reason: "repriced" });
       return { status: "success", transactionHash: "0xrepriced" };
     });
-    await expect(createWagmiPaymentProvider({ config }).pay(network, quotes, { report() {} }))
+    await expect(createWagmiPaymentProvider({ config }).pay(network, quotes, { submitted() {}, report() {} }))
       .resolves.toMatchObject({ transactionHash: "0xrepriced" });
     expect(mocks.writeContract).toHaveBeenCalledTimes(2);
   });
   it("does no work for an already aborted context", async () => {
     const controller = new AbortController(); controller.abort();
     await expect(createWagmiPaymentProvider({ config }).pay(network, quotes, {
-      report() {}, signal: controller.signal,
+      submitted() {}, report() {}, signal: controller.signal,
     })).rejects.toMatchObject({ name: "AbortError" });
     expect(mocks.getConnectorClient).not.toHaveBeenCalled();
     expect(mocks.writeContract).not.toHaveBeenCalled();
@@ -200,7 +200,7 @@ describe("Wagmi replacement and cancellation handling", () => {
     mocks.readContract.mockResolvedValue(allowance);
     const controller = new AbortController();
     await expect(createWagmiPaymentProvider({ config }).pay(network, quotes, {
-      report: () => controller.abort(), signal: controller.signal,
+      submitted() {}, report: () => controller.abort(), signal: controller.signal,
     })).rejects.toMatchObject({ name: "AbortError" });
     expect(mocks.writeContract).not.toHaveBeenCalled();
   });
@@ -210,8 +210,22 @@ describe("Wagmi replacement and cancellation handling", () => {
       controller.abort(); return { status: "success", transactionHash: "0xapproval" };
     });
     await expect(createWagmiPaymentProvider({ config }).pay(network, quotes, {
-      report() {}, signal: controller.signal,
+      submitted() {}, report() {}, signal: controller.signal,
     })).rejects.toMatchObject({ name: "AbortError" });
     expect(mocks.writeContract).toHaveBeenCalledOnce();
   });
+});
+
+it("retries a submitted storage transaction after an RPC timeout without rebroadcast", async () => {
+  mocks.readContract.mockResolvedValue(100n);
+  mocks.waitForTransactionReceipt.mockReset().mockRejectedValueOnce(new Error("RPC timeout"))
+    .mockResolvedValue({ status: "success", transactionHash: "0xconfirmed" });
+  const submitted = vi.fn();
+  await expect(createWagmiPaymentProvider({ config }).pay(network, quotes, { submitted, report() {} }))
+    .rejects.toThrow("RPC timeout");
+  const submission = submitted.mock.calls[0]![0] as import("../src/types.js").PaymentSubmission;
+  await expect(submission.wait()).resolves.toMatchObject({ status: "confirmed" });
+  expect(mocks.writeContract).toHaveBeenCalledOnce();
+  expect(mocks.waitForTransactionReceipt).toHaveBeenCalledTimes(2);
+  expect(mocks.waitForTransactionReceipt.mock.calls[1]![1].hash).toBe(submission.transactionHash);
 });

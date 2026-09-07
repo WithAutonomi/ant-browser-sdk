@@ -12,6 +12,7 @@ import {
 import { readContract, waitForTransactionReceipt, writeContract } from "viem/actions";
 import { abortable, throwIfAborted } from "./internal/abort.js";
 import { assertPaymentChainId } from "./internal/payment-network.js";
+import { createPaymentSubmission, confirmedPayment } from "./payment.js";
 import type {
   PaymentNetwork,
   PaymentProvider,
@@ -140,11 +141,17 @@ export function createWagmiPaymentProvider<config extends Config>(
         functionName: "payForQuotes",
         args: [payments],
       });
-      const confirmedTransactionHash = await requireSuccessfulReceipt(
-        publicClient,
-        transactionHash,
-        "Storage payment transaction reverted",
-      );
+      const submission = createPaymentSubmission({ transactionHash, walletAddress, totalAmount: totalAmount.toString() }, async () => {
+        try {
+          const confirmedHash = await requireSuccessfulReceipt(publicClient, transactionHash, "Storage payment transaction reverted");
+          return { status: "confirmed", receipt: { transactionHash: confirmedHash, walletAddress, totalAmount: totalAmount.toString() } };
+        } catch (error) {
+          if (error instanceof FailedTransaction) return { status: "failed", reason: error.message, cause: error };
+          throw error;
+        }
+      });
+      try { context.submitted(submission); } catch { /* Continue observing the transaction. */ }
+      const confirmedTransactionHash = (await confirmedPayment(submission)).transactionHash;
       try { if (!context.signal?.aborted) context.report(`Payment confirmed in ${confirmedTransactionHash}`); } catch { /* The receipt is already confirmed. */ }
       return {
         transactionHash: confirmedTransactionHash,
@@ -154,6 +161,8 @@ export function createWagmiPaymentProvider<config extends Config>(
     },
   };
 }
+
+class FailedTransaction extends Error {}
 
 async function requireSuccessfulReceipt(
   publicClient: PublicClient,
@@ -167,8 +176,8 @@ async function requireSuccessfulReceipt(
       if (reason !== "repriced") replaced = true;
     },
   });
-  if (replaced) throw new Error("Wallet transaction was cancelled or replaced with a different transaction");
-  if (receipt.status !== "success") throw new Error(errorMessage);
+  if (replaced) throw new FailedTransaction("Wallet transaction was cancelled or replaced with a different transaction");
+  if (receipt.status !== "success") throw new FailedTransaction(errorMessage);
   return receipt.transactionHash;
 }
 

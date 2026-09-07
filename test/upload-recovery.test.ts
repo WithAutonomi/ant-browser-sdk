@@ -25,7 +25,7 @@ vi.mock("../src/internal/staging.js", async (original) => ({
   ...await original<typeof import("../src/internal/staging.js")>(),
   stageBlob: mocks.stage,
 }));
-import { AutonomiClient, UploadError } from "../src/index.js";
+import { AutonomiClient, UploadError, createPaymentSubmission } from "../src/index.js";
 import { getStagedRecord, putStagedRecord } from "../src/internal/record-store.js";
 const file: PublicFile = {
   name: "file.bin", address: "aa".repeat(32), size: 3, content_type: "application/octet-stream", blake3: "bb".repeat(32), data_map_size: 1, chunks: [], replicas: 1,
@@ -124,4 +124,75 @@ it("refuses recovery when the same contracts are advertised on another chain", a
   await expect(replacement.resumeUpload(recovery)).rejects.toMatchObject({ code: "INVALID_SOURCE" });
   expect(mocks.upload).toHaveBeenCalledOnce();
   expect(recovery.status).toBe("ready");
+});
+
+it("retains broadcast evidence and blocks new payment until its outcome is known", async () => {
+  const observe = vi.fn().mockRejectedValue(new Error("RPC timeout"));
+  const submission = createPaymentSubmission({ transactionHash: "0xpaid", totalAmount: "42" }, observe);
+  const payment: PaymentProvider = { pay: vi.fn(async (_network, _quotes, context) => {
+    context.submitted(submission);
+    await submission.wait();
+    throw new Error("observation failed");
+  }) };
+  const value = await client(payment);
+  const submitted = vi.fn();
+  mocks.upload.mockImplementation(async (_staged, network, _load, pay) => { await pay(network, quotes); return result; });
+  await expect(value.upload(new Blob(["abc"]), { onPaymentSubmitted: submitted })).rejects.toBeInstanceOf(UploadError);
+  const recovery = value.pendingUploads[0]!;
+  const pending = recovery.pendingPayments[0]!;
+  expect(submitted).toHaveBeenCalledWith(pending);
+  expect(pending.submission.transactionHash).toBe("0xpaid");
+  expect(Object.isFrozen(pending.submission)).toBe(true);
+  const fresh = wallet();
+  await expect(value.resumeUpload(recovery, { payment: fresh })).rejects.toMatchObject({ code: "PAYMENT_UNRESOLVED" });
+  expect(fresh.pay).not.toHaveBeenCalled();
+  expect(mocks.upload).toHaveBeenCalledOnce();
+  observe.mockResolvedValue({ status: "confirmed", receipt: { transactionHash: "0xpaid", totalAmount: "42" } });
+  const uploaded = await value.resumeUpload(recovery);
+  expect(uploaded.payments).toHaveLength(1);
+  expect(uploaded.storageCostAtto).toBe("42");
+  expect(recovery.pendingPayments).toEqual([]);
+  expect(pending.status).toBe("confirmed");
+  expect(payment.pay).toHaveBeenCalledOnce();
+});
+
+it("permits explicitly authorized payment after a definitive failure", async () => {
+  const submission = createPaymentSubmission({ transactionHash: "0xreverted", totalAmount: "42" },
+    async () => ({ status: "failed", reason: "reverted" }));
+  const value = await client({ pay: async (_network, _quotes, context) => {
+    context.submitted(submission); throw new Error("reverted");
+  } });
+  mocks.upload.mockImplementation(async (_staged, network, _load, pay) => { await pay(network, quotes); return result; });
+  await expect(value.upload(new Blob(["abc"]))).rejects.toBeInstanceOf(UploadError);
+  const recovery = value.pendingUploads[0]!;
+  const pending = recovery.pendingPayments[0]!;
+  const fresh = wallet();
+  const uploaded = await value.resumeUpload(recovery, { payment: fresh });
+  expect(fresh.pay).toHaveBeenCalledOnce();
+  expect(pending.status).toBe("failed");
+  expect(uploaded.payments).toHaveLength(1);
+});
+
+it("delivers submission evidence even when broadcast resolves after cancellation", async () => {
+  let broadcast!: () => void;
+  const value = await client({ pay: async (_network, _quotes, context) => {
+    await new Promise<void>((resolve) => { broadcast = resolve; });
+    context.submitted(createPaymentSubmission({ transactionHash: "0xlate", totalAmount: "42" },
+      async () => ({ status: "confirmed", receipt: { transactionHash: "0xlate", totalAmount: "42" } })));
+    throw new Error("RPC disconnected");
+  } });
+  mocks.upload.mockImplementation(async (_staged, network, _load, pay) => { await pay(network, quotes); return result; });
+  const controller = new AbortController();
+  const submitted = vi.fn();
+  const uploading = value.upload(new Blob(["abc"]), { signal: controller.signal, onPaymentSubmitted: submitted });
+  const reason = new Error("stop");
+  const rejected = expect(uploading).rejects.toBe(reason);
+  await vi.waitFor(() => expect(broadcast).toBeTypeOf("function"));
+  controller.abort(reason); await rejected;
+  broadcast();
+  const recovery = value.pendingUploads[0]!;
+  await recovery.settled;
+  expect(submitted).toHaveBeenCalledWith(recovery.pendingPayments[0]);
+  await recovery.pendingPayments[0]!.reconcile();
+  expect(recovery.payments[0]!.receipt.transactionHash).toBe("0xlate");
 });

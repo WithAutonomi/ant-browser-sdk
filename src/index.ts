@@ -8,6 +8,7 @@ export {
   type ManualPaymentStatus,
 } from "./manual-payment.js";
 export { saveDownload } from "./save.js";
+export { createPaymentSubmission } from "./payment.js";
 export { initializeWasm } from "./internal/runtime.js";
 export type {
   ChunkInfo,
@@ -29,6 +30,10 @@ export type {
   PaymentNetwork,
   PaymentProvider,
   PaymentReceipt,
+  PaymentSettlement,
+  PaymentSubmission,
+  PaymentSubmissionInfo,
+  PendingPayment,
   ProgressDetails,
   ProgressPhase,
   ProgressEvent,

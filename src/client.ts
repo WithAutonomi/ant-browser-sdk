@@ -11,7 +11,7 @@ import {
 import { operationId, progressReporter, type Reporter } from "./internal/progress.js";
 import {
   awaitUploadSettlement, claimUpload, paidReceipt, releaseUpload, retainUpload,
-  uploadResult, uploadSettlement, validateReceipt, type RetainedUpload,
+  uploadResult, uploadSettlement, recordPayment, reconcilePayments, trackPayment, type RetainedUpload, type TrackedPayment,
 } from "./internal/upload-recovery.js";
 import { snapshot } from "./internal/snapshot.js";
 import {
@@ -30,6 +30,7 @@ import type {
   Operation,
   OperationOptions,
   PaymentProvider,
+  PendingPayment,
   ProgressEvent,
   ProgressListener,
   PublicFile,
@@ -239,7 +240,7 @@ export class AutonomiClient {
         throw new TypeError("upload input must be a File, Blob, or Uint8Array");
       }
       return await this.#runUpload(
-        retained, payment, false, options.retainOnFailure !== false, operation, report,
+        retained, payment, false, options.retainOnFailure !== false, operation, report, options.onPaymentSubmitted,
       );
     } catch (error) {
       if (isAbort(error, operation.signal)) throw error;
@@ -260,7 +261,7 @@ export class AutonomiClient {
       await abortable(uploadSettlement(recovery), operation.signal);
       throwIfAborted(operation.signal);
       const state = claimUpload(recovery, this.#connection.paymentNetwork);
-      return await this.#runUpload(state, options.payment, true, true, operation, report);
+      return await this.#runUpload(state, options.payment, true, true, operation, report, options.onPaymentSubmitted);
     } finally {
       operation.finish();
     }
@@ -273,6 +274,7 @@ export class AutonomiClient {
     retainOnFailure: boolean,
     operation: OperationScope,
     report: Reporter,
+    onPaymentSubmitted?: (payment: PendingPayment) => void,
   ): Promise<UploadResult> {
     let paymentFailure: unknown;
     const payForQuotes = async (networkValue: unknown, quoteValue: unknown) => {
@@ -294,15 +296,20 @@ export class AutonomiClient {
         report("Waiting for storage payment", { phase: "payment", total: quotes.length, unit: "quotes" });
         throwIfAborted(operation.signal);
         // Observe the actual provider promise, even after the upload stops waiting.
+        const submitted: TrackedPayment[] = [];
         const pending = Promise.resolve(payment.pay(network, quotes, {
           report, signal: operation.signal,
+          submitted: (submission) => {
+            const tracked = trackPayment(state, network, quotes, submission);
+            submitted.push(tracked);
+            try { onPaymentSubmitted?.(tracked.handle); } catch { /* Receipt observation must survive UI failures. */ }
+          },
         })).then((receipt) => {
-          validateReceipt(receipt, quotes);
-          const recorded = snapshot({ network, quotes, receipt });
-          state.payments.push(recorded);
+          const recorded = recordPayment(state, network, quotes, receipt);
+          for (const tracked of submitted) tracked.confirm(receipt);
           return recorded.receipt;
         });
-        state.pendingPayments.push(pending);
+        state.paymentTasks.push(pending);
         const receipt = await abortable(pending, operation.signal);
         report("Storage payment confirmed", { phase: "uploading" });
         return receipt;
@@ -314,6 +321,7 @@ export class AutonomiClient {
     };
     try {
       throwIfAborted(operation.signal);
+      if (resuming) await reconcilePayments(state, operation.signal);
       if (!state.result) {
         report(`Preparing storage for ${state.name}`, { phase: "preparing" });
         const raw = state.staged
