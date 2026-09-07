@@ -11,6 +11,7 @@ import {
   type Transport,
 } from "viem";
 import { readContract, waitForTransactionReceipt, writeContract } from "viem/actions";
+import { abortable, throwIfAborted } from "./internal/abort.js";
 import type {
   PaymentNetwork,
   PaymentProvider,
@@ -76,13 +77,14 @@ export function createWagmiPaymentProvider<config extends Config>(
 
   return {
     async pay(network, quotes, context): Promise<PaymentReceipt> {
+      throwIfAborted(context.signal);
       if (quotes.length === 0) return { totalAmount: "0" };
 
       const publicClient = createPublicClient({ transport: http(network.rpc_url) });
-      const [chainId, connectorClient] = await Promise.all([
+      const [chainId, connectorClient] = await abortable(Promise.all([
         publicClient.getChainId(),
         getConnectorClient(options.config),
-      ]);
+      ]), context.signal);
       const walletClient = connectorClient as Client<Transport, Chain, Account>;
       if (walletClient.chain.id !== chainId) {
         throw new Error(
@@ -97,15 +99,17 @@ export function createWagmiPaymentProvider<config extends Config>(
         (total, quote) => total + BigInt(quote.amount),
         0n,
       );
-      const allowance = await readContract(publicClient, {
+      throwIfAborted(context.signal);
+      const allowance = await abortable(readContract(publicClient, {
         address: tokenAddress,
         abi: TOKEN_ABI,
         functionName: "allowance",
         args: [walletAddress, vaultAddress],
-      });
+      }), context.signal);
 
       if (allowance < totalAmount) {
         context.report(`Approving the payment vault from wallet ${walletAddress}`);
+        throwIfAborted(context.signal);
         const amount = approval === "exact" ? totalAmount : maxUint256;
         const transactionHash = await writeContract(walletClient, {
           address: tokenAddress,
@@ -121,7 +125,9 @@ export function createWagmiPaymentProvider<config extends Config>(
       }
 
       const payments = quotePayments(quotes);
+      throwIfAborted(context.signal);
       context.report(`Submitting one payment for ${payments.length} storage quote(s)`);
+      throwIfAborted(context.signal);
       const transactionHash = await writeContract(walletClient, {
         address: vaultAddress,
         abi: VAULT_ABI,
@@ -133,7 +139,7 @@ export function createWagmiPaymentProvider<config extends Config>(
         transactionHash,
         "Storage payment transaction reverted",
       );
-      context.report(`Payment confirmed in ${confirmedTransactionHash}`);
+      if (!context.signal?.aborted) context.report(`Payment confirmed in ${confirmedTransactionHash}`);
       return {
         transactionHash: confirmedTransactionHash,
         walletAddress,
@@ -148,7 +154,14 @@ async function requireSuccessfulReceipt(
   hash: Hex,
   errorMessage: string,
 ): Promise<Hex> {
-  const receipt = await waitForTransactionReceipt(publicClient, { hash });
+  let replaced = false;
+  const receipt = await waitForTransactionReceipt(publicClient, {
+    hash,
+    onReplaced: ({ reason }) => {
+      if (reason !== "repriced") replaced = true;
+    },
+  });
+  if (replaced) throw new Error("Wallet transaction was cancelled or replaced with a different transaction");
   if (receipt.status !== "success") throw new Error(errorMessage);
   return receipt.transactionHash;
 }

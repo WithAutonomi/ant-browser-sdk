@@ -4,7 +4,9 @@ import {
   MaxUint256,
   NonceManager,
   Wallet,
+  isError,
   type Signer,
+  type TransactionResponse,
 } from "ethers";
 import { abortable, throwIfAborted } from "./internal/abort.js";
 import type {
@@ -66,28 +68,31 @@ export function createEthersPaymentProvider(
       () => undefined,
       () => undefined,
     );
-    return abortable(payment, signal);
+    // Once submission starts, retain its eventual receipt even if the caller
+    // stops waiting. The SDK observes this promise for upload recovery.
+    return payment;
   };
 
   return {
     async pay(network, quotes, context): Promise<PaymentReceipt> {
+      throwIfAborted(context.signal);
       if (quotes.length === 0) return { totalAmount: "0" };
       if (options.getSigner) {
         throwIfAborted(context.signal);
         const signer = await abortable(options.getSigner(network), context.signal);
-        return abortable(
-          submitPayment(signer, network, quotes, context, approval),
-          context.signal,
-        );
+        return submitPayment(signer, network, quotes, context, approval);
       }
       return serializePrivateKeyPayment(
-        () => submitPayment(
-          privateKeySigner(network),
-          network,
-          quotes,
-          context,
-          approval,
-        ),
+        async () => {
+          const signer = privateKeySigner(network);
+          try {
+            return await submitPayment(signer, network, quotes, context, approval);
+          } finally {
+            // NonceManager increments before estimation/broadcast can fail.
+            // The next queued attempt must reload the chain's pending nonce.
+            signer.reset();
+          }
+        },
         context.signal,
       );
     },
@@ -116,6 +121,7 @@ async function submitPayment(
   if (allowance < totalAmount) {
     throwIfAborted(context.signal);
     context.report(`Approving the payment vault from wallet ${walletAddress}`);
+    throwIfAborted(context.signal);
     const amount = approval === "exact" ? totalAmount : MaxUint256;
     // Once a transaction submission starts it cannot be cancelled. Keep this
     // task queued until its receipt settles so a later private-key payment
@@ -124,26 +130,37 @@ async function submitPayment(
       network.payment_vault_address,
       amount,
     );
-    const receipt = (await transaction.wait()) as { status: number } | null;
-    if (!receipt || receipt.status !== 1) {
-      throw new Error("Payment-token approval transaction reverted");
-    }
+    await confirmedHash(transaction, "Payment-token approval transaction reverted");
   }
 
   throwIfAborted(context.signal);
   const payments = quotePayments(quotes);
   context.report(`Submitting one payment for ${payments.length} storage quote(s)`);
+  throwIfAborted(context.signal);
   const transaction = await vault.getFunction("payForQuotes")(payments);
-  const receipt = (await transaction.wait()) as { status: number } | null;
-  if (!receipt || receipt.status !== 1) {
-    throw new Error("Storage payment transaction reverted");
-  }
-  context.report(`Payment confirmed in ${transaction.hash}`);
+  const transactionHash = await confirmedHash(transaction, "Storage payment transaction reverted");
+  if (!context.signal?.aborted) context.report(`Payment confirmed in ${transactionHash}`);
   return {
-    transactionHash: transaction.hash,
+    transactionHash,
     walletAddress,
     totalAmount: totalAmount.toString(),
   };
+}
+
+async function confirmedHash(transaction: TransactionResponse, failure: string): Promise<string> {
+  try {
+    const receipt = await transaction.wait();
+    if (!receipt || receipt.status !== 1) throw new Error(failure);
+    return receipt.hash;
+  } catch (error) {
+    if (
+      isError(error, "TRANSACTION_REPLACED") &&
+      !error.cancelled && error.reason === "repriced" && error.receipt.status === 1
+    ) {
+      return error.receipt.hash;
+    }
+    throw error;
+  }
 }
 
 function quotePayments(quotes: readonly VerifiedStorageQuote[]): Array<{

@@ -45,7 +45,7 @@ const quotes: VerifiedStorageQuote[] = [
 const config = {} as Parameters<typeof createWagmiPaymentProvider>[0]["config"];
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   mocks.getChainId.mockResolvedValue(42161);
   mocks.getConnectorClient.mockResolvedValue({
     account: { address: walletAddress },
@@ -149,5 +149,53 @@ describe("createWagmiPaymentProvider", () => {
     );
     expect(mocks.readContract).not.toHaveBeenCalled();
     expect(mocks.writeContract).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("Wagmi replacement and cancellation handling", () => {
+  it.each(["cancelled", "replaced"])("rejects a successful %s replacement receipt", async (reason) => {
+    mocks.readContract.mockResolvedValue(100n);
+    mocks.waitForTransactionReceipt.mockReset().mockImplementation(async (_client, options) => {
+      options.onReplaced({ reason });
+      return { status: "success", transactionHash: "0xcancellation" };
+    });
+    await expect(createWagmiPaymentProvider({ config }).pay(network, quotes, { report() {} }))
+      .rejects.toThrow("cancelled or replaced");
+  });
+  it("uses the replacement hash after repricing approval and payment", async () => {
+    mocks.waitForTransactionReceipt.mockReset().mockImplementation(async (_client, options) => {
+      options.onReplaced({ reason: "repriced" });
+      return { status: "success", transactionHash: "0xrepriced" };
+    });
+    await expect(createWagmiPaymentProvider({ config }).pay(network, quotes, { report() {} }))
+      .resolves.toMatchObject({ transactionHash: "0xrepriced" });
+    expect(mocks.writeContract).toHaveBeenCalledTimes(2);
+  });
+  it("does no work for an already aborted context", async () => {
+    const controller = new AbortController(); controller.abort();
+    await expect(createWagmiPaymentProvider({ config }).pay(network, quotes, {
+      report() {}, signal: controller.signal,
+    })).rejects.toMatchObject({ name: "AbortError" });
+    expect(mocks.getConnectorClient).not.toHaveBeenCalled();
+    expect(mocks.writeContract).not.toHaveBeenCalled();
+  });
+  it.each([0n, 100n])("checks cancellation after reporting (allowance %s)", async (allowance) => {
+    mocks.readContract.mockResolvedValue(allowance);
+    const controller = new AbortController();
+    await expect(createWagmiPaymentProvider({ config }).pay(network, quotes, {
+      report: () => controller.abort(), signal: controller.signal,
+    })).rejects.toMatchObject({ name: "AbortError" });
+    expect(mocks.writeContract).not.toHaveBeenCalled();
+  });
+  it("does not pay after cancellation during approval confirmation", async () => {
+    const controller = new AbortController();
+    mocks.waitForTransactionReceipt.mockReset().mockImplementation(async () => {
+      controller.abort(); return { status: "success", transactionHash: "0xapproval" };
+    });
+    await expect(createWagmiPaymentProvider({ config }).pay(network, quotes, {
+      report() {}, signal: controller.signal,
+    })).rejects.toMatchObject({ name: "AbortError" });
+    expect(mocks.writeContract).toHaveBeenCalledOnce();
   });
 });
