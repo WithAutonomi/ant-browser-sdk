@@ -449,6 +449,12 @@ chunk. Fallback reads still authenticate nodes and verify the record's BLAKE3
 hash. This also applies to DataMaps and media range reads; it cannot recover
 records that are absent from all reachable holders.
 
+These reads now use the same Rust engine as native `ant-core`. Inconclusive
+close-group sweeps retry after one second. Missing file records are retried as
+a batch immediately once, then after 15 and 45 seconds. Nested DataMaps use the
+native recursive resolver through an async batch adapter; full downloads and
+media ranges share verified fetching and decryption with native callers.
+
 Call `downloadAndSave()` directly from a user action. It opens
 `showSaveFilePicker()` before starting the network request so the picker retains
 the action's transient user activation, then downloads, verifies, and writes the
@@ -769,6 +775,10 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution requirements.
 - Rust/WASM owns WebRTC, protocol framing, HELLO authentication, discovery,
   self-encryption, record verification, quote verification, payment planning,
   storage workflows, and range reads.
+- Native and WASM share peer selection, discovery fallback, chunk verification,
+  close-group and deferred file retries, DataMap resolution, and range reads in
+  `ant-core/src/client_engine`. WebRTC, JS bindings, file descriptors, wallet
+  callbacks, caches, and browser memory ceilings remain platform adapters.
 - Upload policy follows native `ant-client`: quote and commitment validation,
   witnessed quote eligibility, upper-median selection with a 3× payment,
   existing-holder voting, and storage-target ordering. The PUT neighbourhood
