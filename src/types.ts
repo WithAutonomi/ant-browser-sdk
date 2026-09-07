@@ -1,8 +1,7 @@
-/** Node-advertised EVM configuration with the chain identity resolved by the SDK. */
+/** Public payment identity advertised by the node; RPC providers belong to the application. */
 export interface PaymentNetwork {
-  /** EVM chain ID read from rpc_url during connect(); a non-negative safe integer. */
+  /** Node-advertised EVM chain ID; payment adapters verify their provider uses this chain. */
   readonly chainId: number;
-  readonly rpc_url: string;
   readonly payment_token_address: string;
   readonly payment_vault_address: string;
 }

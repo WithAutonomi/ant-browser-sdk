@@ -10,13 +10,13 @@ import type {
 const state = vi.hoisted(() => ({
   hello: {
     type: "hello",
-    protocol: "autonomi.web.poc.v4",
+    protocol: "autonomi.web.poc.v5",
     peer_id: "ab".repeat(32),
     endpoint: { multiaddr: "/ip4/127.0.0.1/udp/24000/mock" },
     max_chunk_size: 4_194_304,
     capabilities: ["get_chunk", "put_chunk"],
     payment: {
-      rpc_url: "http://127.0.0.1:8545/",
+      chain_id: 31337,
       payment_token_address: `0x${"11".repeat(20)}`,
       payment_vault_address: `0x${"22".repeat(20)}`,
     },
@@ -117,11 +117,13 @@ describe("AutonomiClient", () => {
 
     expect(client.connection.bootstrap.peer_id).toBe("ab".repeat(32));
     expect(client.connection.bootstrapMultiaddr).toBe(endpoint);
-    expect(client.connection.paymentNetwork).toEqual({ ...state.hello.payment, chainId: 31337 });
+    expect(client.connection.paymentNetwork).toEqual({
+      chainId: 31337, payment_token_address: state.hello.payment.payment_token_address,
+      payment_vault_address: state.hello.payment.payment_vault_address,
+    });
     expect(client.connection.bootstrap.payment).toEqual(client.connection.paymentNetwork);
-    expect(fetch).toHaveBeenCalledWith(state.hello.payment.rpc_url, expect.objectContaining({
-      method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_chainId", params: [] }),
-    }));
+    expect(fetch).not.toHaveBeenCalled();
+    expect(client.connection.paymentNetwork).not.toHaveProperty("rpc_url");
     expect(state.networks[0]?.endpoints).toEqual([{ multiaddr: endpoint }]);
     expect(progress.at(-1)).toContain("Connected to authenticated peer");
 
@@ -501,20 +503,21 @@ describe("AutonomiClient", () => {
 });
 
 describe("connection snapshots", () => {
-  it("fails connection setup when chain identity cannot be resolved", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ jsonrpc: "2.0", id: 1, error: { code: -32601 } }));
-    await expect(AutonomiClient.connect(endpoint)).rejects.toMatchObject({ code: "CONNECTION_FAILED" });
-    expect(state.networks).toEqual([]);
+  it("rejects an invalid node-advertised chain identity without fetching an RPC", async () => {
+    const previous = state.hello.payment.chain_id;
+    state.hello.payment.chain_id = -1;
+    try {
+      await expect(AutonomiClient.connect(endpoint)).rejects.toMatchObject({ code: "CONNECTION_FAILED" });
+      expect(state.networks).toEqual([]);
+      expect(fetch).not.toHaveBeenCalled();
+    } finally { state.hello.payment.chain_id = previous; }
   });
 
-  it("preserves cancellation while resolving chain identity", async () => {
-    vi.mocked(fetch).mockReturnValueOnce(new Promise(() => {}));
+  it("preserves cancellation before connection setup", async () => {
     const controller = new AbortController();
-    const connecting = AutonomiClient.connect(endpoint, { signal: controller.signal });
-    const rejection = expect(connecting).rejects.toBe("cancel chain lookup");
-    await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
-    controller.abort("cancel chain lookup");
-    await rejection;
+    controller.abort("cancel connection");
+    await expect(AutonomiClient.connect(endpoint, { signal: controller.signal })).rejects.toBe("cancel connection");
+    expect(fetch).not.toHaveBeenCalled();
     expect(state.networks).toEqual([]);
   });
 

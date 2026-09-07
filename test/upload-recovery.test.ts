@@ -7,7 +7,7 @@ const mocks = vi.hoisted(() => ({
   upload: vi.fn(),
   stage: vi.fn(),
   network: {
-    rpc_url: "https://rpc.example/", payment_token_address: `0x${"11".repeat(20)}`, payment_vault_address: `0x${"22".repeat(20)}`,
+    chain_id: 31337, payment_token_address: `0x${"11".repeat(20)}`, payment_vault_address: `0x${"22".repeat(20)}`,
   },
 }));
 vi.mock("../src/internal/runtime.js", () => ({
@@ -41,7 +41,7 @@ const result = { file, transactionHash: "0xpaid", storageCostAtto: "42", records
 beforeEach(async () => {
   vi.stubGlobal("fetch", vi.fn(async () => Response.json({ jsonrpc: "2.0", id: 1, result: "0x7a69" })));
   mocks.upload.mockReset(); mocks.stage.mockReset();
-  mocks.network = { ...mocks.network, rpc_url: "https://rpc.example/" };
+  mocks.network = { ...mocks.network, chain_id: 31337, payment_vault_address: `0x${"22".repeat(20)}` };
   mocks.staged = {
     sessionId: crypto.randomUUID(),
     staged: { ...file, chunks: [], records: [{ address: file.address, size: 3 }] },
@@ -107,19 +107,19 @@ it("refuses recovery against a different payment network", async () => {
   mocks.upload.mockRejectedValue(new Error("network unavailable"));
   await expect(original.upload(new Blob(["abc"]))).rejects.toBeInstanceOf(UploadError);
   const recovery = original.pendingUploads[0]!;
-  mocks.network = { ...mocks.network, rpc_url: "https://another.example/" };
+  mocks.network = { ...mocks.network, payment_vault_address: `0x${"77".repeat(20)}` };
   const replacement = await client();
   await expect(replacement.resumeUpload(recovery)).rejects.toMatchObject({ code: "INVALID_SOURCE" });
   expect(mocks.upload).toHaveBeenCalledOnce();
   expect(recovery.status).toBe("ready");
 });
 
-it("refuses recovery when the same RPC and contracts resolve to another chain", async () => {
+it("refuses recovery when the same contracts are advertised on another chain", async () => {
   const original = await client(wallet());
   mocks.upload.mockRejectedValue(new Error("network unavailable"));
   await expect(original.upload(new Blob(["abc"]))).rejects.toBeInstanceOf(UploadError);
   const recovery = original.pendingUploads[0]!;
-  vi.mocked(fetch).mockResolvedValueOnce(Response.json({ jsonrpc: "2.0", id: 1, result: "0x1" }));
+  mocks.network = { ...mocks.network, chain_id: 1 };
   const replacement = await client();
   await expect(replacement.resumeUpload(recovery)).rejects.toMatchObject({ code: "INVALID_SOURCE" });
   expect(mocks.upload).toHaveBeenCalledOnce();

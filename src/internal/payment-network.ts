@@ -1,12 +1,11 @@
 import type { PaymentNetwork } from "../types.js";
-import { abortable, throwIfAborted } from "./abort.js";
 
-/** The current node/WASM protocol does not carry the SDK's chain identity. */
-export type CorePaymentNetwork = Omit<PaymentNetwork, "chainId">;
+/** Public payment identity in the shared node/WASM protocol. */
+export type CorePaymentNetwork = Omit<PaymentNetwork, "chainId"> & { chain_id: number };
 
 export function corePaymentNetwork(network: PaymentNetwork): CorePaymentNetwork {
   return {
-    rpc_url: network.rpc_url,
+    chain_id: network.chainId,
     payment_token_address: network.payment_token_address,
     payment_vault_address: network.payment_vault_address,
   };
@@ -30,31 +29,4 @@ export function assertPaymentChainId(chainId: number): void {
   if (!Number.isSafeInteger(chainId) || chainId < 0) {
     throw new TypeError("Payment chainId must be a non-negative safe integer");
   }
-}
-
-/** Resolve chain identity without adding a wallet dependency to the core package. */
-export async function resolvePaymentNetwork(
-  network: CorePaymentNetwork,
-  signal?: AbortSignal,
-): Promise<PaymentNetwork> {
-  throwIfAborted(signal);
-  const response = await abortable(fetch(network.rpc_url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_chainId", params: [] }),
-    ...(signal ? { signal } : {}),
-  }), signal);
-  if (!response.ok) throw new Error(`Could not resolve the payment chain (HTTP ${response.status})`);
-  const payload: unknown = await abortable(response.json(), signal);
-  if (typeof payload !== "object" || payload === null) {
-    throw new Error("Payment RPC returned an invalid eth_chainId response");
-  }
-  const rpc = payload as Record<string, unknown>;
-  if (rpc.jsonrpc !== "2.0" || rpc.id !== 1 || "error" in rpc ||
-      typeof rpc.result !== "string" || !/^0x(?:0|[1-9a-f][0-9a-f]*)$/iu.test(rpc.result)) {
-    throw new Error("Payment RPC returned an invalid eth_chainId response");
-  }
-  const chainId = Number(BigInt(rpc.result));
-  assertPaymentChainId(chainId);
-  return { ...network, chainId };
 }

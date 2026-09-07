@@ -1,52 +1,35 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { expect, it } from "vitest";
 import {
-  corePaymentNetwork, paymentNetworkFromCore, resolvePaymentNetwork,
+  assertPaymentChainId, corePaymentNetwork, paymentNetworkFromCore,
 } from "../src/internal/payment-network.js";
 
-const advertised = {
-  rpc_url: "https://rpc.example/",
+const network = Object.freeze({
+  chainId: 31337,
   payment_token_address: `0x${"11".repeat(20)}`,
   payment_vault_address: `0x${"22".repeat(20)}`,
-};
-afterEach(() => vi.unstubAllGlobals());
-
-it.each([["0x0", 0], ["0xa4b1", 42161], ["0x1fffffffffffff", Number.MAX_SAFE_INTEGER]])(
-  "resolves the RPC's hexadecimal chain ID %s",
-  async (result, chainId) => {
-    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ jsonrpc: "2.0", id: 1, result })));
-    expect(await resolvePaymentNetwork(advertised)).toEqual({ ...advertised, chainId });
-  },
-);
-
-it.each(["1", "0x", "0x01", "0x-1", "0x20000000000000", 1, null])(
-  "rejects malformed or imprecise chain IDs: %s",
-  async (result) => {
-    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ jsonrpc: "2.0", id: 1, result })));
-    await expect(resolvePaymentNetwork(advertised)).rejects.toThrow();
-  },
-);
-
-it.each([
-  { jsonrpc: "2.0", id: 1, error: { code: -32601 } },
-  { jsonrpc: "2.0", id: 2, result: "0x1" },
-  { id: 1, result: "0x1" },
-  null,
-])("rejects an unsuccessful or unrelated RPC response: %j", async (payload) => {
-  vi.stubGlobal("fetch", vi.fn(async () => Response.json(payload)));
-  await expect(resolvePaymentNetwork(advertised)).rejects.toThrow("invalid eth_chainId response");
 });
 
-it("rejects HTTP failures even if their bodies contain a chain ID", async () => {
-  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ jsonrpc: "2.0", id: 1, result: "0x1" }, { status: 503 })));
-  await expect(resolvePaymentNetwork(advertised)).rejects.toThrow("HTTP 503");
+it.each([0, 42161, Number.MAX_SAFE_INTEGER])("accepts precise chain ID %s", (chainId) => {
+  expect(() => assertPaymentChainId(chainId)).not.toThrow();
 });
-
-it("preserves the core wire format and restores the pinned chain for payment callbacks", () => {
-  const network = Object.freeze({ ...advertised, chainId: 31337 });
+it.each([-1, 1.5, Number.MAX_SAFE_INTEGER + 1, NaN, Infinity])("rejects invalid chain ID %s", (chainId) => {
+  expect(() => assertPaymentChainId(chainId)).toThrow();
+});
+it("passes only chain identity and contracts to the core and restores the SDK representation", () => {
   const core = corePaymentNetwork(network);
-  expect(core).toEqual(advertised);
-  expect(core).not.toHaveProperty("chainId");
+  expect(core).toEqual({
+    chain_id: 31337,
+    payment_token_address: network.payment_token_address,
+    payment_vault_address: network.payment_vault_address,
+  });
+  expect(core).not.toHaveProperty("rpc_url");
   expect(paymentNetworkFromCore(core, network)).toBe(network);
-  expect(() => paymentNetworkFromCore({ ...core, rpc_url: "https://another.example/" }, network)).toThrow("different network");
   expect(() => paymentNetworkFromCore(null, network)).toThrow("invalid network");
+  for (const changed of [
+    { ...core, chain_id: 1 },
+    { ...core, payment_token_address: `0x${"33".repeat(20)}` },
+    { ...core, payment_vault_address: `0x${"44".repeat(20)}` },
+  ]) {
+    expect(() => paymentNetworkFromCore(changed, network)).toThrow("different network");
+  }
 });

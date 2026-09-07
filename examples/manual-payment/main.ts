@@ -15,6 +15,7 @@ import { createLogger, element, errorMessage } from "../shared/ui.js";
 const bootstrap = element<HTMLInputElement>("bootstrap");
 const fileInput = element<HTMLInputElement>("file");
 const privateKey = element<HTMLInputElement>("private-key");
+const paymentRpc = element<HTMLInputElement>("payment-rpc");
 const walletMode = element<HTMLSelectElement>("wallet-mode");
 const injectedFields = element<HTMLElement>("injected-fields");
 const privateKeyFields = element<HTMLElement>("private-key-fields");
@@ -159,7 +160,7 @@ function selectedWalletPayment(): PaymentProvider {
   if (walletMode.value === "injected") return connectedEthersPaymentProvider();
   const key = privateKey.value.trim();
   if (!key) throw new Error("Enter a disposable private key");
-  return createEthersPaymentProvider({ privateKey: key, approval: "exact" });
+  return createEthersPaymentProvider({ privateKey: key, rpcUrl: paymentRpc.value.trim(), approval: "exact" });
 }
 
 function refreshWalletControls(): void {

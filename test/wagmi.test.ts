@@ -4,7 +4,7 @@ import type { PaymentNetwork, VerifiedStorageQuote } from "../src/types.js";
 const mocks = vi.hoisted(() => ({
   getChainId: vi.fn(),
   getConnectorClient: vi.fn(),
-  http: vi.fn(),
+  getPublicClient: vi.fn(),
   readContract: vi.fn(),
   waitForTransactionReceipt: vi.fn(),
   writeContract: vi.fn(),
@@ -12,11 +12,10 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@wagmi/core", () => ({
   getConnectorClient: mocks.getConnectorClient,
+  getPublicClient: mocks.getPublicClient,
 }));
 
 vi.mock("viem", () => ({
-  createPublicClient: () => ({ getChainId: mocks.getChainId }),
-  http: mocks.http,
   maxUint256: 2n ** 256n - 1n,
 }));
 
@@ -31,7 +30,6 @@ import { createWagmiPaymentProvider } from "../src/wagmi.js";
 const walletAddress = `0x${"33".repeat(20)}`;
 const network: PaymentNetwork = {
   chainId: 42161,
-  rpc_url: "http://127.0.0.1:8545/",
   payment_token_address: `0x${"11".repeat(20)}`,
   payment_vault_address: `0x${"22".repeat(20)}`,
 };
@@ -52,7 +50,7 @@ beforeEach(() => {
     account: { address: walletAddress },
     chain: { id: 42161 },
   });
-  mocks.http.mockReturnValue("rpc-transport");
+  mocks.getPublicClient.mockReturnValue({ getChainId: mocks.getChainId });
   mocks.readContract.mockResolvedValue(0n);
   mocks.writeContract
     .mockResolvedValueOnce(`0x${"66".repeat(32)}`)
@@ -69,6 +67,14 @@ beforeEach(() => {
 });
 
 describe("createWagmiPaymentProvider", () => {
+  it("requires an application-configured public client for the advertised chain", async () => {
+    mocks.getPublicClient.mockReturnValue(undefined);
+    await expect(createWagmiPaymentProvider({ config }).pay(network, quotes, { report() {} }))
+      .rejects.toThrow("Configure a Wagmi public client for payment chain 42161");
+    expect(mocks.getConnectorClient).not.toHaveBeenCalled();
+    expect(mocks.writeContract).not.toHaveBeenCalled();
+  });
+
   it("rejects an RPC and wallet that moved together to a different chain", async () => {
     mocks.getChainId.mockResolvedValue(1);
     mocks.getConnectorClient.mockResolvedValue({ account: { address: walletAddress }, chain: { id: 1 } });
@@ -84,7 +90,7 @@ describe("createWagmiPaymentProvider", () => {
 
     const receipt = await payment.pay(network, quotes, { report });
 
-    expect(mocks.http).toHaveBeenCalledWith(network.rpc_url);
+    expect(mocks.getPublicClient).toHaveBeenCalledWith(config, { chainId: network.chainId });
     expect(mocks.getConnectorClient).toHaveBeenCalledWith(config);
     expect(mocks.readContract).toHaveBeenCalledWith(
       expect.anything(),

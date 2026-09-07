@@ -13,6 +13,7 @@ import "../shared/style.css";
 import { createLogger, element } from "../shared/ui.js";
 
 const bootstrap = element<HTMLInputElement>("bootstrap");
+const paymentRpc = element<HTMLInputElement>("payment-rpc");
 const fileInput = element<HTMLInputElement>("file");
 const nodeState = element<HTMLOutputElement>("node-state");
 const walletState = element<HTMLOutputElement>("wallet-state");
@@ -33,7 +34,7 @@ connectNodeButton.addEventListener("click", async () => {
     client = await AutonomiClient.connect(bootstrap.value.trim(), {
       onProgress: ({ operation, message }) => write(`[${operation}] ${message}`),
     });
-    const rpcUrl = client.connection.paymentNetwork.rpc_url;
+    const rpcUrl = new URL(paymentRpc.value.trim()).toString();
     paymentChainId = client.connection.paymentNetwork.chainId;
     const paymentChain = defineChain({
       id: paymentChainId,

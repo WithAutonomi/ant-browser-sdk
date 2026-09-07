@@ -4,6 +4,7 @@ import type { PaymentNetwork, VerifiedStorageQuote } from "../src/types.js";
 const state = vi.hoisted(() => ({
   chainId: 31337n,
   providers: 0,
+  providerUrls: [] as string[],
   allowance: 1_000n,
   failPopulation: false,
   nonces: [] as number[],
@@ -14,7 +15,7 @@ const state = vi.hoisted(() => ({
 vi.mock("ethers", async (importOriginal) => {
   const actual = await importOriginal<typeof import("ethers")>();
   class JsonRpcProvider {
-    constructor() { state.providers++; }
+    constructor(url: string) { state.providers++; state.providerUrls.push(url); }
     async getNetwork() { return { chainId: state.chainId }; }
     async getTransactionCount() { return state.nonces.length; }
   }
@@ -52,14 +53,13 @@ import { createEthersPaymentProvider } from "../src/ethers.js";
 
 const network: PaymentNetwork = {
   chainId: 31337,
-  rpc_url: "http://127.0.0.1:8545/",
   payment_token_address: `0x${"11".repeat(20)}`,
   payment_vault_address: `0x${"22".repeat(20)}`,
 };
 const quotes: VerifiedStorageQuote[] = [{
   quote: {}, quoteHash: "33".repeat(32), rewardsAddress: `0x${"44".repeat(20)}`, amount: "1",
 }];
-const provider = () => createEthersPaymentProvider({ privateKey: `0x${"55".repeat(32)}` });
+const provider = () => createEthersPaymentProvider({ privateKey: `0x${"55".repeat(32)}`, rpcUrl: "http://127.0.0.1:8545/" });
 const context = () => ({ report: vi.fn() });
 async function waiting() { await vi.waitFor(() => expect(state.waits.length).toBeGreaterThan(0)); }
 function confirm(hash = "0xconfirmed") { state.waits.shift()!.resolve({ status: 1, hash }); }
@@ -72,10 +72,29 @@ function replace(reason: "repriced" | "cancelled" | "replaced", status = 1) {
 beforeEach(() => {
   state.chainId = 31337n;
   state.providers = 0; state.allowance = 1_000n; state.failPopulation = false;
+  state.providerUrls.length = 0;
   state.nonces.length = 0; state.submissions.length = 0; state.waits.length = 0;
 });
 
 describe("Ethers payments", () => {
+  it("requires an application-owned RPC for private-key payments", () => {
+    // JavaScript consumers also receive a useful error for the removed default.
+    // @ts-expect-error rpcUrl is required for private-key payments.
+    expect(() => createEthersPaymentProvider({ privateKey: `0x${"55".repeat(32)}` }))
+      .toThrow("Provide rpcUrl with privateKey");
+    expect(state.providers).toBe(0);
+  });
+
+  it("uses the application's RPC endpoint for private-key payments", async () => {
+    const rpcUrl = "https://application.example/rpc";
+    const payment = createEthersPaymentProvider({ privateKey: `0x${"55".repeat(32)}`, rpcUrl });
+    const pending = payment.pay(network, quotes, context());
+    await waiting();
+    expect(state.providerUrls).toEqual([rpcUrl]);
+    confirm();
+    await pending;
+  });
+
   it("rejects a private-key provider on a different chain before submitting", async () => {
     state.chainId = 1n;
     await expect(provider().pay(network, quotes, context())).rejects.toThrow("switch to payment chain 31337");

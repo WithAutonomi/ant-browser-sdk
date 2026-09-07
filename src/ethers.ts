@@ -26,14 +26,21 @@ const VAULT_ABI = [
   "function payForQuotes((address rewardsAddress,uint256 amount,bytes32 quoteHash)[] payments)",
 ];
 
-export interface EthersPaymentOptions {
-  /** Convenient for local/dev wallets. Prefer getSigner for user-managed production wallets. */
-  privateKey?: string;
-  /** Resolve an ethers signer connected to the advertised payment network. */
-  getSigner?: (network: PaymentNetwork) => Signer | Promise<Signer>;
+export type EthersPaymentOptions = {
   /** Defaults to unlimited, avoiding another approval on the next upload. */
   approval?: "exact" | "unlimited";
-}
+} & ({
+  /** Convenient for local/dev wallets. Prefer getSigner for user-managed wallets. */
+  privateKey: string;
+  /** Application-owned HTTP(S) endpoint; never received from a storage node. */
+  rpcUrl: string;
+  getSigner?: never;
+} | {
+  /** Resolve an ethers signer connected to the node's advertised payment chain. */
+  getSigner: (network: PaymentNetwork) => Signer | Promise<Signer>;
+  privateKey?: never;
+  rpcUrl?: never;
+});
 
 /** Create the optional Ethers v6 payment adapter used by paid uploads. */
 export function createEthersPaymentProvider(
@@ -42,17 +49,24 @@ export function createEthersPaymentProvider(
   if (Boolean(options.privateKey) === Boolean(options.getSigner)) {
     throw new TypeError("Provide exactly one of privateKey or getSigner");
   }
+  if (options.privateKey) {
+    if (!options.rpcUrl) throw new TypeError("Provide rpcUrl with privateKey");
+    const rpc = new URL(options.rpcUrl);
+    if (rpc.protocol !== "http:" && rpc.protocol !== "https:") {
+      throw new TypeError("Payment rpcUrl must use HTTP or HTTPS");
+    }
+  }
   const approval = options.approval ?? "unlimited";
-  const privateKeySigners = new Map<string, NonceManager>();
+  const privateKeySigners = new Map<number, NonceManager>();
   let privateKeyPayments: Promise<void> = Promise.resolve();
 
   const privateKeySigner = (network: PaymentNetwork): NonceManager => {
-    let signer = privateKeySigners.get(network.rpc_url);
+    let signer = privateKeySigners.get(network.chainId);
     if (!signer) {
       signer = new NonceManager(
-        new Wallet(options.privateKey!, new JsonRpcProvider(network.rpc_url)),
+        new Wallet(options.privateKey!, new JsonRpcProvider(options.rpcUrl!)),
       );
-      privateKeySigners.set(network.rpc_url, signer);
+      privateKeySigners.set(network.chainId, signer);
     }
     return signer;
   };

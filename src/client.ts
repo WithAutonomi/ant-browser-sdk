@@ -15,7 +15,7 @@ import {
 } from "./internal/upload-recovery.js";
 import { snapshot } from "./internal/snapshot.js";
 import {
-  corePaymentNetwork, paymentNetworkFromCore, resolvePaymentNetwork, type CorePaymentNetwork,
+  corePaymentNetwork, paymentNetworkFromCore, assertPaymentChainId, type CorePaymentNetwork,
 } from "./internal/payment-network.js";
 import { requestSaveFileHandle, saveDownload } from "./save.js";
 import type {
@@ -86,7 +86,7 @@ export class AutonomiClient {
   }
 
   /**
-   * Initialize WASM, authenticate the bootstrap node, and resolve its payment chain ID.
+   * Initialize WASM, authenticate the bootstrap node, and read its payment identity.
    *
    * Pass one complete, certificate-pinned WebRTC Direct multiaddress.
    */
@@ -117,8 +117,12 @@ export class AutonomiClient {
           probe.free();
         }
       }
-      report("Resolving the payment chain advertised by the bootstrap node");
-      const paymentNetwork = await resolvePaymentNetwork(normalizePaymentNetwork(hello.payment), options.signal);
+      const identity = normalizePaymentNetwork(hello.payment);
+      const paymentNetwork = {
+        chainId: identity.chain_id,
+        payment_token_address: identity.payment_token_address,
+        payment_vault_address: identity.payment_vault_address,
+      };
       const endpoints = [endpoint];
       throwIfAborted(options.signal);
       network = new BrowserNetworkClient(endpoints);
@@ -621,21 +625,13 @@ function normalizePaymentNetwork(value: unknown): CorePaymentNetwork {
     throw new TypeError("bootstrap node advertises invalid payment configuration");
   }
   const payment = value as Record<string, unknown>;
-  const rpcValue = requiredString(payment.rpc_url, "payment RPC URL");
-  let rpcUrl: URL;
-  try {
-    rpcUrl = new URL(rpcValue);
-  } catch {
-    throw new TypeError("bootstrap node advertises an invalid payment RPC URL");
+  const chainId = payment.chain_id;
+  if (typeof chainId !== "number") {
+    throw new TypeError("bootstrap node advertises an invalid payment chain ID");
   }
-  if (!/^https?:$/u.test(rpcUrl.protocol)) {
-    throw new TypeError("bootstrap node payment RPC URL must use HTTP or HTTPS");
-  }
-  if (rpcUrl.username !== "" || rpcUrl.password !== "") {
-    throw new TypeError("bootstrap node payment RPC URL must not contain credentials");
-  }
+  assertPaymentChainId(chainId);
   return {
-    rpc_url: rpcUrl.toString(),
+    chain_id: chainId,
     payment_token_address: normalizeEvmAddress(
       requiredString(payment.payment_token_address, "payment token address"),
     ),

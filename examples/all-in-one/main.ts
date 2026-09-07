@@ -3,6 +3,7 @@ import { createEthersPaymentProvider } from "@autonomi/browser-sdk/ethers";
 import "../shared/style.css";
 
 const bootstrap = element<HTMLInputElement>("bootstrap");
+const paymentRpc = element<HTMLInputElement>("payment-rpc");
 const wallet = element<HTMLInputElement>("wallet");
 const uploadInput = element<HTMLInputElement>("upload-input");
 const address = element<HTMLInputElement>("address");
@@ -46,7 +47,7 @@ uploadButton.addEventListener("click", async () => {
   setBusy(uploadButton, true);
   try {
     const result = await client.upload(file, {
-      payment: createEthersPaymentProvider({ privateKey: wallet.value.trim() }),
+      payment: createEthersPaymentProvider({ privateKey: wallet.value.trim(), rpcUrl: paymentRpc.value.trim() }),
     });
     address.value = result.file.address;
     write(`Uploaded ${result.file.name} as ${result.file.address}`);

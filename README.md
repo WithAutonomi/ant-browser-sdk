@@ -80,14 +80,15 @@ authenticates the bootstrap node's ML-DSA identity. A single direct endpoint is
 enough: authenticated peers can advertise additional WebRTC Direct addresses
 during closest-node lookup.
 
-Connection setup also resolves the payment RPC's EVM `chainId` using
-[`eth_chainId`](https://ethereum.org/developers/docs/apis/json-rpc/#eth_chainid).
-`client.connection.paymentNetwork` and `client.connection.bootstrap.payment`
-include this fixed identity as a non-negative safe integer. The RPC must be
-reachable from the browser, including for clients used only to read files;
-an unavailable RPC or invalid chain ID fails connection setup with
-`CONNECTION_FAILED`. The chain ID is resolved from the node-advertised RPC,
-not carried in the authenticated HELLO payload.
+Connection setup reads the payment chain ID and token/vault addresses from the
+authenticated HELLO. `client.connection.paymentNetwork` and
+`client.connection.bootstrap.payment` expose `chainId` as a non-negative safe
+integer. Nodes never advertise an RPC URL. Connecting and reading files require
+no EVM RPC access; payment adapters use the application's or wallet's provider
+and verify its chain before approval or payment.
+
+This SDK uses browser protocol v5 and browser manifest v6. Upgrade the node,
+Rust/WASM client, and SDK together; older protocol versions are rejected.
 
 Pass `wasm` when the bundled WASM asset must be served from a custom location.
 The SDK compiles one module per page and shares that exact module with every
@@ -197,7 +198,7 @@ receipt. `resumeUpload()` waits for settlement too and rejects concurrent resume
 A late successful upload is returned without uploading again.
 
 Recovery handles survive `client.close()` and can be resumed by a new client in
-the same page using the same payment chain ID, RPC, and contracts. They are not
+the same page using the same payment chain ID and contracts. They are not
 serialized recovery files and do not survive a page reload. Release retained
 input when it is no longer wanted, including before leaving the page:
 
@@ -275,9 +276,14 @@ production private key must never be embedded in browser code:
 ```ts
 const payment = createEthersPaymentProvider({
   privateKey: disposableDevnetPrivateKey,
+  rpcUrl: applicationRpcUrl,
   approval: "exact",
 });
 ```
+
+Private-key payments require an explicit application-owned `rpcUrl`. For a
+local devnet, use the Anvil JSON-RPC URL printed by `ant-devnet`. An injected
+wallet's signer already has a provider and needs no `rpcUrl` option.
 
 ### Wagmi and Viem
 
@@ -297,8 +303,9 @@ const client = await AutonomiClient.connect(bootstrapMultiaddr, { payment });
 
 The Wagmi adapter uses the active connector directly and does not bridge through
 Ethers. Before approval or payment, it checks that the connected wallet is on the
-fixed `network.chainId`, and rejects if the advertised RPC now reports a different
-chain. The application remains responsible for its wallet connection and
+advertised `network.chainId`, and checks the public client's actual chain too.
+Configure the payment chain and its RPC transport in the application's Wagmi
+`config`. The application remains responsible for its wallet connection and
 chain-switching user experience.
 
 ### Custom payment provider
@@ -551,8 +558,8 @@ explicit resume or discard; closing the client does not discard them.
 - Autonomi nodes exposing a WebRTC Direct listener and complete multiaddresses
   containing `/webrtc-direct/certhash/.../p2p/...`
 - Enough IndexedDB quota to stage encrypted records for `File` and `Blob` uploads
-- CORS access to the advertised payment RPC for chain resolution during every
-  connection, plus wallet integrations that query that RPC directly
+- CORS access to the application's payment RPC when the payment adapter queries
+  it directly; injected wallets manage their own provider access
 - A secure context and service-worker support for seekable media URLs
 - Enough page memory for whole-file downloads and `Uint8Array` uploads
 

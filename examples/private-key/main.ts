@@ -4,6 +4,7 @@ import "../shared/style.css";
 import { createLogger, element } from "../shared/ui.js";
 
 const bootstrap = element<HTMLInputElement>("bootstrap");
+const paymentRpc = element<HTMLInputElement>("payment-rpc");
 const privateKey = element<HTMLInputElement>("private-key");
 const fileInput = element<HTMLInputElement>("file");
 const connection = element<HTMLOutputElement>("connection");
@@ -44,7 +45,7 @@ uploadButton.addEventListener("click", async () => {
   result.value = "";
   try {
     const uploaded = await client.upload(file, {
-      payment: createEthersPaymentProvider({ privateKey: key }),
+      payment: createEthersPaymentProvider({ privateKey: key, rpcUrl: paymentRpc.value.trim() }),
     });
     result.value = `Uploaded as ${uploaded.file.address}`;
   } catch (error) {

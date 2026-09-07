@@ -1,13 +1,12 @@
-import { getConnectorClient, type Config } from "@wagmi/core";
+import { getConnectorClient, getPublicClient, type Config } from "@wagmi/core";
 import {
-  createPublicClient,
-  http,
   maxUint256,
   type Account,
   type Address,
   type Chain,
   type Client,
   type Hex,
+  type PublicClient,
   type Transport,
 } from "viem";
 import { readContract, waitForTransactionReceipt, writeContract } from "viem/actions";
@@ -82,7 +81,9 @@ export function createWagmiPaymentProvider<config extends Config>(
       if (quotes.length === 0) return { totalAmount: "0" };
       assertPaymentChainId(network.chainId);
 
-      const publicClient = createPublicClient({ transport: http(network.rpc_url) });
+      const configuredClient = getPublicClient(options.config, { chainId: network.chainId });
+      if (!configuredClient) throw new Error(`Configure a Wagmi public client for payment chain ${network.chainId}`);
+      const publicClient = configuredClient as PublicClient;
       const [chainId, connectorClient] = await abortable(Promise.all([
         publicClient.getChainId(),
         getConnectorClient(options.config),
@@ -155,7 +156,7 @@ export function createWagmiPaymentProvider<config extends Config>(
 }
 
 async function requireSuccessfulReceipt(
-  publicClient: ReturnType<typeof createPublicClient>,
+  publicClient: PublicClient,
   hash: Hex,
   errorMessage: string,
 ): Promise<Hex> {
