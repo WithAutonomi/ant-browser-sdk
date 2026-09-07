@@ -12,6 +12,7 @@ import {
 } from "viem";
 import { readContract, waitForTransactionReceipt, writeContract } from "viem/actions";
 import { abortable, throwIfAborted } from "./internal/abort.js";
+import { assertPaymentChainId } from "./internal/payment-network.js";
 import type {
   PaymentNetwork,
   PaymentProvider,
@@ -79,16 +80,20 @@ export function createWagmiPaymentProvider<config extends Config>(
     async pay(network, quotes, context): Promise<PaymentReceipt> {
       throwIfAborted(context.signal);
       if (quotes.length === 0) return { totalAmount: "0" };
+      assertPaymentChainId(network.chainId);
 
       const publicClient = createPublicClient({ transport: http(network.rpc_url) });
       const [chainId, connectorClient] = await abortable(Promise.all([
         publicClient.getChainId(),
         getConnectorClient(options.config),
       ]), context.signal);
+      if (chainId !== network.chainId) {
+        throw new Error(`Payment RPC is on chain ${chainId}; expected payment chain ${network.chainId}`);
+      }
       const walletClient = connectorClient as Client<Transport, Chain, Account>;
-      if (walletClient.chain.id !== chainId) {
+      if (walletClient.chain.id !== network.chainId) {
         throw new Error(
-          `Connected wallet is on chain ${walletClient.chain.id}; switch to payment chain ${chainId}`,
+          `Connected wallet is on chain ${walletClient.chain.id}; switch to payment chain ${network.chainId}`,
         );
       }
 

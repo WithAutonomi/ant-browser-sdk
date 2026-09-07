@@ -166,7 +166,7 @@ export function uploadResult(
 }
 
 function sameNetwork(a: PaymentNetwork, b: PaymentNetwork): boolean {
-  return a.rpc_url === b.rpc_url &&
+  return a.chainId === b.chainId && a.rpc_url === b.rpc_url &&
     a.payment_token_address.toLowerCase() === b.payment_token_address.toLowerCase() &&
     a.payment_vault_address.toLowerCase() === b.payment_vault_address.toLowerCase();
 }

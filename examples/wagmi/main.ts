@@ -8,7 +8,7 @@ import {
   switchChain,
   type Config,
 } from "@wagmi/core";
-import { createPublicClient, defineChain, http } from "viem";
+import { defineChain, http } from "viem";
 import "../shared/style.css";
 import { createLogger, element } from "../shared/ui.js";
 
@@ -34,7 +34,7 @@ connectNodeButton.addEventListener("click", async () => {
       onProgress: ({ operation, message }) => write(`[${operation}] ${message}`),
     });
     const rpcUrl = client.connection.paymentNetwork.rpc_url;
-    paymentChainId = await createPublicClient({ transport: http(rpcUrl) }).getChainId();
+    paymentChainId = client.connection.paymentNetwork.chainId;
     const paymentChain = defineChain({
       id: paymentChainId,
       name: `Autonomi payment chain ${paymentChainId}`,

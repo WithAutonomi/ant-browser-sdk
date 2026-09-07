@@ -80,6 +80,15 @@ authenticates the bootstrap node's ML-DSA identity. A single direct endpoint is
 enough: authenticated peers can advertise additional WebRTC Direct addresses
 during closest-node lookup.
 
+Connection setup also resolves the payment RPC's EVM `chainId` using
+[`eth_chainId`](https://ethereum.org/developers/docs/apis/json-rpc/#eth_chainid).
+`client.connection.paymentNetwork` and `client.connection.bootstrap.payment`
+include this fixed identity as a non-negative safe integer. The RPC must be
+reachable from the browser, including for clients used only to read files;
+an unavailable RPC or invalid chain ID fails connection setup with
+`CONNECTION_FAILED`. The chain ID is resolved from the node-advertised RPC,
+not carried in the authenticated HELLO payload.
+
 Pass `wasm` when the bundled WASM asset must be served from a custom location.
 The SDK compiles one module per page and shares that exact module with every
 `File`/`Blob` upload worker. Later connections without `wasm` reuse it. An explicit
@@ -188,9 +197,9 @@ receipt. `resumeUpload()` waits for settlement too and rejects concurrent resume
 A late successful upload is returned without uploading again.
 
 Recovery handles survive `client.close()` and can be resumed by a new client in
-the same page using the same payment RPC and contracts. They are not serialized
-recovery files and do not survive a page reload. Release retained input when it
-is no longer wanted, including before leaving the page:
+the same page using the same payment chain ID, RPC, and contracts. They are not
+serialized recovery files and do not survive a page reload. Release retained
+input when it is no longer wanted, including before leaving the page:
 
 ```ts
 await recovery.discard();
@@ -232,7 +241,6 @@ authenticated node:
 ```ts
 import {
   BrowserProvider,
-  JsonRpcProvider,
   type Eip1193Provider,
 } from "ethers";
 import { createEthersPaymentProvider } from "@autonomi/browser-sdk/ethers";
@@ -243,14 +251,10 @@ if (!injected) throw new Error("No injected EVM wallet is available");
 const payment = createEthersPaymentProvider({
   getSigner: async (network) => {
     const walletProvider = new BrowserProvider(injected);
-    const paymentProvider = new JsonRpcProvider(network.rpc_url);
-    const [walletNetwork, paymentNetwork] = await Promise.all([
-      walletProvider.getNetwork(),
-      paymentProvider.getNetwork(),
-    ]);
+    const walletNetwork = await walletProvider.getNetwork();
 
-    if (walletNetwork.chainId !== paymentNetwork.chainId) {
-      throw new Error(`Switch the wallet to chain ${paymentNetwork.chainId}`);
+    if (walletNetwork.chainId !== BigInt(network.chainId)) {
+      throw new Error(`Switch the wallet to chain ${network.chainId}`);
     }
     return walletProvider.getSigner();
   },
@@ -260,6 +264,10 @@ const payment = createEthersPaymentProvider({
 
 `approval` can be `"exact"` or `"unlimited"`; it defaults to `"unlimited"` to
 avoid another token-approval transaction on a later upload.
+
+Before approval or payment, the adapter verifies that the signer's provider is
+on `network.chainId`. A resolver must return a signer connected to a provider;
+the application owns wallet connection and chain switching.
 
 The `privateKey` option is convenient for a funded local-devnet wallet, but a
 production private key must never be embedded in browser code:
@@ -289,12 +297,15 @@ const client = await AutonomiClient.connect(bootstrapMultiaddr, { payment });
 
 The Wagmi adapter uses the active connector directly and does not bridge through
 Ethers. Before approval or payment, it checks that the connected wallet is on the
-chain exposed by the authenticated node's payment RPC. The application remains
-responsible for its wallet connection and chain-switching user experience.
+fixed `network.chainId`, and rejects if the advertised RPC now reports a different
+chain. The application remains responsible for its wallet connection and
+chain-switching user experience.
 
 ### Custom payment provider
 
 Implement `PaymentProvider` to integrate another wallet stack:
+
+Custom providers must verify that the wallet submits on `network.chainId`.
 
 ```ts
 import type { PaymentProvider } from "@autonomi/browser-sdk";
@@ -536,8 +547,8 @@ explicit resume or discard; closing the client does not discard them.
 - Autonomi nodes exposing a WebRTC Direct listener and complete multiaddresses
   containing `/webrtc-direct/certhash/.../p2p/...`
 - Enough IndexedDB quota to stage encrypted records for `File` and `Blob` uploads
-- CORS access to the advertised payment RPC for Wagmi, private-key Ethers, and
-  integrations that query that RPC directly
+- CORS access to the advertised payment RPC for chain resolution during every
+  connection, plus wallet integrations that query that RPC directly
 - A secure context and service-worker support for seekable media URLs
 - Enough page memory for whole-file downloads and `Uint8Array` uploads
 

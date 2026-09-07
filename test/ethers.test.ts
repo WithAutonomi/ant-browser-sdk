@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PaymentNetwork, VerifiedStorageQuote } from "../src/types.js";
 
 const state = vi.hoisted(() => ({
+  chainId: 31337n,
   providers: 0,
   allowance: 1_000n,
   failPopulation: false,
@@ -14,6 +15,7 @@ vi.mock("ethers", async (importOriginal) => {
   const actual = await importOriginal<typeof import("ethers")>();
   class JsonRpcProvider {
     constructor() { state.providers++; }
+    async getNetwork() { return { chainId: state.chainId }; }
     async getTransactionCount() { return state.nonces.length; }
   }
   class Wallet {
@@ -49,6 +51,7 @@ vi.mock("ethers", async (importOriginal) => {
 import { createEthersPaymentProvider } from "../src/ethers.js";
 
 const network: PaymentNetwork = {
+  chainId: 31337,
   rpc_url: "http://127.0.0.1:8545/",
   payment_token_address: `0x${"11".repeat(20)}`,
   payment_vault_address: `0x${"22".repeat(20)}`,
@@ -67,11 +70,32 @@ function replace(reason: "repriced" | "cancelled" | "replaced", status = 1) {
   }));
 }
 beforeEach(() => {
+  state.chainId = 31337n;
   state.providers = 0; state.allowance = 1_000n; state.failPopulation = false;
   state.nonces.length = 0; state.submissions.length = 0; state.waits.length = 0;
 });
 
 describe("Ethers payments", () => {
+  it("rejects a private-key provider on a different chain before submitting", async () => {
+    state.chainId = 1n;
+    await expect(provider().pay(network, quotes, context())).rejects.toThrow("switch to payment chain 31337");
+    expect(state.submissions).toEqual([]);
+  });
+
+  it("checks a resolved signer's chain independently of the application", async () => {
+    const payment = createEthersPaymentProvider({
+      getSigner: () => ({ provider: { getNetwork: async () => ({ chainId: 1n }) } }) as unknown as import("ethers").Signer,
+    });
+    await expect(payment.pay(network, quotes, context())).rejects.toThrow("switch to payment chain 31337");
+    expect(state.submissions).toEqual([]);
+  });
+
+  it("requires a provider on resolved signers to verify the chain", async () => {
+    const payment = createEthersPaymentProvider({ getSigner: () => ({ provider: null }) as unknown as import("ethers").Signer });
+    await expect(payment.pay(network, quotes, context())).rejects.toThrow("must be connected to a provider");
+    expect(state.submissions).toEqual([]);
+  });
+
   it("serializes private-key payments and reloads sequential nonces", async () => {
     const payment = provider();
     const first = payment.pay(network, quotes, context());

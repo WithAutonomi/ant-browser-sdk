@@ -1,5 +1,7 @@
-/** Public EVM contracts advertised by authenticated Autonomi nodes. */
+/** Node-advertised EVM configuration with the chain identity resolved by the SDK. */
 export interface PaymentNetwork {
+  /** EVM chain ID read from rpc_url during connect(); a non-negative safe integer. */
+  readonly chainId: number;
   readonly rpc_url: string;
   readonly payment_token_address: string;
   readonly payment_vault_address: string;

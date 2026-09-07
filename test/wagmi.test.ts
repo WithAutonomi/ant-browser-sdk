@@ -30,6 +30,7 @@ import { createWagmiPaymentProvider } from "../src/wagmi.js";
 
 const walletAddress = `0x${"33".repeat(20)}`;
 const network: PaymentNetwork = {
+  chainId: 42161,
   rpc_url: "http://127.0.0.1:8545/",
   payment_token_address: `0x${"11".repeat(20)}`,
   payment_vault_address: `0x${"22".repeat(20)}`,
@@ -68,6 +69,15 @@ beforeEach(() => {
 });
 
 describe("createWagmiPaymentProvider", () => {
+  it("rejects an RPC and wallet that moved together to a different chain", async () => {
+    mocks.getChainId.mockResolvedValue(1);
+    mocks.getConnectorClient.mockResolvedValue({ account: { address: walletAddress }, chain: { id: 1 } });
+    await expect(createWagmiPaymentProvider({ config }).pay(network, quotes, { report() {} }))
+      .rejects.toThrow("expected payment chain 42161");
+    expect(mocks.readContract).not.toHaveBeenCalled();
+    expect(mocks.writeContract).not.toHaveBeenCalled();
+  });
+
   it("approves and pays verified quotes with the active Wagmi connector", async () => {
     const report = vi.fn();
     const payment = createWagmiPaymentProvider({ config, approval: "exact" });

@@ -9,6 +9,7 @@ import {
   type TransactionResponse,
 } from "ethers";
 import { abortable, throwIfAborted } from "./internal/abort.js";
+import { assertPaymentChainId } from "./internal/payment-network.js";
 import type {
   PaymentContext,
   PaymentNetwork,
@@ -77,6 +78,7 @@ export function createEthersPaymentProvider(
     async pay(network, quotes, context): Promise<PaymentReceipt> {
       throwIfAborted(context.signal);
       if (quotes.length === 0) return { totalAmount: "0" };
+      assertPaymentChainId(network.chainId);
       if (options.getSigner) {
         throwIfAborted(context.signal);
         const signer = await abortable(options.getSigner(network), context.signal);
@@ -107,6 +109,11 @@ async function submitPayment(
   approval: "exact" | "unlimited",
 ): Promise<PaymentReceipt> {
   throwIfAborted(context.signal);
+  if (!signer.provider) throw new Error("Payment signer must be connected to a provider");
+  const signerNetwork = await abortable(signer.provider.getNetwork(), context.signal);
+  if (signerNetwork.chainId !== BigInt(network.chainId)) {
+    throw new Error(`Payment signer is on chain ${signerNetwork.chainId}; switch to payment chain ${network.chainId}`);
+  }
   const walletAddress = await abortable(signer.getAddress(), context.signal);
   const totalAmount = quotes.reduce(
     (total, quote) => total + BigInt(quote.amount),

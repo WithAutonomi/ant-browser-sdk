@@ -10,6 +10,7 @@ import type {
 } from "../src/types.js";
 
 const network: PaymentNetwork = {
+  chainId: 31337,
   rpc_url: "http://127.0.0.1:8545/",
   payment_token_address: `0x${"11".repeat(20)}`,
   payment_vault_address: `0x${"22".repeat(20)}`,

@@ -14,6 +14,9 @@ import {
   uploadResult, uploadSettlement, validateReceipt, type RetainedUpload,
 } from "./internal/upload-recovery.js";
 import { snapshot } from "./internal/snapshot.js";
+import {
+  corePaymentNetwork, paymentNetworkFromCore, resolvePaymentNetwork, type CorePaymentNetwork,
+} from "./internal/payment-network.js";
 import { requestSaveFileHandle, saveDownload } from "./save.js";
 import type {
   ClientOptions,
@@ -26,7 +29,6 @@ import type {
   MediaSource,
   Operation,
   OperationOptions,
-  PaymentNetwork,
   PaymentProvider,
   ProgressEvent,
   ProgressListener,
@@ -84,7 +86,7 @@ export class AutonomiClient {
   }
 
   /**
-   * Initialize WASM, validate a WebRTC Direct bootstrap address, and authenticate the node.
+   * Initialize WASM, authenticate the bootstrap node, and resolve its payment chain ID.
    *
    * Pass one complete, certificate-pinned WebRTC Direct multiaddress.
    */
@@ -105,9 +107,9 @@ export class AutonomiClient {
       report(`Authenticating bootstrap node from ${endpoint.multiaddr}`, { phase: "connecting" });
 
       const probe = new BrowserNodeClient(endpoint);
-      let hello: HelloInfo;
+      let hello: Omit<HelloInfo, "payment"> & { payment: unknown };
       try {
-        hello = (await abortable(probe.hello(), options.signal)) as HelloInfo;
+        hello = (await abortable(probe.hello(), options.signal)) as typeof hello;
       } finally {
         try {
           probe.close();
@@ -115,15 +117,15 @@ export class AutonomiClient {
           probe.free();
         }
       }
-      const paymentNetwork = normalizePaymentNetwork(hello.payment);
-      hello = { ...hello, payment: paymentNetwork };
+      report("Resolving the payment chain advertised by the bootstrap node");
+      const paymentNetwork = await resolvePaymentNetwork(normalizePaymentNetwork(hello.payment), options.signal);
       const endpoints = [endpoint];
       throwIfAborted(options.signal);
       network = new BrowserNetworkClient(endpoints);
       const connection: ConnectionInfo = {
         bootstrapMultiaddr: endpoint.multiaddr,
         paymentNetwork,
-        bootstrap: hello,
+        bootstrap: { ...hello, payment: paymentNetwork },
         files: [],
       };
       report(`Connected to authenticated peer ${hello.peer_id}`, { phase: "complete" });
@@ -272,7 +274,7 @@ export class AutonomiClient {
     const payForQuotes = async (networkValue: unknown, quoteValue: unknown) => {
       try {
         throwIfAborted(operation.signal);
-        const network = snapshot(networkValue as PaymentNetwork);
+        const network = paymentNetworkFromCore(networkValue, state.network);
         const quotes = snapshot(quoteValue as VerifiedStorageQuote[]);
         const previous = resuming ? paidReceipt(state, network, quotes) : undefined;
         if (previous) {
@@ -312,13 +314,13 @@ export class AutonomiClient {
         report(`Preparing storage for ${state.name}`, { phase: "preparing" });
         const raw = state.staged
           ? this.#network.uploadStagedPublicFile(
-              state.staged.staged, state.network,
+              state.staged.staged, corePaymentNetwork(state.network),
               (index: unknown, address: unknown, size: unknown) => loadStagedRecord(
                 state.staged!.sessionId, Number(index), String(address), Number(size), operation.signal,
               ), payForQuotes, report,
             )
           : this.#network.uploadPublicFile(
-              state.bytes!, state.name, state.contentType, state.network, payForQuotes, report,
+              state.bytes!, state.name, state.contentType, corePaymentNetwork(state.network), payForQuotes, report,
             );
         state.work = Promise.resolve(raw).then((result) => {
           state.result = uploadResult(state, result as UploadResult);
@@ -614,7 +616,7 @@ function parseBootstrapMultiaddr(value: string): { multiaddr: string } {
   }
 }
 
-function normalizePaymentNetwork(value: unknown): PaymentNetwork {
+function normalizePaymentNetwork(value: unknown): CorePaymentNetwork {
   if (typeof value !== "object" || value === null) {
     throw new TypeError("bootstrap node advertises invalid payment configuration");
   }

@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { PaymentNetwork, PaymentProvider, PublicFile } from "../src/types.js";
+import type { PaymentProvider, PublicFile } from "../src/types.js";
 import type { StagedUpload } from "../src/internal/staging.js";
 const mocks = vi.hoisted(() => ({
   staged: undefined as StagedUpload | undefined,
@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   stage: vi.fn(),
   network: {
     rpc_url: "https://rpc.example/", payment_token_address: `0x${"11".repeat(20)}`, payment_vault_address: `0x${"22".repeat(20)}`,
-  } as PaymentNetwork,
+  },
 }));
 vi.mock("../src/internal/runtime.js", () => ({
   initializeClientWasm: async () => undefined,
@@ -39,6 +39,7 @@ async function client(payment?: PaymentProvider) {
 const wallet = (): PaymentProvider => ({ pay: vi.fn(async () => ({ transactionHash: "0xpaid", totalAmount: "42" })) });
 const result = { file, transactionHash: "0xpaid", storageCostAtto: "42", records: 1 };
 beforeEach(async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json({ jsonrpc: "2.0", id: 1, result: "0x7a69" })));
   mocks.upload.mockReset(); mocks.stage.mockReset();
   mocks.network = { ...mocks.network, rpc_url: "https://rpc.example/" };
   mocks.staged = {
@@ -53,6 +54,7 @@ afterEach(async () => {
     value.close();
     for (const recovery of value.pendingUploads) await recovery.discard();
   }
+  vi.unstubAllGlobals();
 });
 it("retains staged bytes after failure and cleans them only after a successful resume", async () => {
   const payment = wallet(); const value = await client(payment);
@@ -106,6 +108,18 @@ it("refuses recovery against a different payment network", async () => {
   await expect(original.upload(new Blob(["abc"]))).rejects.toBeInstanceOf(UploadError);
   const recovery = original.pendingUploads[0]!;
   mocks.network = { ...mocks.network, rpc_url: "https://another.example/" };
+  const replacement = await client();
+  await expect(replacement.resumeUpload(recovery)).rejects.toMatchObject({ code: "INVALID_SOURCE" });
+  expect(mocks.upload).toHaveBeenCalledOnce();
+  expect(recovery.status).toBe("ready");
+});
+
+it("refuses recovery when the same RPC and contracts resolve to another chain", async () => {
+  const original = await client(wallet());
+  mocks.upload.mockRejectedValue(new Error("network unavailable"));
+  await expect(original.upload(new Blob(["abc"]))).rejects.toBeInstanceOf(UploadError);
+  const recovery = original.pendingUploads[0]!;
+  vi.mocked(fetch).mockResolvedValueOnce(Response.json({ jsonrpc: "2.0", id: 1, result: "0x1" }));
   const replacement = await client();
   await expect(replacement.resumeUpload(recovery)).rejects.toMatchObject({ code: "INVALID_SOURCE" });
   expect(mocks.upload).toHaveBeenCalledOnce();
