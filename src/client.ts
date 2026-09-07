@@ -10,6 +10,7 @@ import {
   type StagedUpload,
   type WorkerWasmSource,
 } from "./internal/staging.js";
+import { snapshot } from "./internal/snapshot.js";
 import { requestSaveFileHandle, saveDownload } from "./save.js";
 import type {
   ClientOptions,
@@ -48,7 +49,8 @@ interface OperationScope {
 
 /** High-level, stateful browser client for direct Autonomi applications. */
 export class AutonomiClient {
-  readonly connection: ConnectionInfo;
+  #connection: Omit<ConnectionInfo, "files">;
+  #files: PublicFile[] = [];
 
   #network: RawNetworkClient;
   #payment: PaymentProvider | undefined;
@@ -65,7 +67,9 @@ export class AutonomiClient {
     workerWasm?: WorkerWasmSource,
   ) {
     this.#network = network;
-    this.connection = connection;
+    const { files, ...metadata } = connection;
+    this.#connection = snapshot(metadata);
+    this.#files = files.map((file) => snapshot(file));
     this.#payment = options.payment;
     this.#workerWasm = workerWasm;
     if (options.onProgress) this.#listeners.add(options.onProgress);
@@ -126,12 +130,17 @@ export class AutonomiClient {
     }
   }
 
+  /** A frozen snapshot; later operations produce new snapshots. */
+  get connection(): ConnectionInfo {
+    return Object.freeze({ ...this.#connection, files: this.files });
+  }
+
   get closed(): boolean {
     return this.#closed;
   }
 
   get files(): readonly PublicFile[] {
-    return this.connection.files;
+    return Object.freeze([...this.#files]);
   }
 
   /** Install or replace the wallet/payment adapter used by future uploads. */
@@ -225,7 +234,7 @@ export class AutonomiClient {
             input,
             name,
             contentType,
-            this.connection.paymentNetwork,
+            this.#connection.paymentNetwork,
             payForQuotes,
             report,
           ),
@@ -248,7 +257,7 @@ export class AutonomiClient {
         result = await abortable(
           this.#network.uploadStagedPublicFile(
             staged.staged,
-            this.connection.paymentNetwork,
+            this.#connection.paymentNetwork,
             (index: unknown, address: unknown, size: unknown) =>
               loadStagedRecord(
                 staged!.sessionId,
@@ -486,9 +495,9 @@ export class AutonomiClient {
   }
 
   #rememberFile(file: PublicFile): void {
-    const index = this.connection.files.findIndex((known) => known.address === file.address);
-    if (index === -1) this.connection.files.push(file);
-    else this.connection.files[index] = file;
+    const index = this.#files.findIndex((known) => known.address === file.address);
+    if (index === -1) this.#files.push(snapshot(file));
+    else this.#files[index] = snapshot(file);
   }
 }
 

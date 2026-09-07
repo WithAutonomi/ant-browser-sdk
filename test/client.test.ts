@@ -490,3 +490,25 @@ describe("AutonomiClient", () => {
     client.close();
   });
 });
+
+describe("connection snapshots", () => {
+  it("exposes frozen metadata and files without leaking operational configuration", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    const before = client.connection;
+    expect(Object.isFrozen(before)).toBe(true);
+    expect(Object.isFrozen(before.paymentNetwork)).toBe(true);
+    expect(Object.isFrozen(before.bootstrap.endpoint)).toBe(true);
+    expect(() => Object.assign(before.paymentNetwork, { rpc_url: "https://wrong.example" })).toThrow();
+    state.networks[0]!.downloadPublicFile.mockResolvedValue({
+      content: Uint8Array.of(1), hash: file.blake3, file: { ...file },
+      dataMapNode: { peer_id: "aa".repeat(32), native_addresses: [], reliability: 1 },
+    });
+    const downloaded = await client.download(file.address);
+    Object.assign(downloaded.file, { name: "changed by caller" });
+    expect(client.files[0]!.name).toBe(file.name);
+    expect(before.files).toHaveLength(0);
+    expect(client.connection.files).toHaveLength(1);
+    expect(Object.isFrozen(client.files[0]!.chunks)).toBe(true);
+    client.close();
+  });
+});

@@ -1,37 +1,37 @@
 /** Public EVM contracts advertised by authenticated Autonomi nodes. */
 export interface PaymentNetwork {
-  rpc_url: string;
-  payment_token_address: string;
-  payment_vault_address: string;
+  readonly rpc_url: string;
+  readonly payment_token_address: string;
+  readonly payment_vault_address: string;
 }
 
 export interface ChunkInfo {
-  index: number;
-  dst_hash: string;
-  src_hash: string;
-  src_size: number;
+  readonly index: number;
+  readonly dst_hash: string;
+  readonly src_hash: string;
+  readonly src_size: number;
 }
 
 /** Metadata needed to retrieve and verify a public file. */
 export interface PublicFile {
-  name: string;
-  address: string;
-  size: number;
-  content_type: string;
-  blake3: string;
-  data_map_size: number;
-  chunks: ChunkInfo[];
-  replicas: number;
+  readonly name: string;
+  readonly address: string;
+  readonly size: number;
+  readonly content_type: string;
+  readonly blake3: string;
+  readonly data_map_size: number;
+  readonly chunks: readonly ChunkInfo[];
+  readonly replicas: number;
 }
 
 export interface HelloInfo {
-  type: string;
-  protocol: string;
-  peer_id: string;
-  endpoint: { multiaddr: string };
-  max_chunk_size: number;
-  capabilities: string[];
-  payment: PaymentNetwork;
+  readonly type: string;
+  readonly protocol: string;
+  readonly peer_id: string;
+  readonly endpoint: { readonly multiaddr: string };
+  readonly max_chunk_size: number;
+  readonly capabilities: readonly string[];
+  readonly payment: PaymentNetwork;
 }
 
 export interface NetworkNode {
@@ -114,10 +114,10 @@ export interface ClientOptions {
 }
 
 export interface ConnectionInfo {
-  bootstrapMultiaddr: string;
-  paymentNetwork: PaymentNetwork;
-  bootstrap: HelloInfo;
-  files: PublicFile[];
+  readonly bootstrapMultiaddr: string;
+  readonly paymentNetwork: PaymentNetwork;
+  readonly bootstrap: HelloInfo;
+  readonly files: readonly PublicFile[];
 }
 
 export interface OperationOptions {
