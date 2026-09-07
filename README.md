@@ -157,6 +157,15 @@ The Rust core owns content addressing, closest-node selection, storage-quote and
 commitment verification, payment-total calculation, quorum storage, fallback,
 and retries. A payment provider receives only verified quotes.
 
+Upload preparation requires seven initial PUT peers, matching native ant-core.
+If discovery fails or returns fewer peers, the shared policy retries at
+close-group width. The browser's fresh pass rechecks temporarily suppressed
+endpoints with normal request deadlines. Payment is requested only after all
+records pass preparation; a failure at this stage does not request a new
+storage payment. A recovery handle means input was retained, not that payment
+was made: inspect both `payments` and `pendingPayments` before presenting retry
+actions.
+
 This SDK currently publishes public files. Persist the returned DataMap address
 in application storage if it must survive a page reload; `client.files` is only
 an in-memory list for the current client instance.
