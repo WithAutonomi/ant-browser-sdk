@@ -441,6 +441,14 @@ Download concurrency must be an integer from 1 through 6 and defaults to 3.
 Complete downloads are memory-bound. Use a random-access reader for large media
 or range-oriented formats.
 
+For each record, the Rust client first tries the closest discovery responders.
+If those nodes cannot return it, the client tries up to 20 additional known
+WebRTC Direct endpoints, including eligible cached routes and configured seeds.
+A failed discovery request does not by itself disqualify a node from serving a
+chunk. Fallback reads still authenticate nodes and verify the record's BLAKE3
+hash. This also applies to DataMaps and media range reads; it cannot recover
+records that are absent from all reachable holders.
+
 Call `downloadAndSave()` directly from a user action. It opens
 `showSaveFilePicker()` before starting the network request so the picker retains
 the action's transient user activation, then downloads, verifies, and writes the
