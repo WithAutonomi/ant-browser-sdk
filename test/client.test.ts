@@ -66,7 +66,7 @@ vi.mock("../src/internal/runtime.js", () => {
   }
 
   return {
-    initializeWasm: vi.fn(async () => undefined),
+    initializeClientWasm: vi.fn(async (source?: unknown) => source),
     getBindings: () => ({
       BrowserNodeClient: NodeClient,
       BrowserNetworkClient: NetworkClient,

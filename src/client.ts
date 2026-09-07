@@ -1,7 +1,7 @@
 import { AutonomiError, wrapError } from "./errors.js";
 import { PublicFileReader } from "./file-reader.js";
 import { abortable, isAbort, throwIfAborted } from "./internal/abort.js";
-import { getBindings, initializeWasm, type RawNetworkClient } from "./internal/runtime.js";
+import { getBindings, initializeClientWasm, type RawNetworkClient } from "./internal/runtime.js";
 import { MediaBridge } from "./internal/media.js";
 import {
   clearStagedUpload,
@@ -89,8 +89,7 @@ export class AutonomiClient {
     try {
       throwIfAborted(options.signal);
       report("Initializing the Autonomi browser core");
-      const workerWasm = await prepareWorkerWasmSource(options.wasm, options.signal);
-      await abortable(initializeWasm(workerWasm), options.signal);
+      const workerWasm = await abortable(initializeClientWasm(options.wasm), options.signal);
       const { BrowserNodeClient, BrowserNetworkClient } = getBindings();
       const endpoint = parseBootstrapMultiaddr(bootstrapMultiaddr);
       report(`Authenticating bootstrap node from ${endpoint.multiaddr}`);
@@ -490,58 +489,6 @@ export class AutonomiClient {
     const index = this.connection.files.findIndex((known) => known.address === file.address);
     if (index === -1) this.connection.files.push(file);
     else this.connection.files[index] = file;
-  }
-}
-
-async function prepareWorkerWasmSource(
-  source: ClientOptions["wasm"],
-  signal?: AbortSignal,
-): Promise<WorkerWasmSource | undefined> {
-  if (source === undefined) return undefined;
-  try {
-    const resolved = await abortable(Promise.resolve(source), signal);
-    throwIfAborted(signal);
-    if (
-      typeof WebAssembly === "object" &&
-      resolved instanceof WebAssembly.Module
-    ) {
-      return resolved;
-    }
-    if (resolved instanceof ArrayBuffer) return resolved.slice(0);
-    if (ArrayBuffer.isView(resolved)) {
-      return new Uint8Array(
-        resolved.buffer,
-        resolved.byteOffset,
-        resolved.byteLength,
-      ).slice().buffer;
-    }
-
-    let response: Response;
-    if (typeof Response === "function" && resolved instanceof Response) {
-      response = resolved;
-    } else {
-      response = await abortable(
-        fetch(
-          resolved as RequestInfo | URL,
-          signal === undefined ? undefined : { signal },
-        ),
-        signal,
-      );
-    }
-    if (!response.ok) {
-      throw new Error(
-        `Could not load the Autonomi WASM override (${response.status} ${response.statusText})`,
-      );
-    }
-    throwIfAborted(signal);
-    return await abortable(response.arrayBuffer(), signal);
-  } catch (error) {
-    if (isAbort(error, signal)) throw error;
-    throw new AutonomiError(
-      "INITIALIZATION_FAILED",
-      "Could not initialize the Autonomi WASM core",
-      error,
-    );
   }
 }
 
