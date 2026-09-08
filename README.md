@@ -812,6 +812,33 @@ behavior and do not imply parity with native filesystem resume.
 - Applications own UI, wallet and chain switching, policy, bootstrap distribution,
   and durable metadata for published files.
 
+### Persisting upload recovery
+
+The Rust client checkpoints its prepared payment plans before requesting a
+wallet payment and its confirmed per-record proofs before uploading data. The
+SDK retains these checkpoints for `resumeUpload()`. To recover after a reload,
+persist the checkpoint and retain or reselect the same input:
+
+```ts
+let checkpoint = await checkpointStore.load(fileId);
+await client.upload(file, {
+  ...(checkpoint === undefined ? {} : { checkpoint }),
+  payment,
+  onCheckpoint: async (value) => {
+    checkpoint = value;
+    await checkpointStore.save(fileId, value);
+  },
+});
+```
+
+`checkpointStore` is application-owned storage, such as IndexedDB. The callback
+is awaited before payment or record uploads proceed. A confirmed proof remains
+usable with newly discovered peers and new quotes until the shared native expiry
+policy says otherwise. Checkpoints are bound to the input records and payment
+network, and contain no file bytes or private keys. They do not contain the
+wallet's unresolved transaction observers: persist submission evidence through
+`onPaymentSubmitted` and reconcile it before authorizing a replacement payment.
+
 ## License
 
 Licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.

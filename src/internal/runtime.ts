@@ -33,6 +33,8 @@ export interface RawNetworkClient {
     paymentNetwork: unknown,
     payForQuotes: (...args: unknown[]) => Promise<unknown>,
     onProgress?: (message: string) => void,
+    checkpoint?: string,
+    onCheckpoint?: (checkpoint: string) => void | Promise<void>,
   ): Promise<unknown>;
   uploadStagedPublicFile(
     staged: unknown,
@@ -40,6 +42,8 @@ export interface RawNetworkClient {
     loadRecord: (...args: unknown[]) => Promise<Uint8Array>,
     payForQuotes: (...args: unknown[]) => Promise<unknown>,
     onProgress?: (message: string) => void,
+    checkpoint?: string,
+    onCheckpoint?: (checkpoint: string) => void | Promise<void>,
   ): Promise<unknown>;
   close(): void;
   free(): void;

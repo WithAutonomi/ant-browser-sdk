@@ -63,6 +63,8 @@ export interface VerifiedStorageQuote {
 
 /** A confirmed storage transaction, including transactions paying zero tokens. */
 export interface PaidPaymentReceipt {
+  /** Optional per-quote transaction mapping when a wallet splits a payment batch. */
+  transactionHashes?: Readonly<Record<string, string>>;
   transactionHash: string;
   walletAddress?: string;
   /** Decimal sum of every quote paid by this transaction. */
@@ -196,6 +198,10 @@ export interface OperationOptions {
 }
 
 export interface UploadOptions extends OperationOptions {
+  /** Restore a Rust checkpoint with the same file bytes and payment network. */
+  checkpoint?: string;
+  /** Persist Rust recovery state; awaited before requesting payment or storing records. */
+  onCheckpoint?: (checkpoint: string) => void | Promise<void>;
   /** Receives submission evidence immediately; may run after cancellation during broadcast. */
   onPaymentSubmitted?: (payment: PendingPayment) => void;
   /** Retain prepared input after failure for resume/discard. Defaults to true. */
@@ -208,6 +214,8 @@ export interface UploadOptions extends OperationOptions {
 }
 
 export interface ResumeUploadOptions extends OperationOptions {
+  /** Replace the persistence callback for subsequent Rust checkpoints. */
+  onCheckpoint?: (checkpoint: string) => void | Promise<void>;
   onPaymentSubmitted?: (payment: PendingPayment) => void;
   /** Explicitly authorize payment for quotes not covered by a retained receipt. */
   payment?: PaymentProvider;

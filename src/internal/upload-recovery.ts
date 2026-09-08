@@ -8,6 +8,8 @@ import { snapshot } from "./snapshot.js";
 import { abortable, isAbort } from "./abort.js";
 
 export interface RetainedUpload {
+  coreCheckpoint?: string;
+  onCheckpoint?: (checkpoint: string) => void | Promise<void>;
   handle: UploadRecovery;
   network: PaymentNetwork;
   name: string;

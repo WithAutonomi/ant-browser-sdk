@@ -237,7 +237,7 @@ export class AutonomiClient {
     try {
       this.#assertOpen();
       const payment = options.payment ?? this.#payment;
-      if (!payment) {
+      if (!payment && !options.checkpoint) {
         throw new AutonomiError(
           "PAYMENT_REQUIRED", "Uploading requires a PaymentProvider; pass one to connect() or upload()",
         );
@@ -263,6 +263,8 @@ export class AutonomiClient {
       } else {
         throw new TypeError("upload input must be a File, Blob, or Uint8Array");
       }
+      if (options.checkpoint !== undefined) retained.coreCheckpoint = options.checkpoint;
+      if (options.onCheckpoint !== undefined) retained.onCheckpoint = options.onCheckpoint;
       return await this.#runUpload(
         retained, payment, false, options.retainOnFailure !== false, operation, report, options.onPaymentSubmitted,
       );
@@ -289,6 +291,7 @@ export class AutonomiClient {
       await abortable(settled, operation.signal);
       throwIfAborted(operation.signal);
       const state = claimUpload(recovery, this.#connection.paymentNetwork);
+      if (options.onCheckpoint) state.onCheckpoint = options.onCheckpoint;
       return await this.#runUpload(state, options.payment, true, true, operation, report, options.onPaymentSubmitted);
     } catch (error) {
       operation.fail(error);
@@ -356,15 +359,19 @@ export class AutonomiClient {
       if (resuming) await reconcilePayments(state, operation.signal);
       if (!state.result) {
         report(`Preparing storage for ${state.name}`, { phase: "preparing" });
+        const checkpoint = async (value: string) => {
+          state.coreCheckpoint = value;
+          await state.onCheckpoint?.(value);
+        };
         const raw = state.staged
           ? this.#network.uploadStagedPublicFile(
               state.staged.staged, corePaymentNetwork(state.network),
               (index: unknown, address: unknown, size: unknown) => loadStagedRecord(
                 state.staged!.sessionId, Number(index), String(address), Number(size), operation.signal,
-              ), payForQuotes, report,
+              ), payForQuotes, report, state.coreCheckpoint, checkpoint,
             )
           : this.#network.uploadPublicFile(
-              state.bytes!, state.name, state.contentType, corePaymentNetwork(state.network), payForQuotes, report,
+              state.bytes!, state.name, state.contentType, corePaymentNetwork(state.network), payForQuotes, report, state.coreCheckpoint, checkpoint,
             );
         state.work = Promise.resolve(raw).then((result) => {
           const rawResult = result as Omit<UploadResult, "file" | "payments"> & { file: CorePublicFile };

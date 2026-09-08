@@ -196,3 +196,32 @@ it("delivers submission evidence even when broadcast resolves after cancellation
   await recovery.pendingPayments[0]!.reconcile();
   expect(recovery.payments[0]!.receipt.transactionHash).toBe("0xlate");
 });
+
+it("retains Rust checkpoints across retries and awaits the persistence hook", async () => {
+  const payment = wallet(); const value = await client(payment);
+  const saved: string[] = [];
+  mocks.upload.mockImplementationOnce(async (_staged, _network, _load, _pay, _progress, checkpoint, save) => {
+    expect(checkpoint).toBeUndefined();
+    await save("paid-rust-checkpoint");
+    throw new Error("storage interrupted after payment");
+  });
+  await expect(value.upload(new Blob(["abc"]), { onCheckpoint: async checkpoint => { saved.push(checkpoint); } })).rejects.toBeInstanceOf(UploadError);
+  const recovery = value.pendingUploads[0]!;
+  await recovery.settled;
+  mocks.upload.mockImplementationOnce(async (_staged, _network, _load, _pay, _progress, checkpoint) => {
+    expect(checkpoint).toBe("paid-rust-checkpoint");
+    return { ...result, storageCostAtto: "0" };
+  });
+  await value.resumeUpload(recovery);
+  expect(saved).toEqual(["paid-rust-checkpoint"]);
+  expect(payment.pay).not.toHaveBeenCalled();
+});
+
+it("accepts a persisted checkpoint with restaged input without requiring a new wallet", async () => {
+  const value = await client();
+  mocks.upload.mockImplementationOnce(async (_staged, _network, _load, _pay, _progress, checkpoint) => {
+    expect(checkpoint).toBe("restored-rust-checkpoint");
+    return { ...result, storageCostAtto: "0" };
+  });
+  await expect(value.upload(new Blob(["abc"]), { checkpoint: "restored-rust-checkpoint" })).resolves.toMatchObject({ storageCostAtto: "0" });
+});
