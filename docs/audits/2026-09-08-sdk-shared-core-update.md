@@ -1,6 +1,6 @@
 # SDK shared-core integration — 2026-09-08
 
-The SDK now bundles release WASM from ant-client `8a4a12fa2cc5e732f0cc8f697c2ae53ab21876b8`,
+The SDK now bundles release WASM from ant-client `3433d710bbdbc21c62a634d8d8960958cc9cb7c8`,
 with `--no-default-features --features browser-wasm`. The source worktree was
 clean. `src/wasm/source.json` records the source and artifact checksums.
 
@@ -59,8 +59,8 @@ native vault calldata and decode settlement with evmlib's ABI. Applications own
 durable browser checkpoint/input storage and settlement observation for pending
 wallet submissions.
 
-Pinned dependencies: saorsa-core `2e6a3d525858926ff07188be9919e4b2b0ab96fa`,
-ant-protocol `5acbaee1280234fe45d474a492a3f778cd87cdcf`, and saorsa-transport
+Pinned dependencies: saorsa-core `91a929bbb329e9f9a348476de37116317267299f`,
+ant-protocol `f091b13b79aef643b6a6e6e47d7ba17351af3b36`, and saorsa-transport
 `f3655297dbe26e1bd28739281ad88ae86213b0cc`.
 
 ## Canonical protocol definitions
@@ -135,3 +135,22 @@ The refreshed SDK passed build/type checks and all 134 tests. Real Chromium
 against twenty rebuilt local nodes and Anvil completed authentication, worker
 upload, single-node and forced Merkle payments, a byte-exact 5,200-byte download,
 and range reads with stateless admission enabled.
+
+## Nonempty V2 address replacements
+
+V2 publications and forwarded records reject empty sets, including sets emptied
+by validation, without changing stored addresses or advancing the sequence.
+The publication driver skips empty updates even on forced retries. Nonempty
+QUIC projections use the same replacement methods as V1; a WebRTC-only or
+opaque future-transport update preserves existing native QUIC addresses.
+Nonempty replacements may still remove omitted supplemental endpoints. V1
+peers are not sent empty QUIC projections of supplemental-only publications.
+
+Owner authentication of third-party gossip remains a separate unresolved issue;
+this change does not introduce signatures or change V1's sequence trust policy.
+
+Validation: 562 core library tests, strict all-target/all-feature core Clippy,
+the portable WASM build, protocol/client checks, and 23 node WebRTC tests passed.
+The rebuilt SDK passed all 134 tests. Real Chromium against twenty updated
+nodes and Anvil completed endpoint discovery, authentication, worker upload,
+single-node and forced Merkle payments, byte-exact downloads, and range reads.
