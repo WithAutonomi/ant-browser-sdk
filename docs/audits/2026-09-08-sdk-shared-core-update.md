@@ -1,6 +1,6 @@
 # SDK shared-core integration — 2026-09-08
 
-The SDK now bundles release WASM from ant-client `a5a55c6ca0d76a45dcf6ba26876d4c63cf6babb4`,
+The SDK now bundles release WASM from ant-client `8a4a12fa2cc5e732f0cc8f697c2ae53ab21876b8`,
 with `--no-default-features --features browser-wasm`. The source worktree was
 clean. `src/wasm/source.json` records the source and artifact checksums.
 
@@ -59,9 +59,9 @@ native vault calldata and decode settlement with evmlib's ABI. Applications own
 durable browser checkpoint/input storage and settlement observation for pending
 wallet submissions.
 
-Pinned dependencies: saorsa-core `580f4558b5446742b775d7f1bd163ed41d65f9d7`,
-ant-protocol `2054bc0c012fff7bc2945cab8990f1c39fd701b7`, and saorsa-transport
-`c4398305ca19274dde3163a35833b99672f26233`.
+Pinned dependencies: saorsa-core `2e6a3d525858926ff07188be9919e4b2b0ab96fa`,
+ant-protocol `5acbaee1280234fe45d474a492a3f778cd87cdcf`, and saorsa-transport
+`f3655297dbe26e1bd28739281ad88ae86213b0cc`.
 
 ## Canonical protocol definitions
 
@@ -112,3 +112,26 @@ WebRTC tests (23) and strict node Clippy passed. The updated SDK's 134 tests
 passed. Real Chromium against twenty rebuilt local nodes and Anvil completed
 worker upload, single-node and forced Merkle payments, byte-exact download, and
 range reads with the new STUN admission enabled.
+
+## Admission and lifecycle regression fixes
+
+Inbound queue entries, pending reservations, setup tasks, and ICE mux callbacks
+carry an immutable association generation. Retired work cannot remove or reuse a
+replacement reservation, including when the credential and source are reused.
+Listener shutdown wakes an accept awaiting its owned construction task.
+
+Unanswered STUN challenges retain no state. A keyed source-bound transaction
+cookie establishes reachability; its returned proof is cached with bounded
+expiry until an ordinary ICE retransmission supplies matching credentials.
+Unreturned spoofed probes cannot occupy the cache. Valid long ICE credentials
+remain supported. The existing configured connection-limit bound is unchanged.
+
+Validation: 1,553 transport library tests passed (3 ignored), including spoofed
+probe floods, cookie expiry/integrity, generation reuse, shutdown, and native
+DataChannel connectivity. Strict all-target transport Clippy and the portable
+WASM check passed. Core/protocol/client checks and 23 node WebRTC tests passed.
+
+The refreshed SDK passed build/type checks and all 134 tests. Real Chromium
+against twenty rebuilt local nodes and Anvil completed authentication, worker
+upload, single-node and forced Merkle payments, a byte-exact 5,200-byte download,
+and range reads with stateless admission enabled.
