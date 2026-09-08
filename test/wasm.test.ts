@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { corePublicFile, publicFileFromCore } from "../src/internal/protocol.js";
@@ -61,4 +62,13 @@ it("matches the bundled core's minimum encryption size and maximum descriptor si
   expect(parseBrowserManifest(manifest).files[0].size).toBe(SDK_LIMITS.maxFileBytes);
   descriptor.size++;
   expect(() => parseBrowserManifest(manifest)).toThrow();
+});
+
+it("ships provenance matching the bundled production WASM", async () => {
+  const metadata = JSON.parse(await readFile(new URL("../src/wasm/source.json", import.meta.url), "utf8"));
+  const bytes = await readFile(new URL("../src/wasm/ant_core_bg.wasm", import.meta.url));
+  expect(metadata.wasmSha256).toBe(createHash("sha256").update(bytes).digest("hex"));
+  expect(metadata.revision).toMatch(/^[0-9a-f]{40}$/);
+  expect(metadata.features).toEqual(["browser-wasm"]);
+  expect(metadata.defaultFeatures).toBe(false);
 });

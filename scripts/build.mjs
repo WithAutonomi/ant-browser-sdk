@@ -20,6 +20,7 @@ for (const file of [
   "ant_core.d.ts",
   "ant_core_bg.wasm",
   "ant_core_bg.wasm.d.ts",
+  "source.json",
 ]) {
   await cp(resolve(root, "src/wasm", file), resolve(dist, "wasm", file));
 }

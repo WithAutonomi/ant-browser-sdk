@@ -1,6 +1,12 @@
 # WASM/native behavior audit — 2026-09-08
 
-**Conclusion: WASM does not yet have full native ant-core/ant-client behavior.** Shared primitives and several policies are in place, but separate browser orchestration still changes discovery state, error handling, upload completion, payment recovery, scheduling, and cancellation. The preceding discovery-cache fix was correct; it did not establish complete parity.
+> Historical baseline: this audit describes ant-core `cd63ff3`. The SDK now
+> bundles `9e906c9`, which uses the shared native Client and crate graph. Its GET
+> integrity and PUT retry paths changed; the original probes below intentionally
+> describe the old artifact. Receipt recovery and other SDK adapter behavior
+> still require separate assessment. This is not a claim of full workflow parity.
+
+**Conclusion at the audited baseline: WASM does not yet have full native ant-core/ant-client behavior.** Shared primitives and several policies are in place, but separate browser orchestration still changes discovery state, error handling, upload completion, payment recovery, scheduling, and cancellation. The preceding discovery-cache fix was correct; it did not establish complete parity.
 
 This audit changes documentation only. The accompanying probes demonstrate current differences and are deliberately outside the normal regression suite.
 

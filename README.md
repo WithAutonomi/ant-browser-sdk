@@ -107,7 +107,8 @@ Authentication establishes who advertised the identity; this optional policy
 establishes which identity the application expects. Neither path needs an EVM RPC.
 
 This SDK uses browser protocol v5 and browser manifest v6. Upgrade the node,
-Rust/WASM client, and SDK together; older protocol versions are rejected.
+Rust/WASM client, and SDK together; older protocol versions are rejected. The bootstrap node must advertise the
+`chunk_protocol` capability used by the shared ant-core Client.
 
 Pass `wasm` when the bundled WASM asset must be served from a custom location.
 The SDK compiles one module per page and shares that exact module with every
@@ -460,7 +461,8 @@ chunk. Fallback reads still authenticate nodes and verify the record's BLAKE3
 hash. This also applies to DataMaps and media range reads; it cannot recover
 records that are absent from all reachable holders.
 
-These reads now use the same Rust engine as native `ant-core`. Inconclusive
+These reads now use the same Rust Client as native `ant-core`. Corrupt content
+fails immediately rather than being retried against another peer. Inconclusive
 close-group sweeps retry after one second. Missing file records are retried as
 a batch immediately once, then after 15 and 45 seconds. Nested DataMaps use the
 native recursive resolver through an async batch adapter; full downloads and
@@ -770,23 +772,28 @@ To rebuild it from an `ant-client` checkout:
 ```bash
 rustup target add wasm32-unknown-unknown
 cargo install wasm-pack --version 0.15.0 --locked
-ANT_CLIENT_DIR=../ant-client npm run sync:wasm
+ANT_CLIENT_DIR=../ant-client-web-support npm run sync:wasm
 npm run check
 npm pack --dry-run
 ```
 
-`ANT_CLIENT_DIR` defaults to the sibling `../ant-client` repository, so the
+`ANT_CLIENT_DIR` defaults to the sibling `../ant-client-web-support` worktree, so the
 variable can be omitted for that layout. WASM protocol changes and matching SDK
-types must ship in the same SDK release.
+types must ship in the same SDK release. `src/wasm/source.json` records the
+source commit, build features, lockfile hash, and binary hash; it ships in `dist/wasm`.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution requirements.
 
 ## Architecture boundaries
 
-Shared helpers do not yet provide full native behavior. The
-[WASM/native parity audit](docs/audits/2026-09-08-wasm-native-parity.md)
-documents remaining differences in routing state, retries, payment recovery,
-scheduling, and cancellation, with executable probes.
+The bundled WASM now uses the ordinary ant-core `data::Client`, importing
+ant-protocol, saorsa-core, saorsa-pqc, and evmlib. Shared code owns quote
+validation, U256 payment plans, native payment proofs, PUT retries/quorum, GET
+integrity checks, caching, and in-memory reads. OS facilities are feature-gated.
+The [earlier parity audit](docs/audits/2026-09-08-wasm-native-parity.md) describes
+the previous artifact; its findings are not all current. Browser staged uploads,
+JS wallet callbacks, session recovery, and cancellation still have adapter-specific
+behavior and do not imply parity with native filesystem resume.
 
 - Rust/WASM owns WebRTC, protocol framing, HELLO authentication, discovery,
   self-encryption, record verification, quote verification, payment planning,

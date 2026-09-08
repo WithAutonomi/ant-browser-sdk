@@ -129,6 +129,9 @@ export class AutonomiClient {
           probe.free();
         }
       }
+      if (!hello.capabilities.includes("chunk_protocol")) {
+        throw new AutonomiError("CONNECTION_FAILED", "Bootstrap node does not support the shared storage protocol; upgrade ant-node to a version advertising chunk_protocol");
+      }
       const identity = normalizePaymentNetwork(hello.payment);
       const paymentNetwork = {
         chainId: identity.chain_id,

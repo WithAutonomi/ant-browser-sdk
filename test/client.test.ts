@@ -14,7 +14,7 @@ const state = vi.hoisted(() => ({
     peer_id: "ab".repeat(32),
     endpoint: { multiaddr: "/ip4/127.0.0.1/udp/24000/mock" },
     max_chunk_size: 4_194_304,
-    capabilities: ["get_chunk", "put_chunk"],
+    capabilities: ["get_chunk", "put_chunk", "chunk_protocol"],
     payment: {
       chain_id: 31337,
       payment_token_address: `0x${"11".repeat(20)}`,
@@ -107,6 +107,7 @@ const file: PublicFile = {
 
 beforeEach(() => {
   state.networks.length = 0;
+  state.hello.capabilities = ["get_chunk", "put_chunk", "chunk_protocol"];
   vi.stubGlobal("fetch", vi.fn(async () => Response.json({ jsonrpc: "2.0", id: 1, result: "0x7a69" })));
 });
 
@@ -137,6 +138,14 @@ describe("AutonomiClient", () => {
     expect(state.networks[0]?.closed).toBe(true);
     expect(state.networks[0]?.freed).toBe(true);
     await expect(client.findClosest()).rejects.toBeInstanceOf(AutonomiError);
+  });
+
+  it("rejects nodes missing the shared storage protocol before creating a network client", async () => {
+    state.hello.capabilities = ["get_chunk", "put_chunk"];
+    await expect(AutonomiClient.connect(endpoint)).rejects.toMatchObject({
+      code: "CONNECTION_FAILED", message: expect.stringContaining("chunk_protocol"),
+    });
+    expect(state.networks).toHaveLength(0);
   });
 
   it("rejects bootstrap URLs instead of treating them as manifests", async () => {
