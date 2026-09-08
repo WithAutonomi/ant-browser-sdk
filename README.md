@@ -157,12 +157,11 @@ The Rust core owns content addressing, closest-node selection, storage-quote and
 commitment verification, payment-total calculation, quorum storage, fallback,
 and retries. A payment provider receives only verified quotes.
 
-Upload preparation requires seven initial PUT peers, matching native ant-core.
-If discovery fails or returns fewer peers, the shared policy retries at
-close-group width. The browser's fresh pass rechecks temporarily suppressed
-endpoints with normal request deadlines. Payment is requested only after all
-records pass preparation; a failure at this stage does not request a new
-storage payment. A recovery handle means input was retained, not that payment
+Upload preparation follows native ant-core's witnessed discovery flow: request
+twenty initial responders, then fall back to seven if the wide lookup fails.
+Both attempts use normal lookup behavior; WASM adds no special recovery probe,
+cache bypass, or relaxed threshold. Payment is requested only after all records
+pass preparation. A recovery handle means input was retained, not that payment
 was made: inspect both `payments` and `pendingPayments` before presenting retry
 actions.
 
