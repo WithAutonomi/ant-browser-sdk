@@ -59,9 +59,9 @@ native vault calldata and decode settlement with evmlib's ABI. Applications own
 durable browser checkpoint/input storage and settlement observation for pending
 wallet submissions.
 
-Pinned dependencies: saorsa-core `acd4a50e668c4da59880439ca7d32f7484efd39b`,
-ant-protocol `64734ca6ce7472e80f20b7577d8d4cbd6dbfe972`, and saorsa-transport
-`0ce2ea865242942b09a40cd0cea03ff0d0557065`.
+Pinned dependencies: saorsa-core `580f4558b5446742b775d7f1bd163ed41d65f9d7`,
+ant-protocol `2054bc0c012fff7bc2945cab8990f1c39fd701b7`, and saorsa-transport
+`c4398305ca19274dde3163a35833b99672f26233`.
 
 ## Canonical protocol definitions
 
@@ -94,3 +94,21 @@ WebRTC nodes and Anvil completed worker-staged single-node payment, a forced
 Merkle payment, byte-exact downloads, and range reads. A sixteen-node attempt
 lost one DataChannel during candidate collection and correctly stopped before
 payment; the twenty-node run completed with spare candidates.
+
+## Transport review follow-up
+
+The SDK bundle includes the reviewed transport revision. Native listeners now
+require a STUN reachability round trip before allocating RTC state, apply the
+node's connection limits at that boundary, expire pending setup, and own cleanup
+across cancelled accepts. ICE credentials remain public in this signaling-free
+profile; certificate pinning and the PQ session authenticate the connection.
+Transport address decoding rejects unknown layouts, and scoped IPv6 endpoints
+are rejected instead of losing their scope. Certificate expiry follows signed
+X.509 validity, preserving the pin when loading old ARM expiry metadata.
+
+Validation: 1,548 transport tests passed (3 ignored), strict transport Clippy
+passed across all targets, and the portable transport WASM check passed. Node
+WebRTC tests (23) and strict node Clippy passed. The updated SDK's 134 tests
+passed. Real Chromium against twenty rebuilt local nodes and Anvil completed
+worker upload, single-node and forced Merkle payments, byte-exact download, and
+range reads with the new STUN admission enabled.

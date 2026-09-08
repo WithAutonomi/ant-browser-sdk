@@ -1,12 +1,12 @@
 {
   "repository": "https://github.com/WithAutonomi/ant-client",
-  "revision": "e9647849d1dba2342f476f785fce81aca1fc3e88",
+  "revision": "f39a2ccb45f1ceda2f1187a42d520321c2dbb35e",
   "dirty": false,
   "target": "wasm32-unknown-unknown",
   "features": [
     "browser-wasm"
   ],
   "defaultFeatures": false,
-  "cargoLockSha256": "4e9d424800f2d680388c6b2ae57470a9fea77417af449291ab2d9ccdc716d1f7",
-  "wasmSha256": "f2a043b83d7ddc6c0daf7f2612239d137835141800e43e2a4d7f4eaf90871afb"
+  "cargoLockSha256": "3d3bfdf7dbf693dfa47017938380ccb223d7e4deb55da64e999052be704001f8",
+  "wasmSha256": "3edb00ee651fd98c3a0eedbf9a8373ac2b26bed2ae3ed498568513506baca390"
 }
