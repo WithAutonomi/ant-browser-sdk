@@ -160,8 +160,11 @@ and retries. A payment provider receives only verified quotes.
 Upload preparation follows native ant-core's witnessed discovery flow: request
 twenty initial responders, then fall back to seven if the wide lookup fails.
 Both attempts use normal lookup behavior; WASM adds no special recovery probe,
-cache bypass, or relaxed threshold. Payment is requested only after all records
-pass preparation. A recovery handle means input was retained, not that payment
+cache bypass, or relaxed threshold. Like native's dial cache, browser endpoint
+suppression applies to failed connections, not failed or grace-cancelled
+FIND_NODE requests. Discovery failures therefore do not put otherwise reachable
+endpoints into the connection-failure cache. Payment is requested only after all
+records pass preparation. A recovery handle means input was retained, not that payment
 was made: inspect both `payments` and `pendingPayments` before presenting retry
 actions.
 
