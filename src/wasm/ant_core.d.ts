@@ -114,14 +114,14 @@ export class BrowserNetworkClient {
     /**
      * Self-encrypt, quote, pay through a wallet callback, and store a public file.
      */
-    uploadPublicFile(content: Uint8Array, name: string, content_type: string, payment_network: any, pay_for_quotes: Function, on_progress?: Function | null, checkpoint?: string | null, on_checkpoint?: Function | null): Promise<any>;
+    uploadPublicFile(content: Uint8Array, name: string, content_type: string, payment_network: any, pay_for_quotes: Function, on_progress?: Function | null, checkpoint?: string | null, on_checkpoint?: Function | null, payment_mode?: string | null, pay_for_merkle?: Function | null): Promise<any>;
     /**
      * Quote, pay for, and upload records produced by `BrowserFileEncryptor`.
      *
      * Record bytes are requested lazily from the asynchronous JavaScript
      * callback, allowing the page to keep them in IndexedDB rather than WASM.
      */
-    uploadStagedPublicFile(staged: any, payment_network: any, load_record: Function, pay_for_quotes: Function, on_progress?: Function | null, checkpoint?: string | null, on_checkpoint?: Function | null): Promise<any>;
+    uploadStagedPublicFile(staged: any, payment_network: any, load_record: Function, pay_for_quotes: Function, on_progress?: Function | null, checkpoint?: string | null, on_checkpoint?: Function | null, payment_mode?: string | null, pay_for_merkle?: Function | null): Promise<any>;
 }
 
 /**
@@ -172,6 +172,11 @@ export class BrowserNodeClient {
  * Native BLAKE3 content address.
  */
 export function contentAddress(content: Uint8Array): string;
+
+/**
+ * Decode a confirmed vault event using the native ABI and prepared request.
+ */
+export function decodeMerklePaymentReceipt(request: any, vault: string, logs: any): any;
 
 /**
  * Decode a native public DataMap for browser-side record retrieval.
@@ -250,8 +255,8 @@ export interface InitOutput {
     readonly browsernetworkclient_findClosest: (a: number, b: number, c: number, d: number) => any;
     readonly browsernetworkclient_new: (a: any) => [number, number, number];
     readonly browsernetworkclient_openPublicFile: (a: number, b: any, c: number) => any;
-    readonly browsernetworkclient_uploadPublicFile: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: any, j: number, k: number, l: number, m: number) => any;
-    readonly browsernetworkclient_uploadStagedPublicFile: (a: number, b: any, c: any, d: any, e: any, f: number, g: number, h: number, i: number) => any;
+    readonly browsernetworkclient_uploadPublicFile: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: any, j: number, k: number, l: number, m: number, n: number, o: number, p: number) => any;
+    readonly browsernetworkclient_uploadStagedPublicFile: (a: number, b: any, c: any, d: any, e: any, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => any;
     readonly browsernodeclient_close: (a: number) => void;
     readonly browsernodeclient_connect: (a: number) => any;
     readonly browsernodeclient_findNode: (a: number, b: number, c: number, d: number) => any;
@@ -272,6 +277,7 @@ export interface InitOutput {
     readonly browseriterativelookup_results: (a: number) => [number, number, number];
     readonly browseriterativelookup_run: (a: number, b: any) => any;
     readonly contentAddress: (a: number, b: number) => [number, number];
+    readonly decodeMerklePaymentReceipt: (a: any, b: number, c: number, d: any) => [number, number, number];
     readonly decodePublicDataMap: (a: number, b: number) => [number, number, number];
     readonly decryptPublicFile: (a: number, b: number, c: any) => [number, number, number];
     readonly encryptPublicFile: (a: number, b: number) => [number, number, number];
@@ -306,8 +312,8 @@ export interface InitOutput {
     readonly BrotliDecoderVersion: () => number;
     readonly wasm_bindgen__convert__closures_____invoke__h6c639ae6ac52cf17: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen__convert__closures_____invoke__h1a72669c4838b5a0: (a: number, b: number, c: any, d: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h16cb12a4572e7ab7: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h16cb12a4572e7ab7_2: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h3a0e908432398b63: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h3a0e908432398b63_2: (a: number, b: number, c: any) => void;
     readonly wasm_bindgen__convert__closures_____invoke__hc4b509476b4504c4: (a: number, b: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

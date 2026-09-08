@@ -24,6 +24,7 @@ import {
 } from "./internal/payment-network.js";
 import { requestSaveFileHandle, saveDownload } from "./save.js";
 import type {
+  MerklePaymentRequest, MerklePaymentReceipt,
   ClientOptions,
   ConnectionInfo,
   DownloadOptions,
@@ -263,6 +264,7 @@ export class AutonomiClient {
       } else {
         throw new TypeError("upload input must be a File, Blob, or Uint8Array");
       }
+      if (options.paymentMode !== undefined) retained.paymentMode = options.paymentMode;
       if (options.checkpoint !== undefined) retained.coreCheckpoint = options.checkpoint;
       if (options.onCheckpoint !== undefined) retained.onCheckpoint = options.onCheckpoint;
       return await this.#runUpload(
@@ -354,6 +356,39 @@ export class AutonomiClient {
         throw paymentFailure;
       }
     };
+    const payForMerkle = async (networkValue: unknown, requestValue: unknown) => {
+      try {
+        throwIfAborted(operation.signal);
+        const network = paymentNetworkFromCore(networkValue, state.network);
+        const request = snapshot(requestValue as MerklePaymentRequest);
+        const previous = state.payments.find((paid) => paid.merkle?.calldata === request.calldata);
+        if (previous) return previous.receipt;
+        if (!payment?.payMerkle) throw new AutonomiError("PAYMENT_FAILED", "PaymentProvider must implement payMerkle for this upload, or select paymentMode: single");
+        const submitted: TrackedPayment[] = [];
+        const pending = Promise.resolve(payment.payMerkle(network, request, {
+          report, signal: operation.signal,
+          decodeReceipt: (logs) => {
+            const decode = getBindings().decodeMerklePaymentReceipt;
+            if (!decode) throw new Error("WASM does not support Merkle receipt decoding");
+            return decode(request, network.paymentVaultAddress, logs) as Pick<MerklePaymentReceipt, "winnerPoolHash" | "totalAmount">;
+          },
+          submitted: (submission) => {
+            const tracked = trackPayment(state, network, [], submission, request);
+            submitted.push(tracked);
+            try { onPaymentSubmitted?.(tracked.handle); } catch { /* Preserve settlement observation. */ }
+          },
+        })).then((receipt) => {
+          const recorded = recordPayment(state, network, [], receipt, request);
+          for (const tracked of submitted) tracked.confirm(receipt);
+          return recorded.receipt;
+        });
+        state.paymentTasks.push(pending);
+        return await abortable(pending, operation.signal);
+      } catch (error) {
+        paymentFailure = isAbort(error, operation.signal) ? error : wrapError("PAYMENT_FAILED", "Merkle payment failed", error);
+        throw paymentFailure;
+      }
+    };
     try {
       throwIfAborted(operation.signal);
       if (resuming) await reconcilePayments(state, operation.signal);
@@ -368,10 +403,10 @@ export class AutonomiClient {
               state.staged.staged, corePaymentNetwork(state.network),
               (index: unknown, address: unknown, size: unknown) => loadStagedRecord(
                 state.staged!.sessionId, Number(index), String(address), Number(size), operation.signal,
-              ), payForQuotes, report, state.coreCheckpoint, checkpoint,
+              ), payForQuotes, report, state.coreCheckpoint, checkpoint, state.paymentMode ?? "auto", payForMerkle,
             )
           : this.#network.uploadPublicFile(
-              state.bytes!, state.name, state.contentType, corePaymentNetwork(state.network), payForQuotes, report, state.coreCheckpoint, checkpoint,
+              state.bytes!, state.name, state.contentType, corePaymentNetwork(state.network), payForQuotes, report, state.coreCheckpoint, checkpoint, state.paymentMode ?? "auto", payForMerkle,
             );
         state.work = Promise.resolve(raw).then((result) => {
           const rawResult = result as Omit<UploadResult, "file" | "payments"> & { file: CorePublicFile };

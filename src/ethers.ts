@@ -13,6 +13,7 @@ import { assertPaymentChainId } from "./internal/payment-network.js";
 import { createPaymentSubmission, confirmedPayment } from "./payment.js";
 import { errorMessage } from "./errors.js";
 import type {
+  MerklePaymentContext, MerklePaymentRequest, MerklePaymentReceipt,
   PaymentContext,
   PaymentNetwork,
   PaymentProvider,
@@ -90,21 +91,20 @@ export function createEthersPaymentProvider(
     return payment;
   };
 
-  return {
-    async pay(network, quotes, context): Promise<PaymentReceipt> {
+  const submit = async (network: PaymentNetwork, quotes: readonly VerifiedStorageQuote[], context: PaymentContext | MerklePaymentContext, merkle?: MerklePaymentRequest): Promise<PaymentReceipt> => {
       throwIfAborted(context.signal);
-      if (quotes.length === 0) return { totalAmount: "0" };
+      if (quotes.length === 0 && !merkle) return { totalAmount: "0" };
       assertPaymentChainId(network.chainId);
       if (options.getSigner) {
         throwIfAborted(context.signal);
         const signer = await abortable(options.getSigner(network), context.signal);
-        return submitPayment(signer, network, quotes, context, approval);
+        return submitPayment(signer, network, quotes, context, approval, merkle);
       }
       return serializePrivateKeyPayment(
         async () => {
           const signer = privateKeySigner(network);
           try {
-            return await submitPayment(signer, network, quotes, context, approval);
+            return await submitPayment(signer, network, quotes, context, approval, merkle);
           } finally {
             // NonceManager increments before estimation/broadcast can fail.
             // The next queued attempt must reload the chain's pending nonce.
@@ -113,7 +113,10 @@ export function createEthersPaymentProvider(
         },
         context.signal,
       );
-    },
+  };
+  return {
+    pay: (network, quotes, context) => submit(network, quotes, context),
+    payMerkle: async (network, request, context) => await submit(network, [], context, request) as MerklePaymentReceipt,
   };
 }
 
@@ -121,8 +124,9 @@ async function submitPayment(
   signer: Signer,
   network: PaymentNetwork,
   quotes: readonly VerifiedStorageQuote[],
-  context: PaymentContext,
+  context: PaymentContext | MerklePaymentContext,
   approval: "exact" | "unlimited",
+  merkle?: MerklePaymentRequest,
 ): Promise<PaymentReceipt> {
   throwIfAborted(context.signal);
   if (!signer.provider) throw new Error("Payment signer must be connected to a provider");
@@ -131,7 +135,7 @@ async function submitPayment(
     throw new Error(`Payment signer is on chain ${signerNetwork.chainId}; switch to payment chain ${network.chainId}`);
   }
   const walletAddress = await abortable(signer.getAddress(), context.signal);
-  const totalAmount = quotes.reduce(
+  const totalAmount = merkle ? BigInt(merkle.maximumAmount) : quotes.reduce(
     (total, quote) => total + BigInt(quote.amount),
     0n,
   );
@@ -158,12 +162,20 @@ async function submitPayment(
 
   throwIfAborted(context.signal);
   const payments = quotePayments(quotes);
-  context.report(`Submitting one payment for ${payments.length} storage quote(s)`, { phase: "payment", total: payments.length, unit: "quotes" });
+  context.report(merkle ? "Submitting batch storage payment" : `Submitting one payment for ${payments.length} storage quote(s)`, { phase: "payment" });
   throwIfAborted(context.signal);
-  const transaction = await vault.getFunction("payForQuotes")(payments);
+  const transaction = merkle
+    ? await signer.sendTransaction({ to: network.paymentVaultAddress, data: merkle.calldata })
+    : await vault.getFunction("payForQuotes")(payments);
   const submission = createPaymentSubmission({ transactionHash: transaction.hash, walletAddress, totalAmount: totalAmount.toString() }, async () => {
     try {
       const transactionHash = await confirmedHash(transaction, "Storage payment transaction reverted");
+      if (merkle) {
+        const mined = await signer.provider!.getTransactionReceipt(transactionHash);
+        if (!mined || mined.status !== 1) throw new Error("Merkle transaction receipt is not available");
+        const settlement = (context as MerklePaymentContext).decodeReceipt(mined.logs);
+        return { status: "confirmed", receipt: { transactionHash, walletAddress, ...settlement } };
+      }
       return { status: "confirmed", receipt: { transactionHash, walletAddress, totalAmount: totalAmount.toString() } };
     } catch (error) {
       if (error instanceof RevertedTransaction || isError(error, "TRANSACTION_REPLACED") ||
@@ -178,11 +190,7 @@ async function submitPayment(
   const receipt = await confirmedPayment(submission);
   const transactionHash = receipt.transactionHash;
   try { if (!context.signal?.aborted) context.report(`Payment confirmed in ${transactionHash}`); } catch { /* The receipt is already confirmed. */ }
-  return {
-    transactionHash,
-    walletAddress,
-    totalAmount: totalAmount.toString(),
-  };
+  return receipt;
 }
 
 class RevertedTransaction extends Error {}

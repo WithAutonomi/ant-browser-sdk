@@ -1,6 +1,6 @@
 import { AutonomiError } from "../errors.js";
 import type {
-  PaymentNetwork, PaymentReceipt, PaymentSettlement, PaymentSubmission, PendingPayment, PublicFile, UploadPayment, UploadRecovery,
+  MerklePaymentRequest, PaymentNetwork, PaymentReceipt, PaymentSettlement, PaymentSubmission, PendingPayment, PublicFile, UploadPayment, UploadRecovery,
   UploadResult, VerifiedStorageQuote,
 } from "../types.js";
 import { clearStagedUpload, type StagedUpload } from "./staging.js";
@@ -8,6 +8,7 @@ import { snapshot } from "./snapshot.js";
 import { abortable, isAbort } from "./abort.js";
 
 export interface RetainedUpload {
+  paymentMode?: "auto" | "single" | "merkle";
   coreCheckpoint?: string;
   onCheckpoint?: (checkpoint: string) => void | Promise<void>;
   handle: UploadRecovery;
@@ -72,31 +73,33 @@ export interface TrackedPayment {
   confirm(receipt: PaymentReceipt): void;
 }
 
-export function recordPayment(state: RetainedUpload, network: PaymentNetwork, quotes: readonly VerifiedStorageQuote[], receipt: PaymentReceipt): UploadPayment {
-  validateReceipt(receipt, quotes);
+export function recordPayment(state: RetainedUpload, network: PaymentNetwork, quotes: readonly VerifiedStorageQuote[], receipt: PaymentReceipt, merkle?: MerklePaymentRequest): UploadPayment {
+  validateReceipt(receipt, quotes, merkle);
+  if (merkle && (!("winnerPoolHash" in receipt) || typeof receipt.winnerPoolHash !== "string")) throw new Error("Merkle receipt is missing its winner");
   const existing = state.payments.find((payment) => sameNetwork(payment.network, network) &&
     payment.receipt.transactionHash === receipt.transactionHash && payment.receipt.totalAmount === receipt.totalAmount &&
+    payment.merkle?.calldata === merkle?.calldata &&
     payment.quotes.length === quotes.length && payment.quotes.every((quote, index) => {
       const other = quotes[index]!;
       return quote.quoteHash === other.quoteHash && quote.amount === other.amount && quote.rewardsAddress === other.rewardsAddress;
     }));
   if (existing) return existing;
-  const payment = snapshot({ network, quotes, receipt });
+  const payment = snapshot({ network, quotes, receipt, ...(merkle ? { merkle } : {}) });
   state.payments.push(payment);
   return payment;
 }
 
 export function trackPayment(
-  state: RetainedUpload, network: PaymentNetwork, quotes: readonly VerifiedStorageQuote[], submission: PaymentSubmission,
+  state: RetainedUpload, network: PaymentNetwork, quotes: readonly VerifiedStorageQuote[], submission: PaymentSubmission, merkle?: MerklePaymentRequest,
 ): TrackedPayment {
-  validateReceipt(submission, quotes);
+  validateReceipt(submission, quotes, merkle);
   if (typeof submission.wait !== "function") throw new TypeError("Payment submission requires a wait() observer");
   let outcome: PaymentSettlement | undefined;
   let observing: Promise<PaymentSettlement> | undefined;
   const finish = (settlement: PaymentSettlement): PaymentSettlement => {
     if (outcome) return outcome;
     if (settlement.status === "confirmed") {
-      const recorded = recordPayment(state, network, quotes, settlement.receipt);
+      const recorded = recordPayment(state, network, quotes, settlement.receipt, merkle);
       if (recorded.receipt.transactionHash === undefined) throw new Error("Submitted payment has no transaction hash");
       outcome = Object.freeze({ status: "confirmed", receipt: recorded.receipt });
     } else if (settlement.status === "failed") {
@@ -107,7 +110,7 @@ export function trackPayment(
     return outcome;
   };
   const handle: PendingPayment = Object.freeze({
-    network, quotes,
+    network, quotes, ...(merkle ? { merkle } : {}),
     submission: snapshot({ transactionHash: submission.transactionHash, totalAmount: submission.totalAmount,
       ...(submission.walletAddress === undefined ? {} : { walletAddress: submission.walletAddress }) }),
     get status() { return outcome?.status ?? "pending"; },
@@ -197,7 +200,16 @@ export function quoteTotal(quotes: readonly VerifiedStorageQuote[]): string {
   }, 0n).toString();
 }
 
-export function validateReceipt(receipt: PaymentReceipt, quotes: readonly VerifiedStorageQuote[]): void {
+export function validateReceipt(receipt: PaymentReceipt, quotes: readonly VerifiedStorageQuote[], merkle?: MerklePaymentRequest): void {
+  if (merkle) {
+    if (!/^\d+$/u.test(receipt.totalAmount) || BigInt(receipt.totalAmount) > BigInt(merkle.maximumAmount) || !receipt.transactionHash) {
+      throw new Error("Invalid Merkle payment receipt");
+    }
+    if ("winnerPoolHash" in receipt && receipt.winnerPoolHash !== undefined && !merkle.poolHashes.includes(receipt.winnerPoolHash.replace(/^0x/u, "").toLowerCase())) {
+      throw new Error("Merkle receipt winner is outside the prepared pools");
+    }
+    return;
+  }
   if (!/^\d+$/u.test(receipt.totalAmount) || receipt.totalAmount !== quoteTotal(quotes)) {
     throw new Error("Payment provider returned a totalAmount that does not match the verified quotes");
   }

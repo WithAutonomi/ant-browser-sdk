@@ -63,6 +63,8 @@ export interface VerifiedStorageQuote {
 
 /** A confirmed storage transaction, including transactions paying zero tokens. */
 export interface PaidPaymentReceipt {
+  /** Present for a confirmed Merkle payment. */
+  winnerPoolHash?: string;
   /** Optional per-quote transaction mapping when a wallet splits a payment batch. */
   transactionHashes?: Readonly<Record<string, string>>;
   transactionHash: string;
@@ -99,6 +101,7 @@ export interface PaymentSubmission extends PaymentSubmissionInfo {
 
 /** Retained submission evidence; confirmation can be retried after an RPC failure. */
 export interface PendingPayment {
+  readonly merkle?: MerklePaymentRequest;
   readonly network: PaymentNetwork;
   readonly quotes: readonly Readonly<VerifiedStorageQuote>[];
   readonly submission: Readonly<PaymentSubmissionInfo>;
@@ -115,8 +118,33 @@ export interface PaymentContext {
   readonly signal?: AbortSignal;
 }
 
+/** Merkle transaction prepared and validated by the native Rust client. */
+export interface MerklePaymentRequest {
+  readonly calldata: string;
+  readonly maximumAmount: string;
+  readonly depth: number;
+  readonly timestamp: number;
+  readonly poolHashes: readonly string[];
+}
+
+export interface PaymentLog {
+  readonly address: string;
+  readonly topics: readonly string[];
+  readonly data: string;
+}
+
+export interface MerklePaymentReceipt extends PaidPaymentReceipt {
+  readonly winnerPoolHash: string;
+}
+
+export interface MerklePaymentContext extends PaymentContext {
+  /** Validate the vault event with the native ABI and prepared request. */
+  decodeReceipt(logs: readonly PaymentLog[]): { winnerPoolHash: string; totalAmount: string };
+}
+
 /** Wallet-independent payment boundary used by uploads. */
 export interface PaymentProvider {
+  payMerkle?(network: PaymentNetwork, request: MerklePaymentRequest, context: MerklePaymentContext): Promise<MerklePaymentReceipt>;
   pay(
     network: PaymentNetwork,
     quotes: readonly VerifiedStorageQuote[],
@@ -198,6 +226,8 @@ export interface OperationOptions {
 }
 
 export interface UploadOptions extends OperationOptions {
+  /** Native selection policy; defaults to auto. */
+  paymentMode?: "auto" | "single" | "merkle";
   /** Restore a Rust checkpoint with the same file bytes and payment network. */
   checkpoint?: string;
   /** Persist Rust recovery state; awaited before requesting payment or storing records. */
@@ -222,6 +252,7 @@ export interface ResumeUploadOptions extends OperationOptions {
 }
 
 export interface UploadPayment {
+  readonly merkle?: MerklePaymentRequest;
   readonly network: PaymentNetwork;
   readonly quotes: readonly Readonly<VerifiedStorageQuote>[];
   readonly receipt: Readonly<PaymentReceipt>;

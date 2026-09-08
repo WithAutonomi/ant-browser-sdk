@@ -225,3 +225,27 @@ it("accepts a persisted checkpoint with restaged input without requiring a new w
   });
   await expect(value.upload(new Blob(["abc"]), { checkpoint: "restored-rust-checkpoint" })).resolves.toMatchObject({ storageCostAtto: "0" });
 });
+
+it("retains a confirmed Merkle receipt and forwards native mode on resume", async () => {
+  const request = { calldata: "0xabcdef", maximumAmount: "100", depth: 2, timestamp: 42, poolHashes: ["ab".repeat(32)] };
+  const receipt = { transactionHash: "0xmerkle", winnerPoolHash: request.poolHashes[0]!, totalAmount: "70" };
+  const payment: PaymentProvider = { pay: vi.fn(), payMerkle: vi.fn(async () => receipt) };
+  const value = await client(payment);
+  mocks.upload.mockImplementationOnce(async (_staged, network, _load, _pay, _progress, _checkpoint, _save, mode, merkle) => {
+    expect(mode).toBe("merkle");
+    await merkle(network, request);
+    throw new Error("store interrupted");
+  });
+  let recovery;
+  try { await value.upload(new Blob(["abc"]), { paymentMode: "merkle" }); }
+  catch (error) { recovery = (error as UploadError).recovery; }
+  expect(recovery).toBeDefined();
+  mocks.upload.mockImplementationOnce(async (_staged, network, _load, _pay, _progress, _checkpoint, _save, mode, merkle) => {
+    expect(mode).toBe("merkle");
+    expect(await merkle(network, request)).toEqual(receipt);
+    return { ...result, transactionHash: receipt.transactionHash, storageCostAtto: "0" };
+  });
+  await value.resumeUpload(recovery!);
+  expect(payment.payMerkle).toHaveBeenCalledTimes(1);
+  expect(payment.pay).not.toHaveBeenCalled();
+});

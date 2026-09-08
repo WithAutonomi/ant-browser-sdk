@@ -14,6 +14,7 @@ export { createPaymentSubmission } from "./payment.js";
 export { initializeWasm } from "./internal/runtime.js";
 export type {
   ChunkInfo,
+  MerklePaymentRequest, MerklePaymentReceipt, MerklePaymentContext, PaymentLog,
   ClientOptions,
   ConnectionInfo,
   DownloadOptions,

@@ -92,7 +92,7 @@ quoteButton.addEventListener("click", async () => {
   });
 
   try {
-    const uploaded = await client.upload(file, { payment });
+    const uploaded = await client.upload(file, { payment, paymentMode: "single" });
     paymentState.value = `Uploaded as ${uploaded.file.address}`;
   } catch (error) {
     paymentState.value =

@@ -2,6 +2,7 @@ import initAntCore, {
   BrowserNetworkClient,
   BrowserNodeClient,
   parseWebRtcDirectMultiaddr,
+  decodeMerklePaymentReceipt,
 } from "../wasm/ant_core.js";
 import { AutonomiError } from "../errors.js";
 import type { WasmSource } from "../types.js";
@@ -35,6 +36,8 @@ export interface RawNetworkClient {
     onProgress?: (message: string) => void,
     checkpoint?: string,
     onCheckpoint?: (checkpoint: string) => void | Promise<void>,
+    paymentMode?: string,
+    payForMerkle?: (...args: unknown[]) => Promise<unknown>,
   ): Promise<unknown>;
   uploadStagedPublicFile(
     staged: unknown,
@@ -44,6 +47,8 @@ export interface RawNetworkClient {
     onProgress?: (message: string) => void,
     checkpoint?: string,
     onCheckpoint?: (checkpoint: string) => void | Promise<void>,
+    paymentMode?: string,
+    payForMerkle?: (...args: unknown[]) => Promise<unknown>,
   ): Promise<unknown>;
   close(): void;
   free(): void;
@@ -59,6 +64,7 @@ export interface WasmBindings {
   BrowserNetworkClient: new (endpoints: unknown) => RawNetworkClient;
   BrowserNodeClient: new (endpoint: unknown) => RawNodeClient;
   parseWebRtcDirectMultiaddr(value: unknown): { multiaddr: string };
+  decodeMerklePaymentReceipt?(request: unknown, vault: string, logs: unknown): unknown;
 }
 
 type LoadedSource = ArrayBuffer | WebAssembly.Module;
@@ -136,5 +142,6 @@ export function getBindings(): WasmBindings {
     BrowserNetworkClient,
     BrowserNodeClient,
     parseWebRtcDirectMultiaddr,
+    decodeMerklePaymentReceipt,
   };
 }

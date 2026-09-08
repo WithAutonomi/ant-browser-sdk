@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   readContract: vi.fn(),
   waitForTransactionReceipt: vi.fn(),
   writeContract: vi.fn(),
+  sendTransaction: vi.fn(),
 }));
 
 vi.mock("@wagmi/core", () => ({
@@ -23,6 +24,7 @@ vi.mock("viem/actions", () => ({
   readContract: mocks.readContract,
   waitForTransactionReceipt: mocks.waitForTransactionReceipt,
   writeContract: mocks.writeContract,
+  sendTransaction: mocks.sendTransaction,
 }));
 
 import { createWagmiPaymentProvider } from "../src/wagmi.js";
@@ -228,4 +230,18 @@ it("retries a submitted storage transaction after an RPC timeout without rebroad
   expect(mocks.writeContract).toHaveBeenCalledOnce();
   expect(mocks.waitForTransactionReceipt).toHaveBeenCalledTimes(2);
   expect(mocks.waitForTransactionReceipt.mock.calls[1]![1].hash).toBe(submission.transactionHash);
+});
+
+it("submits Rust Merkle calldata and decodes the confirmed vault receipt", async () => {
+  const request = { calldata: "0xabcdef", maximumAmount: "100", depth: 2, timestamp: 42, poolHashes: ["ab".repeat(32)] };
+  mocks.readContract.mockResolvedValue(100n);
+  mocks.sendTransaction.mockResolvedValue(`0x${"77".repeat(32)}`);
+  mocks.waitForTransactionReceipt.mockReset().mockResolvedValue({ status: "success", transactionHash: `0x${"77".repeat(32)}` });
+  mocks.getPublicClient.mockReturnValue({ getChainId: mocks.getChainId, getTransactionReceipt: async () => ({ logs: [] }) });
+  const decodeReceipt = vi.fn(() => ({ winnerPoolHash: request.poolHashes[0]!, totalAmount: "70" }));
+  const receipt = await createWagmiPaymentProvider({ config }).payMerkle!(network, request, { report() {}, submitted() {}, decodeReceipt });
+  expect(mocks.sendTransaction).toHaveBeenCalledWith(expect.anything(), { to: network.paymentVaultAddress, data: request.calldata });
+  expect(mocks.writeContract).not.toHaveBeenCalled();
+  expect(receipt.totalAmount).toBe("70");
+  expect(receipt.winnerPoolHash).toBe(request.poolHashes[0]);
 });

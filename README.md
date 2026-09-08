@@ -156,7 +156,7 @@ await client.upload(bytes, {
 
 The Rust core owns content addressing, closest-node selection, storage-quote and
 commitment verification, payment-total calculation, quorum storage, fallback,
-and retries. A payment provider receives only verified quotes.
+and retries. A payment provider receives verified quotes or a prepared Merkle transaction.
 
 Upload preparation follows native ant-core's witnessed discovery flow: request
 twenty initial responders, then fall back to seven if the wide lookup fails.
@@ -164,14 +164,21 @@ Both attempts use normal lookup behavior; WASM adds no special recovery probe,
 cache bypass, or relaxed threshold. Like native's dial cache, browser endpoint
 suppression applies to failed connections, not failed or grace-cancelled
 FIND_NODE requests. Discovery failures therefore do not put otherwise reachable
-endpoints into the connection-failure cache. Payment is requested only after all
-records pass preparation. A recovery handle means input was retained, not that payment
+endpoints into the connection-failure cache. Payment is requested only after its batch passes preparation. A recovery handle means input was retained, not that payment
 was made: inspect both `payments` and `pendingPayments` before presenting retry
 actions.
 
 This SDK currently publishes public files. Persist the returned DataMap address
 in application storage if it must survive a page reload; `client.files` is only
 an in-memory list for the current client instance.
+
+Uploads use the shared native coordinator. `paymentMode` defaults to `"auto"`,
+which selects Merkle payment at the native record-count threshold and falls back
+to single-node waves if candidate pools cannot be filled before payment. Set
+`paymentMode: "single"` or `paymentMode: "merkle"` to force a mode. Ethers and
+wagmi providers support both; custom providers implement optional `payMerkle`
+to submit Rust-generated calldata and decode the confirmed receipt through
+`context.decodeReceipt(receipt.logs)`. Forced Merkle never falls back silently.
 
 ### Resume a failed upload
 
@@ -345,6 +352,7 @@ chain-switching user experience.
 Implement `PaymentProvider` to integrate another wallet stack:
 
 Custom providers must verify that the wallet submits on `network.chainId`.
+This single-node example uses `paymentMode: "single"` when uploading.
 
 ```ts
 import { createPaymentSubmission, type PaymentProvider } from "@autonomi/browser-sdk";

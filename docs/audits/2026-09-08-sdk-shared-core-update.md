@@ -43,21 +43,24 @@ paid checkpoints reuse confirmed proofs even when discovery returns new quotes.
 Wallets may return per-quote transaction hashes for split payments.
 
 - ant-core: 472 native tests and strict workspace Clippy passed.
-- Generated WASM: 75 tests passed after removing duplicated payment definitions and sharing
-  the native lookup defaults.
+- Generated WASM: 80 tests passed, including Auto fallback across payment waves,
+  duplicate records, and prepared/paid Merkle checkpoint recovery.
 - saorsa-core: 561 native tests and 76 portable tests passed.
 - New recovery coverage includes interrupted wallet callbacks, staged byte-loader
   failure after payment, persistence-hook failure before payment, input/network
   mismatch, changed quotes after restart, and separate transactions per quote.
 
-This shares single-node upload state and recovery. Native Merkle mode selection
-and filesystem APIs are not newly exposed in the browser facade. Applications
-own durable checkpoint/input storage; unresolved wallet submissions still need
-settlement observation through the SDK payment reconciliation APIs. Browser
-cancellation and native filesystem resume are not claimed to be identical.
+Both platforms now call `Client::upload_records` for batching, Auto/Single/Merkle
+selection, prepared/paid state, and storage recovery. Native spilled files supply
+a disk adapter; browser staged files supply an asynchronous loader. Public
+DataMap encoding and content addressing also call canonical shared helpers.
+Merkle checkpoints retain the exact salted tree. Ethers and wagmi submit the
+native vault calldata and decode settlement with evmlib's ABI. Applications own
+durable browser checkpoint/input storage and settlement observation for pending
+wallet submissions.
 
 Pinned dependencies: saorsa-core `acd4a50e668c4da59880439ca7d32f7484efd39b`,
-ant-protocol `3cf4fe61664747f18c2d9247ff1400c6ea7e4171`, and saorsa-transport
+ant-protocol `64734ca6ce7472e80f20b7577d8d4cbd6dbfe972`, and saorsa-transport
 `0ce2ea865242942b09a40cd0cea03ff0d0557065`.
 
 ## Canonical protocol definitions
@@ -82,3 +85,12 @@ Native and WASM client Clippy passed with warnings denied. The rebuilt SDK passe
 payment/upload/download/range check described above.
 
 EVM dependency: `545c6fa48cb05fecc411bed2d9d0a47d82ede6d1`.
+
+## Shared upload coordinator validation
+
+SDK: 134 tests pass, including ethers/wagmi Merkle submission and retained
+settlement after interrupted storage. A real Chromium run against twenty local
+WebRTC nodes and Anvil completed worker-staged single-node payment, a forced
+Merkle payment, byte-exact downloads, and range reads. A sixteen-node attempt
+lost one DataChannel during candidate collection and correctly stopped before
+payment; the twenty-node run completed with spare candidates.

@@ -9,11 +9,12 @@ import {
   type PublicClient,
   type Transport,
 } from "viem";
-import { readContract, waitForTransactionReceipt, writeContract } from "viem/actions";
+import { sendTransaction, readContract, waitForTransactionReceipt, writeContract } from "viem/actions";
 import { abortable, throwIfAborted } from "./internal/abort.js";
 import { assertPaymentChainId } from "./internal/payment-network.js";
 import { createPaymentSubmission, confirmedPayment } from "./payment.js";
 import type {
+  PaymentContext, MerklePaymentContext, MerklePaymentRequest, MerklePaymentReceipt,
   PaymentNetwork,
   PaymentProvider,
   PaymentReceipt,
@@ -76,10 +77,9 @@ export function createWagmiPaymentProvider<config extends Config>(
 ): PaymentProvider {
   const approval = options.approval ?? "unlimited";
 
-  return {
-    async pay(network, quotes, context): Promise<PaymentReceipt> {
+  const submit = async (network: PaymentNetwork, quotes: readonly VerifiedStorageQuote[], context: PaymentContext | MerklePaymentContext, merkle?: MerklePaymentRequest): Promise<PaymentReceipt> => {
       throwIfAborted(context.signal);
-      if (quotes.length === 0) return { totalAmount: "0" };
+      if (quotes.length === 0 && !merkle) return { totalAmount: "0" };
       assertPaymentChainId(network.chainId);
 
       const configuredClient = getPublicClient(options.config, { chainId: network.chainId });
@@ -102,7 +102,7 @@ export function createWagmiPaymentProvider<config extends Config>(
       const walletAddress = walletClient.account.address;
       const tokenAddress = network.paymentTokenAddress as Address;
       const vaultAddress = network.paymentVaultAddress as Address;
-      const totalAmount = quotes.reduce(
+      const totalAmount = merkle ? BigInt(merkle.maximumAmount) : quotes.reduce(
         (total, quote) => total + BigInt(quote.amount),
         0n,
       );
@@ -133,9 +133,11 @@ export function createWagmiPaymentProvider<config extends Config>(
 
       const payments = quotePayments(quotes);
       throwIfAborted(context.signal);
-      context.report(`Submitting one payment for ${payments.length} storage quote(s)`, { phase: "payment", total: payments.length, unit: "quotes" });
+      context.report(merkle ? "Submitting batch storage payment" : `Submitting one payment for ${payments.length} storage quote(s)`, { phase: "payment" });
       throwIfAborted(context.signal);
-      const transactionHash = await writeContract(walletClient, {
+      const transactionHash = merkle ? await sendTransaction(walletClient, {
+        to: vaultAddress, data: merkle.calldata as Hex,
+      }) : await writeContract(walletClient, {
         address: vaultAddress,
         abi: VAULT_ABI,
         functionName: "payForQuotes",
@@ -144,6 +146,11 @@ export function createWagmiPaymentProvider<config extends Config>(
       const submission = createPaymentSubmission({ transactionHash, walletAddress, totalAmount: totalAmount.toString() }, async () => {
         try {
           const confirmedHash = await requireSuccessfulReceipt(publicClient, transactionHash, "Storage payment transaction reverted");
+          if (merkle) {
+            const mined = await publicClient.getTransactionReceipt({ hash: confirmedHash });
+            const settlement = (context as MerklePaymentContext).decodeReceipt(mined.logs);
+            return { status: "confirmed", receipt: { transactionHash: confirmedHash, walletAddress, ...settlement } };
+          }
           return { status: "confirmed", receipt: { transactionHash: confirmedHash, walletAddress, totalAmount: totalAmount.toString() } };
         } catch (error) {
           if (error instanceof FailedTransaction) return { status: "failed", reason: error.message, cause: error };
@@ -151,14 +158,14 @@ export function createWagmiPaymentProvider<config extends Config>(
         }
       });
       try { context.submitted(submission); } catch { /* Continue observing the transaction. */ }
-      const confirmedTransactionHash = (await confirmedPayment(submission)).transactionHash;
+      const receipt = await confirmedPayment(submission);
+      const confirmedTransactionHash = receipt.transactionHash;
       try { if (!context.signal?.aborted) context.report(`Payment confirmed in ${confirmedTransactionHash}`); } catch { /* The receipt is already confirmed. */ }
-      return {
-        transactionHash: confirmedTransactionHash,
-        walletAddress,
-        totalAmount: totalAmount.toString(),
-      };
-    },
+      return receipt;
+  };
+  return {
+    pay: (network, quotes, context) => submit(network, quotes, context),
+    payMerkle: async (network, request, context) => await submit(network, [], context, request) as MerklePaymentReceipt,
   };
 }
 

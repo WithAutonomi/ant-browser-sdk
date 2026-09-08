@@ -17,6 +17,7 @@ vi.mock("ethers", async (importOriginal) => {
   class JsonRpcProvider {
     constructor(url: string) { state.providers++; state.providerUrls.push(url); }
     async getNetwork() { return { chainId: state.chainId }; }
+    async getTransactionReceipt() { return { status: 1, logs: [] }; }
     async getTransactionCount() { return state.nonces.length; }
   }
   class Wallet {
@@ -203,4 +204,20 @@ it("reports broadcast evidence and retries confirmation without another transact
   await waiting(); confirm("0xtransaction1");
   await expect(confirmation).resolves.toMatchObject({ status: "confirmed", receipt: { transactionHash: "0xtransaction1" } });
   expect(state.submissions).toEqual(["payForQuotes"]);
+});
+
+it("submits native Merkle calldata and retains the decoded actual settlement", async () => {
+  const request = { calldata: "0xabcdef", maximumAmount: "100", depth: 2, timestamp: 42, poolHashes: ["ab".repeat(32)] };
+  const decodeReceipt = vi.fn(() => ({ winnerPoolHash: request.poolHashes[0]!, totalAmount: "70" }));
+  const ctx = { ...context(), decodeReceipt };
+  const pending = provider().payMerkle!(network, request, ctx);
+  await waiting();
+  expect(state.submissions).toEqual([request.calldata]);
+  confirm();
+  const receipt = await pending;
+  expect(receipt.totalAmount).toBe("70");
+  expect(receipt.winnerPoolHash).toBe(request.poolHashes[0]);
+  expect(decodeReceipt).toHaveBeenCalledWith([]);
+  const submission = ctx.submitted.mock.calls[0]![0];
+  expect((await submission.wait()).receipt).toEqual(receipt);
 });

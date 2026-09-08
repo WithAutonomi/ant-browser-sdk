@@ -297,9 +297,11 @@ export class BrowserNetworkClient {
      * @param {Function | null} [on_progress]
      * @param {string | null} [checkpoint]
      * @param {Function | null} [on_checkpoint]
+     * @param {string | null} [payment_mode]
+     * @param {Function | null} [pay_for_merkle]
      * @returns {Promise<any>}
      */
-    uploadPublicFile(content, name, content_type, payment_network, pay_for_quotes, on_progress, checkpoint, on_checkpoint) {
+    uploadPublicFile(content, name, content_type, payment_network, pay_for_quotes, on_progress, checkpoint, on_checkpoint, payment_mode, pay_for_merkle) {
         const ptr0 = passArray8ToWasm0(content, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
         const ptr1 = passStringToWasm0(name, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
@@ -308,7 +310,9 @@ export class BrowserNetworkClient {
         const len2 = WASM_VECTOR_LEN;
         var ptr3 = isLikeNone(checkpoint) ? 0 : passStringToWasm0(checkpoint, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         var len3 = WASM_VECTOR_LEN;
-        const ret = wasm.browsernetworkclient_uploadPublicFile(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2, payment_network, pay_for_quotes, isLikeNone(on_progress) ? 0 : addToExternrefTable0(on_progress), ptr3, len3, isLikeNone(on_checkpoint) ? 0 : addToExternrefTable0(on_checkpoint));
+        var ptr4 = isLikeNone(payment_mode) ? 0 : passStringToWasm0(payment_mode, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len4 = WASM_VECTOR_LEN;
+        const ret = wasm.browsernetworkclient_uploadPublicFile(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2, payment_network, pay_for_quotes, isLikeNone(on_progress) ? 0 : addToExternrefTable0(on_progress), ptr3, len3, isLikeNone(on_checkpoint) ? 0 : addToExternrefTable0(on_checkpoint), ptr4, len4, isLikeNone(pay_for_merkle) ? 0 : addToExternrefTable0(pay_for_merkle));
         return ret;
     }
     /**
@@ -323,12 +327,16 @@ export class BrowserNetworkClient {
      * @param {Function | null} [on_progress]
      * @param {string | null} [checkpoint]
      * @param {Function | null} [on_checkpoint]
+     * @param {string | null} [payment_mode]
+     * @param {Function | null} [pay_for_merkle]
      * @returns {Promise<any>}
      */
-    uploadStagedPublicFile(staged, payment_network, load_record, pay_for_quotes, on_progress, checkpoint, on_checkpoint) {
+    uploadStagedPublicFile(staged, payment_network, load_record, pay_for_quotes, on_progress, checkpoint, on_checkpoint, payment_mode, pay_for_merkle) {
         var ptr0 = isLikeNone(checkpoint) ? 0 : passStringToWasm0(checkpoint, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         var len0 = WASM_VECTOR_LEN;
-        const ret = wasm.browsernetworkclient_uploadStagedPublicFile(this.__wbg_ptr, staged, payment_network, load_record, pay_for_quotes, isLikeNone(on_progress) ? 0 : addToExternrefTable0(on_progress), ptr0, len0, isLikeNone(on_checkpoint) ? 0 : addToExternrefTable0(on_checkpoint));
+        var ptr1 = isLikeNone(payment_mode) ? 0 : passStringToWasm0(payment_mode, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len1 = WASM_VECTOR_LEN;
+        const ret = wasm.browsernetworkclient_uploadStagedPublicFile(this.__wbg_ptr, staged, payment_network, load_record, pay_for_quotes, isLikeNone(on_progress) ? 0 : addToExternrefTable0(on_progress), ptr0, len0, isLikeNone(on_checkpoint) ? 0 : addToExternrefTable0(on_checkpoint), ptr1, len1, isLikeNone(pay_for_merkle) ? 0 : addToExternrefTable0(pay_for_merkle));
         return ret;
     }
 }
@@ -470,6 +478,23 @@ export function contentAddress(content) {
     } finally {
         wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
+}
+
+/**
+ * Decode a confirmed vault event using the native ABI and prepared request.
+ * @param {any} request
+ * @param {string} vault
+ * @param {any} logs
+ * @returns {any}
+ */
+export function decodeMerklePaymentReceipt(request, vault, logs) {
+    const ptr0 = passStringToWasm0(vault, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.decodeMerklePaymentReceipt(request, ptr0, len0, logs);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
 }
 
 /**
@@ -1136,22 +1161,22 @@ function __wbg_get_imports() {
             return ret;
         },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 722, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 775, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__h6c639ae6ac52cf17);
             return ret;
         },
         __wbindgen_cast_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("Event")], shim_idx: 344, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__h16cb12a4572e7ab7);
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("Event")], shim_idx: 299, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__h3a0e908432398b63);
             return ret;
         },
         __wbindgen_cast_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 344, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__h16cb12a4572e7ab7_2);
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 299, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__h3a0e908432398b63_2);
             return ret;
         },
         __wbindgen_cast_0000000000000004: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 465, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 514, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__hc4b509476b4504c4);
             return ret;
         },
@@ -1200,12 +1225,12 @@ function wasm_bindgen__convert__closures_____invoke__hc4b509476b4504c4(arg0, arg
     wasm.wasm_bindgen__convert__closures_____invoke__hc4b509476b4504c4(arg0, arg1);
 }
 
-function wasm_bindgen__convert__closures_____invoke__h16cb12a4572e7ab7(arg0, arg1, arg2) {
-    wasm.wasm_bindgen__convert__closures_____invoke__h16cb12a4572e7ab7(arg0, arg1, arg2);
+function wasm_bindgen__convert__closures_____invoke__h3a0e908432398b63(arg0, arg1, arg2) {
+    wasm.wasm_bindgen__convert__closures_____invoke__h3a0e908432398b63(arg0, arg1, arg2);
 }
 
-function wasm_bindgen__convert__closures_____invoke__h16cb12a4572e7ab7_2(arg0, arg1, arg2) {
-    wasm.wasm_bindgen__convert__closures_____invoke__h16cb12a4572e7ab7_2(arg0, arg1, arg2);
+function wasm_bindgen__convert__closures_____invoke__h3a0e908432398b63_2(arg0, arg1, arg2) {
+    wasm.wasm_bindgen__convert__closures_____invoke__h3a0e908432398b63_2(arg0, arg1, arg2);
 }
 
 function wasm_bindgen__convert__closures_____invoke__h6c639ae6ac52cf17(arg0, arg1, arg2) {
