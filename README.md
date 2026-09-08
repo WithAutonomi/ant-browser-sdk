@@ -783,6 +783,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution requirements.
 
 ## Architecture boundaries
 
+Shared helpers do not yet provide full native behavior. The
+[WASM/native parity audit](docs/audits/2026-09-08-wasm-native-parity.md)
+documents remaining differences in routing state, retries, payment recovery,
+scheduling, and cancellation, with executable probes.
+
 - Rust/WASM owns WebRTC, protocol framing, HELLO authentication, discovery,
   self-encryption, record verification, quote verification, payment planning,
   storage workflows, and range reads.
@@ -790,7 +795,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution requirements.
   close-group and deferred file retries, DataMap resolution, and range reads in
   `ant-core/src/client_engine`. WebRTC, JS bindings, file descriptors, wallet
   callbacks, caches, and browser memory ceilings remain platform adapters.
-- Upload policy follows native `ant-client`: quote and commitment validation,
+- Shared upload policy includes native `ant-client` quote and commitment validation,
   witnessed quote eligibility, upper-median selection with a 3× payment,
   existing-holder voting, and storage-target ordering. The PUT neighbourhood
   widens to twenty peers when available, and fallback reuses the paid proof.
