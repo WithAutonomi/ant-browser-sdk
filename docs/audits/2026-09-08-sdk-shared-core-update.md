@@ -1,6 +1,6 @@
 # SDK shared-core integration — 2026-09-08
 
-The SDK now bundles release WASM from ant-client `3433d710bbdbc21c62a634d8d8960958cc9cb7c8`,
+The SDK now bundles release WASM from ant-client `1b3ff1b6a7763db4d835a1ee0e0e792099b39990`,
 with `--no-default-features --features browser-wasm`. The source worktree was
 clean. `src/wasm/source.json` records the source and artifact checksums.
 
@@ -59,9 +59,9 @@ native vault calldata and decode settlement with evmlib's ABI. Applications own
 durable browser checkpoint/input storage and settlement observation for pending
 wallet submissions.
 
-Pinned dependencies: saorsa-core `91a929bbb329e9f9a348476de37116317267299f`,
-ant-protocol `f091b13b79aef643b6a6e6e47d7ba17351af3b36`, and saorsa-transport
-`f3655297dbe26e1bd28739281ad88ae86213b0cc`.
+Pinned dependencies: saorsa-core `f3a7934baf0036bf0590f95c1a279641e202dccd`,
+ant-protocol `00376d52d015f35f92dfd5c163d9d6b3bb87c121`, and saorsa-transport
+`c6e3ee21d41caf332b3a64dd15d32123e486f8ac`.
 
 ## Canonical protocol definitions
 
@@ -154,3 +154,13 @@ the portable WASM build, protocol/client checks, and 23 node WebRTC tests passed
 The rebuilt SDK passed all 134 tests. Real Chromium against twenty updated
 nodes and Anvil completed endpoint discovery, authentication, worker upload,
 single-node and forced Merkle payments, byte-exact downloads, and range reads.
+
+## Owner-authenticated address gossip
+
+The bundled core now verifies owner-signed address publications on native and
+WASM clients. Shared signature verification, sequence precedence, and complete
+replacement rules live in saorsa-core. Legacy forwarded entries remain discovery
+hints; their arbitrary sequence metadata cannot overwrite an owner-proven view.
+The node forwards original signatures in bounded binary lookup bodies, outside
+the existing JSON header limit. This adds no separate browser routing policy or
+new crate. See [the validation record](2026-09-08-owner-signed-address-records.md).
