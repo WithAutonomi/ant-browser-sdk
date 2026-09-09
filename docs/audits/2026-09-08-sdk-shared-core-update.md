@@ -1,6 +1,6 @@
 # SDK shared-core integration — 2026-09-08
 
-The SDK now bundles release WASM from ant-client `1b3ff1b6a7763db4d835a1ee0e0e792099b39990`,
+The SDK now bundles release WASM from ant-client `488d6dece3205d45d8c5e4263cf86cd310b0b2a9`,
 with `--no-default-features --features browser-wasm`. The source worktree was
 clean. `src/wasm/source.json` records the source and artifact checksums.
 
@@ -59,8 +59,8 @@ native vault calldata and decode settlement with evmlib's ABI. Applications own
 durable browser checkpoint/input storage and settlement observation for pending
 wallet submissions.
 
-Pinned dependencies: saorsa-core `f3a7934baf0036bf0590f95c1a279641e202dccd`,
-ant-protocol `00376d52d015f35f92dfd5c163d9d6b3bb87c121`, and saorsa-transport
+Pinned dependencies: saorsa-core `3a683af3394c5a59f624be77d6afcdf791f3d611`,
+ant-protocol `521b7bf79d3ebd8e35fd649fb18b40f5688af58c`, and saorsa-transport
 `c6e3ee21d41caf332b3a64dd15d32123e486f8ac`.
 
 ## Canonical protocol definitions
@@ -164,3 +164,11 @@ hints; their arbitrary sequence metadata cannot overwrite an owner-proven view.
 The node forwards original signatures in bounded binary lookup bodies, outside
 the existing JSON header limit. This adds no separate browser routing policy or
 new crate. See [the validation record](2026-09-08-owner-signed-address-records.md).
+
+## Signed V2 replaces the unpublished unsigned draft
+
+V2 now requires owner signatures directly. The separate signed protocol and
+capability have been removed; native and browser peers use the shared `addr-v2`
+capability. V2 lookup replies omit peers without a current proof, and the client
+rejects proofless replies from V2-capable servers. V1 remains the compatibility
+fallback. See [the V2 validation record](2026-09-09-signed-address-v2.md).

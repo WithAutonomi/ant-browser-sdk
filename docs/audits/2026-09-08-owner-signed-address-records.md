@@ -1,5 +1,9 @@
 # Owner-signed address gossip — 2026-09-08
 
+This records the initial implementation. The unpublished unsigned V2 format and
+separate signed protocol were subsequently replaced by
+[signed V2](2026-09-09-signed-address-v2.md).
+
 The SDK is rebuilt from a clean ant-client worktree using
 `--no-default-features --features browser-wasm`. `src/wasm/source.json` records
 the exact source revision, Cargo lock checksum, and release WASM checksum.
