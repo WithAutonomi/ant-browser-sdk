@@ -10,7 +10,7 @@ import type {
 const state = vi.hoisted(() => ({
   hello: {
     type: "hello",
-    protocol: "autonomi.web.poc.v6",
+    protocol: "autonomi.web.poc.v5",
     peer_id: "ab".repeat(32),
     endpoint: { multiaddr: "/ip4/127.0.0.1/udp/24000/mock" },
     max_chunk_size: 4_194_304,

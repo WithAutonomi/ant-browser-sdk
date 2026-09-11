@@ -14,7 +14,7 @@ vi.mock("../src/internal/runtime.js", () => ({
   initializeClientWasm: async () => undefined,
   getBindings: () => ({
     BrowserNodeClient: class {
-      async hello() { return { type: "hello", protocol: "autonomi.web.poc.v6", peer_id: "ab".repeat(32), endpoint: { multiaddr: "/mock" }, max_chunk_size: 4194304, capabilities: ["chunk_protocol"], payment: mocks.network }; }
+      async hello() { return { type: "hello", protocol: "autonomi.web.poc.v5", peer_id: "ab".repeat(32), endpoint: { multiaddr: "/mock" }, max_chunk_size: 4194304, capabilities: ["chunk_protocol"], payment: mocks.network }; }
       close() {} free() {}
     },
     BrowserNetworkClient: class { uploadStagedPublicFile = mocks.upload; close() {} free() {} },
