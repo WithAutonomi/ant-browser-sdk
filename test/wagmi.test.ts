@@ -16,10 +16,6 @@ vi.mock("@wagmi/core", () => ({
   getPublicClient: mocks.getPublicClient,
 }));
 
-vi.mock("viem", () => ({
-  maxUint256: 2n ** 256n - 1n,
-}));
-
 vi.mock("viem/actions", () => ({
   readContract: mocks.readContract,
   waitForTransactionReceipt: mocks.waitForTransactionReceipt,
@@ -244,4 +240,27 @@ it("submits Rust Merkle calldata and decodes the confirmed vault receipt", async
   expect(mocks.writeContract).not.toHaveBeenCalled();
   expect(receipt.totalAmount).toBe("70");
   expect(receipt.winnerPoolHash).toBe(request.poolHashes[0]);
+});
+
+it("recovers confirmed quote payments from the journal without requesting a wallet", async () => {
+  const { encodeFunctionData, parseAbi } = await import("viem");
+  const abi = parseAbi(["function payForQuotes((address rewardsAddress,uint256 amount,bytes32 quoteHash)[] payments)"]);
+  const transactionHash = `0x${"ab".repeat(32)}`;
+  const receipt = vi.fn(async () => ({ status: "success" }));
+  mocks.getPublicClient.mockReturnValue({ getChainId: mocks.getChainId,
+    getTransactionReceipt: receipt,
+    getTransaction: vi.fn(async () => ({ to: network.paymentVaultAddress,
+      input: encodeFunctionData({ abi, functionName: "payForQuotes", args: [quotes.map(quote => ({
+        rewardsAddress: quote.rewardsAddress as `0x${string}`, amount: BigInt(quote.amount), quoteHash: `0x${quote.quoteHash}` as `0x${string}`,
+      }))] }),
+    })),
+  });
+  const payment = createWagmiPaymentProvider({ config });
+  const attempt = { submissions: [{ transactionHashes: { [quotes[0]!.quoteHash]: transactionHash }, totalAmount: "malformed" }] };
+  await expect(payment.recover!(network, quotes, attempt, { report() {} })).resolves.toMatchObject({ transactionHash, totalAmount: "42" });
+  receipt.mockResolvedValue({ status: "reverted" });
+  await expect(payment.recover!(network, quotes, attempt, { report() {} })).rejects.toThrow(/outcome unknown/);
+  expect(mocks.getConnectorClient).not.toHaveBeenCalled();
+  expect(mocks.writeContract).not.toHaveBeenCalled();
+  expect(mocks.sendTransaction).not.toHaveBeenCalled();
 });
