@@ -322,9 +322,9 @@ export interface InitOutput {
     readonly BrotliDecoderVersion: () => number;
     readonly wasm_bindgen__convert__closures_____invoke__h6c639ae6ac52cf17: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen__convert__closures_____invoke__h1a72669c4838b5a0: (a: number, b: number, c: any, d: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h4e386443ed277aae: (a: number, b: number, c: any) => any;
-    readonly wasm_bindgen__convert__closures_____invoke__h14c4dca2d7d04953: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h14c4dca2d7d04953_3: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h9e7803f769f8c721: (a: number, b: number, c: any) => any;
+    readonly wasm_bindgen__convert__closures_____invoke__h7b4c25afdc678bb6: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h7b4c25afdc678bb6_3: (a: number, b: number, c: any) => void;
     readonly wasm_bindgen__convert__closures_____invoke__hc4b509476b4504c4: (a: number, b: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
