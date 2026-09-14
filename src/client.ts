@@ -1,3 +1,4 @@
+import { snapshotNetworkProfile, type NetworkProfile } from "./network-profile.js";
 import { saveUploadCheckpoint } from "./internal/record-store.js";
 import { assertFileSize, SDK_LIMITS } from "./limits.js";
 import {
@@ -94,6 +95,25 @@ export class AutonomiClient {
     this.#payment = options.payment;
     this.#workerWasm = workerWasm;
     if (options.onProgress) this.#listeners.add(options.onProgress);
+  }
+
+  /** Connect using application-bundled seeds and payment identity, with seed failover. */
+  static async connectNetwork(profile: NetworkProfile, options: Omit<ClientOptions, "expectedPaymentNetwork"> = {}): Promise<AutonomiClient> {
+    const trusted = snapshotNetworkProfile(profile);
+    let lastError: unknown;
+    for (const seed of trusted.seeds) {
+      throwIfAborted(options.signal);
+      try {
+        const client = await this.connect(seed, { ...options, expectedPaymentNetwork: trusted.payment });
+        try {
+          const { BrowserNetworkClient } = getBindings();
+          const network = new BrowserNetworkClient(trusted.seeds.map(parseBootstrapMultiaddr));
+          client.#network.close(); client.#network.free(); client.#network = network;
+          return client;
+        } catch (error) { client.close(); throw error; }
+      } catch (error) { lastError = error; }
+    }
+    throw lastError ?? new AutonomiError("CONNECTION_FAILED", "No trusted seed was reachable");
   }
 
   /**

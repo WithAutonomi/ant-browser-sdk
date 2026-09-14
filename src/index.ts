@@ -58,3 +58,4 @@ export type {
 } from "./types.js";
 
 export { storedUploadCheckpoints } from "./internal/record-store.js";
+export type { NetworkProfile } from "./network-profile.js";
