@@ -131,13 +131,26 @@ export class BrowserNodeClient {
     free(): void;
     [Symbol.dispose](): void;
     /**
+     * Complete PQ authentication and HELLO, returning a session for application RPCs.
+     */
+    connect(): Promise<BrowserNodeSession>;
+    /**
+     * Construct a client from a raw or structured WebRTC Direct endpoint.
+     */
+    constructor(endpoint: any);
+}
+
+/**
+ * Authenticated application session. Reconnect through `BrowserNodeClient` after closure.
+ */
+export class BrowserNodeSession {
+    private constructor();
+    free(): void;
+    [Symbol.dispose](): void;
+    /**
      * Close the DataChannel and peer connection.
      */
     close(): void;
-    /**
-     * Open the direct DataChannel without issuing an application request.
-     */
-    connect(): Promise<void>;
     /**
      * Request nodes closest to a 32-byte target.
      */
@@ -151,10 +164,6 @@ export class BrowserNodeClient {
      */
     hello(): Promise<any>;
     /**
-     * Construct a client from a raw or structured WebRTC Direct endpoint.
-     */
-    constructor(endpoint: any);
-    /**
      * Store a paid content-addressed record.
      */
     putChunk(address: string, content: Uint8Array, quote: any, transaction_hash: string): Promise<any>;
@@ -163,7 +172,7 @@ export class BrowserNodeClient {
      */
     quoteChunk(address: string, size: number): Promise<any>;
     /**
-     * Authenticated peer ID, when HELLO has completed.
+     * Authenticated remote peer identity.
      */
     readonly peerId: string | undefined;
 }
@@ -242,6 +251,31 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly __wbg_browserfilereader_free: (a: number, b: number) => void;
+    readonly __wbg_browsernetworkclient_free: (a: number, b: number) => void;
+    readonly __wbg_browsernodeclient_free: (a: number, b: number) => void;
+    readonly __wbg_browsernodesession_free: (a: number, b: number) => void;
+    readonly browserfilereader_close: (a: number) => void;
+    readonly browserfilereader_contentType: (a: number) => [number, number];
+    readonly browserfilereader_name: (a: number) => [number, number];
+    readonly browserfilereader_readRange: (a: number, b: number, c: number) => any;
+    readonly browserfilereader_size: (a: number) => number;
+    readonly browsernetworkclient_close: (a: number) => void;
+    readonly browsernetworkclient_downloadPublicFile: (a: number, b: any, c: number, d: number) => any;
+    readonly browsernetworkclient_findClosest: (a: number, b: number, c: number, d: number) => any;
+    readonly browsernetworkclient_new: (a: any) => [number, number, number];
+    readonly browsernetworkclient_openPublicFile: (a: number, b: any, c: number) => any;
+    readonly browsernetworkclient_uploadPublicFile: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: any, j: number, k: number, l: number, m: number, n: number, o: number, p: number) => any;
+    readonly browsernetworkclient_uploadStagedPublicFile: (a: number, b: any, c: any, d: any, e: any, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => any;
+    readonly browsernodeclient_connect: (a: number) => any;
+    readonly browsernodeclient_new: (a: any) => [number, number, number];
+    readonly browsernodesession_close: (a: number) => void;
+    readonly browsernodesession_findNode: (a: number, b: number, c: number, d: number) => any;
+    readonly browsernodesession_getChunk: (a: number, b: number, c: number) => any;
+    readonly browsernodesession_hello: (a: number) => any;
+    readonly browsernodesession_peerId: (a: number) => [number, number];
+    readonly browsernodesession_putChunk: (a: number, b: number, c: number, d: number, e: number, f: any, g: number, h: number) => any;
+    readonly browsernodesession_quoteChunk: (a: number, b: number, c: number, d: number) => any;
     readonly __wbg_browserfileencryptor_free: (a: number, b: number) => void;
     readonly __wbg_browseriterativelookup_free: (a: number, b: number) => void;
     readonly browserfileencryptor_finish: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
@@ -266,30 +300,6 @@ export interface InitOutput {
     readonly verifyRecord: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly verifyStorageQuote: (a: any, b: number, c: number, d: number, e: number) => [number, number, number];
     readonly webRtcDirectV2ServerCredential: (a: number, b: number) => [number, number, number, number];
-    readonly __wbg_browserfilereader_free: (a: number, b: number) => void;
-    readonly __wbg_browsernetworkclient_free: (a: number, b: number) => void;
-    readonly __wbg_browsernodeclient_free: (a: number, b: number) => void;
-    readonly browserfilereader_close: (a: number) => void;
-    readonly browserfilereader_contentType: (a: number) => [number, number];
-    readonly browserfilereader_name: (a: number) => [number, number];
-    readonly browserfilereader_readRange: (a: number, b: number, c: number) => any;
-    readonly browserfilereader_size: (a: number) => number;
-    readonly browsernetworkclient_close: (a: number) => void;
-    readonly browsernetworkclient_downloadPublicFile: (a: number, b: any, c: number, d: number) => any;
-    readonly browsernetworkclient_findClosest: (a: number, b: number, c: number, d: number) => any;
-    readonly browsernetworkclient_new: (a: any) => [number, number, number];
-    readonly browsernetworkclient_openPublicFile: (a: number, b: any, c: number) => any;
-    readonly browsernetworkclient_uploadPublicFile: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: any, j: number, k: number, l: number, m: number, n: number, o: number, p: number) => any;
-    readonly browsernetworkclient_uploadStagedPublicFile: (a: number, b: any, c: any, d: any, e: any, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => any;
-    readonly browsernodeclient_close: (a: number) => void;
-    readonly browsernodeclient_connect: (a: number) => any;
-    readonly browsernodeclient_findNode: (a: number, b: number, c: number, d: number) => any;
-    readonly browsernodeclient_getChunk: (a: number, b: number, c: number) => any;
-    readonly browsernodeclient_hello: (a: number) => any;
-    readonly browsernodeclient_new: (a: any) => [number, number, number];
-    readonly browsernodeclient_peerId: (a: number) => [number, number];
-    readonly browsernodeclient_putChunk: (a: number, b: number, c: number, d: number, e: number, f: any, g: number, h: number) => any;
-    readonly browsernodeclient_quoteChunk: (a: number, b: number, c: number, d: number) => any;
     readonly BrotliDecoderCreateInstance: (a: number, b: number, c: number) => number;
     readonly BrotliDecoderDecompress: (a: number, b: number, c: number, d: number) => number;
     readonly BrotliDecoderDecompressPrealloc: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => void;
@@ -312,8 +322,9 @@ export interface InitOutput {
     readonly BrotliDecoderVersion: () => number;
     readonly wasm_bindgen__convert__closures_____invoke__h6c639ae6ac52cf17: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen__convert__closures_____invoke__h1a72669c4838b5a0: (a: number, b: number, c: any, d: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h3568d70c8824f24e: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h3568d70c8824f24e_2: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__hd16b156804338ad2: (a: number, b: number, c: any) => any;
+    readonly wasm_bindgen__convert__closures_____invoke__h12e07e9e0eb47010: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h12e07e9e0eb47010_3: (a: number, b: number, c: any) => void;
     readonly wasm_bindgen__convert__closures_____invoke__hc4b509476b4504c4: (a: number, b: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

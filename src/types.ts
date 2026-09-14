@@ -19,6 +19,7 @@ export interface PublicFile {
   readonly address: string;
   readonly size: number;
   readonly contentType: string;
+  /** Computed after a complete plaintext read; empty until then for staged uploads. */
   readonly blake3: string;
   readonly dataMapSize: number;
   readonly chunks: readonly ChunkInfo[];

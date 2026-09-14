@@ -51,6 +51,11 @@ export function corePublicFile(file: PublicFile): CorePublicFile {
   };
 }
 
+/** Read APIs identify content solely by its DataMap address. */
+export function coreFileReference(file: Pick<PublicFile, "address" | "name" | "contentType">): Pick<CorePublicFile, "address" | "name" | "content_type"> {
+  return { address: file.address, name: file.name, content_type: file.contentType };
+}
+
 export function helloFromCore(hello: CoreHelloInfo, payment: PaymentNetwork): HelloInfo {
   return {
     type: hello.type, protocol: hello.protocol, peerId: hello.peer_id,

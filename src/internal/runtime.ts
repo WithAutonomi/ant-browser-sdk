@@ -55,6 +55,11 @@ export interface RawNetworkClient {
 }
 
 export interface RawNodeClient {
+  connect(): Promise<RawNodeSession>;
+  free(): void;
+}
+
+export interface RawNodeSession {
   hello(): Promise<unknown>;
   close(): void;
   free(): void;

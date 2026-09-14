@@ -2,7 +2,7 @@ import { snapshotNetworkProfile, type NetworkProfile } from "./network-profile.j
 import { saveUploadCheckpoint } from "./internal/record-store.js";
 import { assertFileSize, SDK_LIMITS } from "./limits.js";
 import {
-  corePublicFile, helloFromCore, lookupFromCore, nodeFromCore, publicFileFromCore,
+  coreFileReference, helloFromCore, lookupFromCore, nodeFromCore, publicFileFromCore,
   type CoreHelloInfo, type CoreLookupResult, type CoreNetworkNode, type CorePublicFile,
 } from "./internal/protocol.js";
 import { AutonomiError, UploadError, wrapError } from "./errors.js";
@@ -142,14 +142,18 @@ export class AutonomiClient {
 
       const probe = new BrowserNodeClient(endpoint);
       let hello: CoreHelloInfo;
+      // Dispose a session even if connection completed after caller cancellation.
+      const connecting = probe.connect();
+      let session: Awaited<typeof connecting> | undefined;
       try {
-        hello = (await abortable(probe.hello(), options.signal)) as typeof hello;
+        session = await abortable(connecting, options.signal);
+        hello = await abortable(session.hello(), options.signal) as CoreHelloInfo;
       } finally {
-        try {
-          probe.close();
-        } finally {
-          probe.free();
-        }
+        if (session) { session.close(); session.free(); probe.free(); }
+        else void connecting.then(
+          late => { late.close(); late.free(); probe.free(); },
+          () => probe.free(),
+        );
       }
       if (!hello.capabilities.includes("chunk_protocol")) {
         throw new AutonomiError("CONNECTION_FAILED", "Bootstrap node does not support the shared storage protocol; upgrade ant-node to a version advertising chunk_protocol");
@@ -529,9 +533,8 @@ export class AutonomiClient {
         );
       }
       throwIfAborted(operation.signal);
-      if (typeof file !== "string") assertFileSize(file.size);
       const raw = (await abortable(
-        this.#network.downloadPublicFile(typeof file === "string" ? file : corePublicFile(file), concurrency, report),
+        this.#network.downloadPublicFile(typeof file === "string" ? file : coreFileReference(file), concurrency, report),
         operation.signal,
       )) as RawDownloadResult;
       throwIfAborted(operation.signal);
@@ -567,7 +570,6 @@ export class AutonomiClient {
     const report = this.#reporter("download-and-save", options.onProgress, operation);
     try {
       this.#assertOpen();
-      if (typeof file !== "string") assertFileSize(file.size);
       report("Choosing a download destination", { phase: "saving" });
       const knownFile =
         typeof file === "string"
@@ -618,9 +620,8 @@ export class AutonomiClient {
     try {
       this.#assertOpen();
       throwIfAborted(operation.signal);
-      if (typeof file !== "string") assertFileSize(file.size);
       raw = await abortable(
-        this.#network.openPublicFile(typeof file === "string" ? file : corePublicFile(file), report),
+        this.#network.openPublicFile(typeof file === "string" ? file : coreFileReference(file), report),
         operation.signal,
         undefined,
         closeReader,
@@ -657,7 +658,6 @@ export class AutonomiClient {
     let source: MediaSource | undefined;
     try {
       this.#assertOpen();
-      if (typeof file !== "string") assertFileSize(file.size);
       report("Opening an Autonomi random-access media reader");
       reader = await this.openFile(file, {
         ...(options.onProgress ? { onProgress: options.onProgress } : {}),
