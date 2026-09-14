@@ -824,8 +824,8 @@ behavior and do not imply parity with native filesystem resume.
 
 The Rust client checkpoints its prepared payment plans before requesting a
 wallet payment and its confirmed per-record proofs before uploading data. The
-SDK retains these checkpoints for `resumeUpload()`. To recover after a reload,
-persist the checkpoint and retain or reselect the same input:
+SDK persists these checkpoints in IndexedDB by default. To use your own durable
+storage and recover after a reload, retain or reselect the same input:
 
 ```ts
 let checkpoint = await checkpointStore.load(fileId);
@@ -843,9 +843,43 @@ await client.upload(file, {
 is awaited before payment or record uploads proceed. A confirmed proof remains
 usable with newly discovered peers and new quotes until the shared native expiry
 policy says otherwise. Checkpoints are bound to the input records and payment
-network, and contain no file bytes or private keys. They do not contain the
-wallet's unresolved transaction observers: persist submission evidence through
-`onPaymentSubmitted` and reconcile it before authorizing a replacement payment.
+network, and contain no file bytes or private keys. Submission evidence and raw
+receipts are journaled before validation. Promise-based settlement observers stay
+in the page; after reload the wallet's recovery methods observe the saved
+transaction identity without submitting another payment.
+
+### Payment journals and canonical file references
+
+The SDK persists upload checkpoints in IndexedDB by default. Supplying
+`onCheckpoint` selects application-owned persistence instead; that callback must
+complete its durable write before returning. `storedUploadCheckpoints()` lists
+journals retained across reloads. Reselect the same input and pass the saved
+`checkpoint` to `upload()` to resume. IndexedDB is required for the default
+journal even when the input is an in-memory byte array.
+
+Wallet integrations report transaction submission immediately through
+`context.submitted`. An ambiguous payment error never authorizes another
+submission. The SDK observes retained submissions, and Ethers/Wagmi providers
+can recover confirmed transactions from the journal by reading their calldata
+and receipts. Custom providers can implement `recover` and `recoverMerkle`;
+these methods must only observe existing transactions. An attempt with no usable
+transaction identity stays unresolved until the wallet supplies that evidence.
+
+A public file is identified by its DataMap address. Read APIs pass only that
+address and optional display metadata to Rust; size and chunk information come
+from the verified map. A staged upload's returned `blake3` is empty until a full
+plaintext read computes it. Native Rust file APIs and stored record formats are
+unchanged.
+
+Low-level WASM consumers now call `BrowserNodeClient.connect()` and use its
+returned `BrowserNodeSession` for HELLO metadata and application requests. Close
+that session when finished. Closed sessions reject requests; connecting again
+creates a new authenticated session.
+
+`AutonomiClient.connectNetwork(profile, options)` accepts a profile bundled with
+the application, verifies its payment identity and tries its independent seeds.
+A profile is a trust anchor and must not be populated from an untrusted runtime
+manifest. Runtime manifests remain local-devnet tooling.
 
 ## License
 
