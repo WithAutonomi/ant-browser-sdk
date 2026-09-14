@@ -1,6 +1,8 @@
+import { getBindings } from "./internal/runtime.js";
 import { getConnectorClient, getPublicClient, type Config } from "@wagmi/core";
 import {
   maxUint256,
+  decodeFunctionData,
   type Account,
   type Address,
   type Chain,
@@ -163,8 +165,40 @@ export function createWagmiPaymentProvider<config extends Config>(
       try { if (!context.signal?.aborted) context.report(`Payment confirmed in ${confirmedTransactionHash}`); } catch { /* The receipt is already confirmed. */ }
       return receipt;
   };
+  const recover = async (network: PaymentNetwork, quotes: readonly VerifiedStorageQuote[], attempt: unknown,
+    context: Pick<PaymentContext, "report" | "signal">, merkle?: MerklePaymentRequest): Promise<PaymentReceipt> => {
+    const client = getPublicClient(options.config, { chainId: network.chainId }) as PublicClient | undefined;
+    if (!client || await client.getChainId() !== network.chainId) throw new Error("Recovery RPC is on the wrong payment chain");
+    const journal = attempt as { submissions?: { transactionHash?: string; transactionHashes?: Record<string, string> }[]; receipt?: { transactionHash?: string; transactionHashes?: Record<string, string> } };
+    const hashes = [...new Set([...(journal?.submissions ?? []).flatMap(entry => [entry.transactionHash, ...Object.values(entry.transactionHashes ?? {})]), journal?.receipt?.transactionHash,
+      ...Object.values(journal?.receipt?.transactionHashes ?? {})].filter((hash): hash is Hex => typeof hash === "string" && /^0x[0-9a-f]{64}$/iu.test(hash)))];
+    const transactions: Record<string, string> = {};
+    for (const hash of hashes) {
+      throwIfAborted(context.signal);
+      const transaction = await client.getTransaction({ hash });
+      const receipt = await client.getTransactionReceipt({ hash });
+      if (receipt.status !== "success" || transaction.to?.toLowerCase() !== network.paymentVaultAddress.toLowerCase()) continue;
+      if (merkle) {
+        if (transaction.input.toLowerCase() !== merkle.calldata.toLowerCase()) continue;
+        const decode = getBindings().decodeMerklePaymentReceipt;
+        if (!decode) throw new Error("WASM receipt decoder unavailable");
+        const result = decode(merkle, network.paymentVaultAddress, receipt.logs) as Pick<MerklePaymentReceipt, "winnerPoolHash" | "totalAmount">;
+        return { transactionHash: hash, ...result };
+      }
+      const decoded = decodeFunctionData({ abi: VAULT_ABI, data: transaction.input });
+      for (const quote of quotes) {
+        if (decoded.args[0].some(paid => paid.quoteHash.toLowerCase().replace(/^0x/u, "") === quote.quoteHash.toLowerCase().replace(/^0x/u, "") &&
+          paid.rewardsAddress.toLowerCase() === quote.rewardsAddress.toLowerCase() && paid.amount === BigInt(quote.amount))) transactions[quote.quoteHash] = hash;
+      }
+    }
+    if (merkle || quotes.some(quote => !transactions[quote.quoteHash]) || !quotes.length) throw new Error("Payment outcome unknown; no new transaction was sent");
+    return { transactionHash: Object.values(transactions)[0]!, transactionHashes: transactions,
+      totalAmount: quotes.reduce((total, quote) => total + BigInt(quote.amount), 0n).toString() };
+  };
   return {
     pay: (network, quotes, context) => submit(network, quotes, context),
+    recover: (network, quotes, attempt, context) => recover(network, quotes, attempt, context),
+    recoverMerkle: async (network, request, attempt, context) => await recover(network, [], attempt, context, request) as MerklePaymentReceipt,
     payMerkle: async (network, request, context) => await submit(network, [], context, request) as MerklePaymentReceipt,
   };
 }

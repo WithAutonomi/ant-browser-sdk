@@ -1,3 +1,4 @@
+import { saveUploadCheckpoint } from "./internal/record-store.js";
 import { assertFileSize, SDK_LIMITS } from "./limits.js";
 import {
   corePublicFile, helloFromCore, lookupFromCore, nodeFromCore, publicFileFromCore,
@@ -314,7 +315,8 @@ export class AutonomiClient {
   ): Promise<UploadResult> {
     operation.recovery = state.handle;
     let paymentFailure: unknown;
-    const payForQuotes = async (networkValue: unknown, quoteValue: unknown) => {
+    const payForQuotes = async (networkValue: unknown, quoteValue: unknown, persistValue?: unknown) => {
+      const persistSubmission = typeof persistValue === "function" ? persistValue as (value: unknown) => Promise<void> : undefined;
       try {
         throwIfAborted(operation.signal);
         const network = paymentNetworkFromCore(networkValue, state.network);
@@ -334,14 +336,25 @@ export class AutonomiClient {
         throwIfAborted(operation.signal);
         // Observe the actual provider promise, even after the upload stops waiting.
         const submitted: TrackedPayment[] = [];
+        const journalWrites: Promise<void>[] = [];
         const pending = Promise.resolve(payment.pay(network, quotes, {
           report, signal: operation.signal,
           submitted: (submission) => {
+            // Journal broadcast evidence before validating provider metadata.
+            if (persistSubmission) {
+              const write = persistSubmission({ transactionHash: submission.transactionHash,
+                totalAmount: submission.totalAmount, walletAddress: submission.walletAddress });
+              void write.catch(() => undefined);
+              journalWrites.push(write);
+            }
             const tracked = trackPayment(state, network, quotes, submission);
             submitted.push(tracked);
             try { onPaymentSubmitted?.(tracked.handle); } catch { /* Receipt observation must survive UI failures. */ }
           },
-        })).then((receipt) => {
+        })).then(async (receipt) => {
+          // A malformed receipt may still identify a transaction that spent funds.
+          if (persistSubmission) await persistSubmission(receipt);
+          await Promise.all(journalWrites);
           const recorded = recordPayment(state, network, quotes, receipt);
           for (const tracked of submitted) tracked.confirm(receipt);
           return recorded.receipt;
@@ -356,7 +369,8 @@ export class AutonomiClient {
         throw paymentFailure;
       }
     };
-    const payForMerkle = async (networkValue: unknown, requestValue: unknown) => {
+    const payForMerkle = async (networkValue: unknown, requestValue: unknown, persistValue?: unknown) => {
+      const persistSubmission = typeof persistValue === "function" ? persistValue as (value: unknown) => Promise<void> : undefined;
       try {
         throwIfAborted(operation.signal);
         const network = paymentNetworkFromCore(networkValue, state.network);
@@ -365,6 +379,7 @@ export class AutonomiClient {
         if (previous) return previous.receipt;
         if (!payment?.payMerkle) throw new AutonomiError("PAYMENT_FAILED", "PaymentProvider must implement payMerkle for this upload, or select paymentMode: single");
         const submitted: TrackedPayment[] = [];
+        const journalWrites: Promise<void>[] = [];
         const pending = Promise.resolve(payment.payMerkle(network, request, {
           report, signal: operation.signal,
           decodeReceipt: (logs) => {
@@ -373,11 +388,21 @@ export class AutonomiClient {
             return decode(request, network.paymentVaultAddress, logs) as Pick<MerklePaymentReceipt, "winnerPoolHash" | "totalAmount">;
           },
           submitted: (submission) => {
+            // Journal broadcast evidence before validating provider metadata.
+            if (persistSubmission) {
+              const write = persistSubmission({ transactionHash: submission.transactionHash,
+                totalAmount: submission.totalAmount, walletAddress: submission.walletAddress });
+              void write.catch(() => undefined);
+              journalWrites.push(write);
+            }
             const tracked = trackPayment(state, network, [], submission, request);
             submitted.push(tracked);
             try { onPaymentSubmitted?.(tracked.handle); } catch { /* Preserve settlement observation. */ }
           },
-        })).then((receipt) => {
+        })).then(async (receipt) => {
+          // A malformed receipt may still identify a transaction that spent funds.
+          if (persistSubmission) await persistSubmission(receipt);
+          await Promise.all(journalWrites);
           const recorded = recordPayment(state, network, [], receipt, request);
           for (const tracked of submitted) tracked.confirm(receipt);
           return recorded.receipt;
@@ -389,6 +414,31 @@ export class AutonomiClient {
         throw paymentFailure;
       }
     };
+    // Recovery callbacks observe retained/chain receipts; they never call pay().
+    payForQuotes.recover = async (networkValue: unknown, quoteValue: unknown, _persist: unknown, attempt: unknown) => {
+      const network = paymentNetworkFromCore(networkValue, state.network);
+      const quotes = snapshot(quoteValue as VerifiedStorageQuote[]);
+      await reconcilePayments(state, operation.signal);
+      const previous = paidReceipt(state, network, quotes);
+      if (previous) return previous;
+      if (payment?.recover) {
+        const receipt = await payment.recover(network, quotes, attempt, { report, signal: operation.signal });
+        return recordPayment(state, network, quotes, receipt).receipt;
+      }
+      throw new AutonomiError("PAYMENT_FAILED", "Payment outcome unknown; reconcile the original payment before retrying");
+    };
+    payForMerkle.recover = async (networkValue: unknown, requestValue: unknown, _persist: unknown, attempt: unknown) => {
+      const network = paymentNetworkFromCore(networkValue, state.network);
+      const request = snapshot(requestValue as MerklePaymentRequest);
+      await reconcilePayments(state, operation.signal);
+      const previous = state.payments.find(paid => paid.merkle?.calldata === request.calldata);
+      if (previous) return previous.receipt;
+      if (payment?.recoverMerkle) {
+        const receipt = await payment.recoverMerkle(network, request, attempt, { report, signal: operation.signal });
+        return recordPayment(state, network, [], receipt, request).receipt;
+      }
+      throw new AutonomiError("PAYMENT_FAILED", "Merkle payment outcome unknown; reconcile the original payment before retrying");
+    };
     try {
       throwIfAborted(operation.signal);
       if (resuming) await reconcilePayments(state, operation.signal);
@@ -396,7 +446,8 @@ export class AutonomiClient {
         report(`Preparing storage for ${state.name}`, { phase: "preparing" });
         const checkpoint = async (value: string) => {
           state.coreCheckpoint = value;
-          await state.onCheckpoint?.(value);
+          if (state.onCheckpoint) await state.onCheckpoint(value);
+          else { await saveUploadCheckpoint(state.handle.id, value); state.checkpointStoredLocally = true; }
         };
         const raw = state.staged
           ? this.#network.uploadStagedPublicFile(

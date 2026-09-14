@@ -1,3 +1,4 @@
+import { deleteUploadCheckpoint } from "./record-store.js";
 import { AutonomiError } from "../errors.js";
 import type {
   MerklePaymentRequest, PaymentNetwork, PaymentReceipt, PaymentSettlement, PaymentSubmission, PendingPayment, PublicFile, UploadPayment, UploadRecovery,
@@ -10,6 +11,7 @@ import { abortable, isAbort } from "./abort.js";
 export interface RetainedUpload {
   paymentMode?: "auto" | "single" | "merkle";
   coreCheckpoint?: string;
+  checkpointStoredLocally?: boolean;
   onCheckpoint?: (checkpoint: string) => void | Promise<void>;
   handle: UploadRecovery;
   network: PaymentNetwork;
@@ -186,6 +188,7 @@ export async function releaseUpload(
   status: "completed" | "discarded",
 ): Promise<void> {
   if (state.staged) await clearStagedUpload(state.staged);
+  if (state.checkpointStoredLocally) await deleteUploadCheckpoint(state.handle.id);
   delete state.staged;
   delete state.bytes;
   delete state.work;

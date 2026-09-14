@@ -1,23 +1,39 @@
 const DATABASE_NAME = "autonomi-browser-sdk-upload-staging";
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
+const CHECKPOINT_STORE = "checkpoints";
 const RECORD_STORE = "records";
 
 let databasePromise: Promise<IDBDatabase> | undefined;
 
 function uploadDatabase(): Promise<IDBDatabase> {
-  databasePromise ??= new Promise((resolve, reject) => {
+  if (databasePromise) return databasePromise;
+  const opening = new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
+    let abandoned = false;
     request.addEventListener("upgradeneeded", () => {
-      if (!request.result.objectStoreNames.contains(RECORD_STORE)) {
-        request.result.createObjectStore(RECORD_STORE);
-      }
+      if (!request.result.objectStoreNames.contains(CHECKPOINT_STORE)) request.result.createObjectStore(CHECKPOINT_STORE);
+      if (!request.result.objectStoreNames.contains(RECORD_STORE)) request.result.createObjectStore(RECORD_STORE);
     });
-    request.addEventListener("success", () => resolve(request.result));
+    request.addEventListener("blocked", () => {
+      abandoned = true;
+      reject(new Error("Close older Autonomi tabs to upgrade upload recovery storage"));
+    });
+    request.addEventListener("success", () => {
+      const database = request.result;
+      if (abandoned) { database.close(); return; }
+      database.addEventListener("versionchange", () => {
+        database.close();
+        if (databasePromise === opening) databasePromise = undefined;
+      });
+      resolve(database);
+    });
     request.addEventListener("error", () => {
       reject(request.error ?? new Error("Could not open upload staging storage"));
     });
   });
-  return databasePromise;
+  databasePromise = opening;
+  void opening.catch(() => { if (databasePromise === opening) databasePromise = undefined; });
+  return opening;
 }
 
 function transactionDone(transaction: IDBTransaction): Promise<void> {
@@ -92,5 +108,33 @@ export async function deleteStagedSession(sessionId: string): Promise<void> {
     [sessionId, Number.MAX_SAFE_INTEGER],
   );
   transaction.objectStore(RECORD_STORE).delete(range);
+  await transactionDone(transaction);
+}
+
+/** Persist the core payment journal before the signer is invoked. */
+export async function saveUploadCheckpoint(id: string, checkpoint: string): Promise<void> {
+  const database = await uploadDatabase();
+  const transaction = database.transaction(CHECKPOINT_STORE, "readwrite", { durability: "strict" });
+  transaction.objectStore(CHECKPOINT_STORE).put(checkpoint, id);
+  await transactionDone(transaction);
+}
+
+/** Journals survive reloads; reselect the input and pass its checkpoint to upload(). */
+export async function storedUploadCheckpoints(): Promise<ReadonlyArray<{ id: string; checkpoint: string }>> {
+  const database = await uploadDatabase();
+  const transaction = database.transaction(CHECKPOINT_STORE, "readonly");
+  const done = transactionDone(transaction);
+  const store = transaction.objectStore(CHECKPOINT_STORE);
+  const keys = store.getAllKeys();
+  const values = store.getAll();
+  await done;
+  return keys.result.map((id, index) => ({ id: String(id), checkpoint: String(values.result[index]) }));
+}
+
+/** Forget a completed upload journal after all storage work has settled. */
+export async function deleteUploadCheckpoint(id: string): Promise<void> {
+  const database = await uploadDatabase();
+  const transaction = database.transaction(CHECKPOINT_STORE, "readwrite");
+  transaction.objectStore(CHECKPOINT_STORE).delete(id);
   await transactionDone(transaction);
 }

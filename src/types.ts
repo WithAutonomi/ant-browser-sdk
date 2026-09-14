@@ -144,6 +144,10 @@ export interface MerklePaymentContext extends PaymentContext {
 
 /** Wallet-independent payment boundary used by uploads. */
 export interface PaymentProvider {
+  /** Observe an existing attempt from its persisted journal. Must never submit a transaction. */
+  recover?(network: PaymentNetwork, quotes: readonly VerifiedStorageQuote[], attempt: unknown, context: Pick<PaymentContext, "report" | "signal">): Promise<PaymentReceipt>;
+  /** Observe an existing Merkle attempt without submitting another payment. */
+  recoverMerkle?(network: PaymentNetwork, request: MerklePaymentRequest, attempt: unknown, context: Pick<PaymentContext, "report" | "signal">): Promise<MerklePaymentReceipt>;
   payMerkle?(network: PaymentNetwork, request: MerklePaymentRequest, context: MerklePaymentContext): Promise<MerklePaymentReceipt>;
   pay(
     network: PaymentNetwork,

@@ -1,5 +1,7 @@
+import { getBindings } from "./internal/runtime.js";
 import {
   Contract,
+  Interface,
   JsonRpcProvider,
   MaxUint256,
   NonceManager,
@@ -114,8 +116,49 @@ export function createEthersPaymentProvider(
         context.signal,
       );
   };
+  const recover = async (network: PaymentNetwork, quotes: readonly VerifiedStorageQuote[], attempt: unknown,
+    context: Pick<PaymentContext, "report" | "signal">, merkle?: MerklePaymentRequest): Promise<PaymentReceipt> => {
+    throwIfAborted(context.signal);
+    const signer = options.getSigner ? await options.getSigner(network) : privateKeySigner(network);
+    const provider = signer.provider;
+    if (!provider || (await provider.getNetwork()).chainId !== BigInt(network.chainId)) throw new Error("Recovery provider is on the wrong payment chain");
+    const journal = attempt as { submissions?: { transactionHash?: string; transactionHashes?: Record<string, string> }[]; receipt?: { transactionHash?: string; transactionHashes?: Record<string, string> } };
+    const hashes = [...new Set([...(journal?.submissions ?? []).flatMap(entry => [entry.transactionHash, ...Object.values(entry.transactionHashes ?? {})]), journal?.receipt?.transactionHash,
+      ...Object.values(journal?.receipt?.transactionHashes ?? {})].filter((hash): hash is string => typeof hash === "string" && /^0x[0-9a-f]{64}$/iu.test(hash)))];
+    if (!hashes.length) throw new Error("Payment outcome unknown: journal contains no valid transaction hash");
+    const transactions: Record<string, string> = {};
+    const abi = new Interface(VAULT_ABI);
+    for (const hash of hashes) {
+      throwIfAborted(context.signal);
+      const transaction = await provider.getTransaction(hash);
+      const receipt = await provider.getTransactionReceipt(hash);
+      if (!transaction || !receipt || receipt.status !== 1) continue;
+      if (transaction.to?.toLowerCase() !== network.paymentVaultAddress.toLowerCase() || transaction.chainId !== BigInt(network.chainId)) continue;
+      if (merkle) {
+        if (transaction.data.toLowerCase() !== merkle.calldata.toLowerCase()) continue;
+        const decode = getBindings().decodeMerklePaymentReceipt;
+        if (!decode) throw new Error("WASM receipt decoder unavailable");
+        const result = decode(merkle, network.paymentVaultAddress, receipt.logs) as Pick<MerklePaymentReceipt, "winnerPoolHash" | "totalAmount">;
+        return { transactionHash: hash, ...result };
+      }
+      const decoded = abi.parseTransaction({ data: transaction.data });
+      if (decoded?.name !== "payForQuotes") continue;
+      const payments = decoded.args[0] as readonly { quoteHash: string; rewardsAddress: string; amount: bigint }[];
+      for (const quote of quotes) {
+        if (payments.some(paid => paid.quoteHash.toLowerCase().replace(/^0x/u, "") === quote.quoteHash.toLowerCase().replace(/^0x/u, "") &&
+          paid.rewardsAddress.toLowerCase() === quote.rewardsAddress.toLowerCase() && paid.amount === BigInt(quote.amount))) {
+          transactions[quote.quoteHash] = hash;
+        }
+      }
+    }
+    if (merkle || quotes.some(quote => !transactions[quote.quoteHash])) throw new Error("Payment is unconfirmed or does not cover the prepared intent; no new transaction was sent");
+    return { transactionHash: Object.values(transactions)[0]!, transactionHashes: transactions,
+      totalAmount: quotes.reduce((total, quote) => total + BigInt(quote.amount), 0n).toString() };
+  };
   return {
     pay: (network, quotes, context) => submit(network, quotes, context),
+    recover: (network, quotes, attempt, context) => recover(network, quotes, attempt, context),
+    recoverMerkle: async (network, request, attempt, context) => await recover(network, [], attempt, context, request) as MerklePaymentReceipt,
     payMerkle: async (network, request, context) => await submit(network, [], context, request) as MerklePaymentReceipt,
   };
 }

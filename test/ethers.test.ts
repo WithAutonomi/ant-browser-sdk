@@ -221,3 +221,23 @@ it("submits native Merkle calldata and retains the decoded actual settlement", a
   const submission = ctx.submitted.mock.calls[0]![0];
   expect((await submission.wait()).receipt).toEqual(receipt);
 });
+
+it("recovers a persisted transaction by reading its calldata and receipt without sending", async () => {
+  const { Interface } = await import("ethers");
+  const abi = new Interface(["function payForQuotes((address rewardsAddress,uint256 amount,bytes32 quoteHash)[] payments)"]);
+  const hash = `0x${"ab".repeat(32)}`;
+  const reads = {
+    getNetwork: vi.fn(async () => ({ chainId: BigInt(network.chainId) })),
+    getTransaction: vi.fn(async () => ({ to: network.paymentVaultAddress, chainId: BigInt(network.chainId),
+      data: abi.encodeFunctionData("payForQuotes", [quotes.map(quote => ({ ...quote, quoteHash: `0x${quote.quoteHash}` }))]) })),
+    getTransactionReceipt: vi.fn(async () => ({ status: 1 })),
+  };
+  const sendTransaction = vi.fn(() => { throw new Error("must not broadcast"); });
+  const payment = createEthersPaymentProvider({ getSigner: () => ({ provider: reads, sendTransaction }) as unknown as import("ethers").Signer });
+  const result = await payment.recover!(network, quotes, { submissions: [{ transactionHash: hash }] }, { report: vi.fn() });
+  expect(result).toMatchObject({ transactionHash: hash, totalAmount: "1" });
+  expect(sendTransaction).not.toHaveBeenCalled();
+  reads.getTransactionReceipt.mockResolvedValue({ status: 0 });
+  await expect(payment.recover!(network, quotes, { submissions: [{ transactionHash: hash }] }, { report: vi.fn() })).rejects.toThrow(/unconfirmed/);
+  expect(sendTransaction).not.toHaveBeenCalled();
+});

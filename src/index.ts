@@ -56,3 +56,5 @@ export type {
   VerifiedStorageQuote,
   WasmSource,
 } from "./types.js";
+
+export { storedUploadCheckpoints } from "./internal/record-store.js";
