@@ -8,6 +8,8 @@ import type {
 } from "../src/types.js";
 
 const state = vi.hoisted(() => ({
+  failedSeeds: [] as string[],
+  attemptedSeeds: [] as string[],
   hello: {
     type: "hello",
     protocol: "autonomi.web.poc.v5",
@@ -35,7 +37,12 @@ const state = vi.hoisted(() => ({
 
 vi.mock("../src/internal/runtime.js", () => {
   class NodeClient {
-    async connect() { return this; }
+    constructor(private endpoint: { multiaddr: string }) {}
+    async connect() {
+      state.attemptedSeeds.push(this.endpoint.multiaddr);
+      if (state.failedSeeds.includes(this.endpoint.multiaddr)) throw new Error("Seed unavailable");
+      return this;
+    }
     async hello(): Promise<unknown> {
       return state.hello;
     }
@@ -108,6 +115,8 @@ const file: PublicFile = {
 
 beforeEach(() => {
   state.networks.length = 0;
+  state.failedSeeds.length = 0;
+  state.attemptedSeeds.length = 0;
   state.hello.capabilities = ["get_chunk", "put_chunk", "chunk_protocol"];
   vi.stubGlobal("fetch", vi.fn(async () => Response.json({ jsonrpc: "2.0", id: 1, result: "0x7a69" })));
 });
@@ -978,4 +987,30 @@ for (const withSubmission of [false, true]) it(`journals malformed wallet eviden
     expect(evidence).toContainEqual(expect.objectContaining(receipt));
     expect(provider.pay).toHaveBeenCalledTimes(1);
   } finally { client.close(); }
+});
+
+it("fails over between trusted seeds and retains the complete profile for lookup", async () => {
+  const second = endpoint.replace("24000", "24001");
+  state.failedSeeds.push(endpoint);
+  const profile = { id: "test", seeds: [endpoint, second], payment: {
+    chainId: state.hello.payment.chain_id,
+    paymentTokenAddress: state.hello.payment.payment_token_address,
+    paymentVaultAddress: state.hello.payment.payment_vault_address,
+  } };
+  const client = await AutonomiClient.connectNetwork(profile);
+  try {
+    expect(state.attemptedSeeds).toEqual([endpoint, second]);
+    expect(client.connection.bootstrapMultiaddr).toBe(second);
+    expect(state.networks.at(-1)!.endpoints).toEqual(profile.seeds.map(multiaddr => ({ multiaddr })));
+    expect(state.networks[0]!.freed).toBe(true);
+  } finally { client.close(); }
+});
+
+it("rejects every seed with a payment identity outside the bundled profile", async () => {
+  await expect(AutonomiClient.connectNetwork({ id: "wrong-chain", seeds: [endpoint, endpoint.replace("24000", "24001")], payment: {
+    chainId: 1, paymentTokenAddress: state.hello.payment.payment_token_address,
+    paymentVaultAddress: state.hello.payment.payment_vault_address,
+  } })).rejects.toThrow(/does not match/);
+  expect(state.attemptedSeeds).toHaveLength(2);
+  expect(state.networks).toHaveLength(0);
 });
