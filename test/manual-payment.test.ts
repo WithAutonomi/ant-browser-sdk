@@ -160,3 +160,90 @@ describe("createManualPaymentProvider", () => {
     expect(selectedPayment.pay).toHaveBeenCalledOnce();
   });
 });
+
+const merkle = {
+  calldata: "0xabcd",
+  maximumAmount: "100",
+  depth: 2,
+  timestamp: 123,
+  poolHashes: ["aa".repeat(32), "bb".repeat(32)],
+};
+
+it("reviews the Merkle maximum and pays the immutable native plan only once", async () => {
+  const receipt = { transactionHash: `0x${"77".repeat(32)}`, winnerPoolHash: merkle.poolHashes[0]!, totalAmount: "80" };
+  walletPayment.payMerkle = vi.fn(async () => receipt);
+  let request!: ManualPaymentRequest;
+  const payment = createManualPaymentProvider({ payment: walletPayment, onRequest: next => { request = next; } });
+  const context = { submitted: vi.fn(), report: vi.fn(), decodeReceipt: vi.fn() };
+  const original = structuredClone(merkle);
+  const pending = payment.payMerkle!(network, original, context);
+  expect(request.totalAmountAtto).toBe("100");
+  expect(request.quotes).toEqual([]);
+  expect(request.merkle).toEqual(merkle);
+  original.poolHashes[0] = "cc".repeat(32);
+  original.calldata = "0xdead";
+  expect(Object.isFrozen(request.merkle?.poolHashes)).toBe(true);
+  expect(walletPayment.payMerkle).not.toHaveBeenCalled();
+  const paying = request.pay();
+  expect(request.pay()).toBe(paying);
+  expect(request.cancel()).toBe(false);
+  await expect(paying).resolves.toEqual(receipt);
+  await expect(pending).resolves.toEqual(receipt);
+  expect(walletPayment.payMerkle).toHaveBeenCalledExactlyOnceWith(network, merkle, context);
+  expect(walletPayment.pay).not.toHaveBeenCalled();
+});
+
+it("keeps Merkle review pending if the selected wallet cannot pay it", async () => {
+  let request!: ManualPaymentRequest;
+  const payment = createManualPaymentProvider({ payment: walletPayment, onRequest: next => { request = next; } });
+  const pending = payment.payMerkle!(network, merkle, { submitted: vi.fn(), report: vi.fn(), decodeReceipt: vi.fn() });
+  await expect(request.pay()).rejects.toThrow("payMerkle support");
+  expect(request.status).toBe("pending");
+  request.cancel();
+  await expect(pending).rejects.toThrow("cancelled");
+  expect(walletPayment.pay).not.toHaveBeenCalled();
+});
+
+it("forwards both journal recovery methods without a payment prompt or submission", async () => {
+  const receipt = { transactionHash: `0x${"77".repeat(32)}`, totalAmount: "42" };
+  walletPayment.recover = vi.fn(async () => receipt);
+  walletPayment.recoverMerkle = vi.fn(async () => ({ ...receipt, winnerPoolHash: merkle.poolHashes[0]! }));
+  walletPayment.payMerkle = vi.fn();
+  const onRequest = vi.fn();
+  const payment = createManualPaymentProvider({ payment: walletPayment, onRequest });
+  const attempt = { submissions: [{ transactionHash: receipt.transactionHash }] };
+  const context = { report: vi.fn() };
+  await expect(payment.recover!(network, quotes, attempt, context)).resolves.toEqual(receipt);
+  await expect(payment.recoverMerkle!(network, merkle, attempt, context)).resolves.toMatchObject(receipt);
+  expect(walletPayment.recover).toHaveBeenCalledExactlyOnceWith(network, quotes, attempt, context);
+  expect(walletPayment.recoverMerkle).toHaveBeenCalledExactlyOnceWith(network, merkle, attempt, context);
+  expect(walletPayment.pay).not.toHaveBeenCalled();
+  expect(walletPayment.payMerkle).not.toHaveBeenCalled();
+  expect(onRequest).not.toHaveBeenCalled();
+});
+
+it("recovers using the wallet selected at review even when there was no default", async () => {
+  const failure = new Error("RPC unavailable after submission");
+  walletPayment.pay = vi.fn(async () => { throw failure; });
+  walletPayment.recover = vi.fn(async () => ({ transactionHash: `0x${"77".repeat(32)}`, totalAmount: "42" }));
+  let request!: ManualPaymentRequest;
+  const payment = createManualPaymentProvider({ onRequest: next => { request = next; } });
+  const pending = payment.pay(network, quotes, { submitted: vi.fn(), report: vi.fn() });
+  await expect(request.pay(walletPayment)).rejects.toBe(failure);
+  await expect(pending).rejects.toBe(failure);
+  await payment.recover!(network, quotes, {}, { report: vi.fn() });
+  expect(walletPayment.recover).toHaveBeenCalledOnce();
+  expect(walletPayment.pay).toHaveBeenCalledOnce();
+});
+
+it("does not replace missing or failed journal recovery with another payment", async () => {
+  const onRequest = vi.fn();
+  const payment = createManualPaymentProvider({ payment: walletPayment, onRequest });
+  await expect(payment.recover!(network, quotes, {}, { report: vi.fn() })).rejects.toThrow("does not support journal recovery");
+  await expect(payment.recoverMerkle!(network, merkle, {}, { report: vi.fn() })).rejects.toThrow("does not support Merkle journal recovery");
+  const failure = new Error("receipt is still unavailable");
+  walletPayment.recover = vi.fn(async () => { throw failure; });
+  await expect(payment.recover!(network, quotes, {}, { report: vi.fn() })).rejects.toBe(failure);
+  expect(walletPayment.pay).not.toHaveBeenCalled();
+  expect(onRequest).not.toHaveBeenCalled();
+});

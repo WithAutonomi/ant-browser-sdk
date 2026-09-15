@@ -1,9 +1,13 @@
 import type {
+  MerklePaymentContext,
+  MerklePaymentRequest,
+  PaymentContext,
   PaymentNetwork,
   PaymentProvider,
   PaymentReceipt,
   VerifiedStorageQuote,
 } from "./types.js";
+import { snapshot } from "./internal/snapshot.js";
 
 export type ManualPaymentStatus =
   | "pending"
@@ -16,7 +20,9 @@ export type ManualPaymentStatus =
 export interface ManualPaymentRequest {
   readonly network: Readonly<PaymentNetwork>;
   readonly quotes: readonly Readonly<VerifiedStorageQuote>[];
-  /** Decimal atto-token sum of every verified quote. */
+  /** Native Merkle plan, when present; quotes is empty for this payment mode. */
+  readonly merkle?: Readonly<MerklePaymentRequest>;
+  /** Exact single-quote total, or the maximum Merkle charge, in decimal atto-tokens. */
   readonly totalAmountAtto: string;
   readonly status: ManualPaymentStatus;
   /**
@@ -49,92 +55,125 @@ export function createManualPaymentProvider(
     throw new TypeError("The default wallet must be a PaymentProvider");
   }
 
-  return {
-    async pay(network, quotes, context): Promise<PaymentReceipt> {
-      if (quotes.length === 0) return { totalAmount: "0" };
+  let recoveryPayment = options.payment;
 
-      const paymentNetwork = { ...network };
-      Object.freeze(paymentNetwork);
-      const paymentQuotes = quotes.map((quote) => {
-        const snapshot = { ...quote };
-        Object.freeze(snapshot);
-        return snapshot;
-      });
-      Object.freeze(paymentQuotes);
-      const totalAmountAtto = quoteTotal(paymentQuotes);
+  function recoveryProvider(): PaymentProvider {
+    if (!recoveryPayment) throw new Error("Select a wallet provider with payment recovery support");
+    return recoveryPayment;
+  }
 
-      let status: ManualPaymentStatus = "pending";
-      let walletPayment: Promise<PaymentReceipt> | undefined;
-      let resolveUpload!: (receipt: PaymentReceipt) => void;
-      let rejectUpload!: (error: unknown) => void;
-      const uploadPayment = new Promise<PaymentReceipt>((resolve, reject) => {
-        resolveUpload = resolve;
-        rejectUpload = reject;
-      });
+  async function review<T extends PaymentReceipt>(
+    network: PaymentNetwork,
+    quotes: readonly VerifiedStorageQuote[],
+    context: PaymentContext,
+    merkle: MerklePaymentRequest | undefined,
+    submit: (payment: PaymentProvider) => Promise<T>,
+  ): Promise<T> {
+    const paymentNetwork = snapshot(network);
+    const paymentQuotes = snapshot(quotes);
+    const totalAmountAtto = merkle ? merkle.maximumAmount : quoteTotal(paymentQuotes);
+    if (!/^\d+$/u.test(totalAmountAtto)) throw new TypeError("Storage payment has a non-decimal amount");
 
-      const request: ManualPaymentRequest = {
-        network: paymentNetwork,
-        quotes: paymentQuotes,
-        totalAmountAtto,
-        get status() {
-          return status;
-        },
-        pay(payment = options.payment): Promise<PaymentReceipt> {
-          if (walletPayment) return walletPayment;
-          if (status !== "pending") {
-            return Promise.reject(
-              new Error(`Storage payment cannot start while request is ${status}`),
-            );
-          }
-          if (!payment || typeof payment.pay !== "function") {
-            return Promise.reject(
-              new Error("Select a wallet PaymentProvider before paying"),
-            );
-          }
-          status = "paying";
-          walletPayment = Promise.resolve().then(() =>
-            payment.pay(paymentNetwork, paymentQuotes, context),
+    let status: ManualPaymentStatus = "pending";
+    let walletPayment: Promise<T> | undefined;
+    let resolveUpload!: (receipt: T) => void;
+    let rejectUpload!: (error: unknown) => void;
+    const uploadPayment = new Promise<T>((resolve, reject) => {
+      resolveUpload = resolve;
+      rejectUpload = reject;
+    });
+
+    const request: ManualPaymentRequest = {
+      network: paymentNetwork,
+      quotes: paymentQuotes,
+      totalAmountAtto,
+      ...(merkle ? { merkle } : {}),
+      get status() {
+        return status;
+      },
+      pay(payment = options.payment): Promise<PaymentReceipt> {
+        if (walletPayment) return walletPayment;
+        if (status !== "pending") {
+          return Promise.reject(
+            new Error(`Storage payment cannot start while request is ${status}`),
           );
-          void walletPayment.then(
-            (receipt) => {
-              status = "paid";
-              resolveUpload(receipt);
-            },
-            (error: unknown) => {
-              status = "failed";
-              rejectUpload(error);
-            },
-          );
-          return walletPayment;
-        },
-        cancel(reason?: unknown): boolean {
-          if (status !== "pending") return false;
-          status = "cancelled";
-          rejectUpload(cancellationError(reason));
-          return true;
-        },
-      };
-      Object.freeze(request);
-
-      const abort = (): void => {
-        if (context.signal) request.cancel(context.signal.reason);
-      };
-      if (context.signal?.aborted) abort();
-      else context.signal?.addEventListener("abort", abort, { once: true });
-
-      try {
-        if (status === "pending") {
-          const notified = options.onRequest(request);
-          void Promise.resolve(notified).catch((error: unknown) => request.cancel(error));
         }
-      } catch (error) {
-        request.cancel(error);
+        if (!payment || typeof payment.pay !== "function") {
+          return Promise.reject(
+            new Error("Select a wallet PaymentProvider before paying"),
+          );
+        }
+        if (merkle && typeof payment.payMerkle !== "function") {
+          return Promise.reject(new Error("Select a wallet PaymentProvider with payMerkle support"));
+        }
+        recoveryPayment = payment;
+        status = "paying";
+        walletPayment = Promise.resolve().then(() => submit(payment));
+        void walletPayment.then(
+          (receipt) => {
+            status = "paid";
+            resolveUpload(receipt);
+          },
+          (error: unknown) => {
+            status = "failed";
+            rejectUpload(error);
+          },
+        );
+        return walletPayment;
+      },
+      cancel(reason?: unknown): boolean {
+        if (status !== "pending") return false;
+        status = "cancelled";
+        rejectUpload(cancellationError(reason));
+        return true;
+      },
+    };
+    Object.freeze(request);
+
+    const abort = (): void => {
+      if (context.signal) request.cancel(context.signal.reason);
+    };
+    if (context.signal?.aborted) abort();
+    else context.signal?.addEventListener("abort", abort, { once: true });
+
+    try {
+      if (status === "pending") {
+        const notified = options.onRequest(request);
+        void Promise.resolve(notified).catch((error: unknown) => request.cancel(error));
       }
-      try {
-        return await uploadPayment;
-      } finally {
-        context.signal?.removeEventListener("abort", abort);
-      }
+    } catch (error) {
+      request.cancel(error);
+    }
+    try {
+      return await uploadPayment;
+    } finally {
+      context.signal?.removeEventListener("abort", abort);
+    }
+  }
+
+  return {
+    async pay(network, quotes, context) {
+      if (quotes.length === 0) return { totalAmount: "0" };
+      const savedNetwork = snapshot(network);
+      const savedQuotes = snapshot(quotes);
+      return review(savedNetwork, savedQuotes, context, undefined,
+        payment => payment.pay(savedNetwork, savedQuotes, context));
+    },
+    async payMerkle(network, request, context: MerklePaymentContext) {
+      const savedNetwork = snapshot(network);
+      const savedRequest = snapshot(request);
+      return review(savedNetwork, [], context, savedRequest,
+        payment => payment.payMerkle!(savedNetwork, savedRequest, context));
+    },
+    async recover(network, quotes, attempt, context) {
+      const payment = recoveryProvider();
+      if (!payment.recover) throw new Error("Wallet PaymentProvider does not support journal recovery; no new payment was requested");
+      return payment.recover(network, quotes, attempt, context);
+    },
+    async recoverMerkle(network, request, attempt, context) {
+      const payment = recoveryProvider();
+      if (!payment.recoverMerkle) throw new Error("Wallet PaymentProvider does not support Merkle journal recovery; no new payment was requested");
+      return payment.recoverMerkle(network, request, attempt, context);
     },
   };
 }

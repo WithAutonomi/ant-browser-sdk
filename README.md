@@ -423,8 +423,8 @@ import { createManualPaymentProvider } from "@autonomi/browser-sdk";
 
 const payment = createManualPaymentProvider({
   onRequest(request) {
-    price.textContent = `${request.totalAmountAtto} atto-tokens`;
-    quoteCount.textContent = String(request.quotes.length);
+    price.textContent = `${request.merkle ? "Up to " : ""}${request.totalAmountAtto} atto-tokens`;
+    quoteCount.textContent = request.merkle ? "Merkle payment" : String(request.quotes.length);
 
     payButton.onclick = () => {
       void request.pay(getSelectedWalletPayment()).catch(showError);
@@ -444,6 +444,14 @@ const result = await client.upload(file, { payment });
 review and waits for its confirmed receipt. Alternatively, configure a default
 provider in `createManualPaymentProvider()` and call `request.pay()` without an
 argument. The wallet choice is locked once payment begins.
+
+The same review callback handles native Merkle plans: `request.merkle` contains
+the prepared plan, `quotes` is empty, and `totalAmountAtto` is the maximum charge.
+The confirmed receipt reports the actual charge. The selected wallet must support
+`payMerkle`; unsupported wallets leave the review pending so another can be chosen.
+Journal recovery delegates to `recover`/`recoverMerkle` on the default provider
+or the last provider selected for payment. Recovery does not open a review or
+submit a transaction. After reload, configure the wallet provider again.
 
 See the complete [manual-payment example](examples/manual-payment).
 

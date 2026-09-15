@@ -120,7 +120,9 @@ window.addEventListener("beforeunload", () => {
 function showQuotes(request: ManualPaymentRequest): void {
   quotePanel.classList.remove("hidden");
   price.value =
-    `${request.totalAmountAtto} atto-tokens across ${request.quotes.length} quotes`;
+    request.merkle
+      ? `Up to ${request.totalAmountAtto} atto-tokens for this Merkle payment`
+      : `${request.totalAmountAtto} atto-tokens across ${request.quotes.length} quotes`;
   quoteList.replaceChildren(
     ...request.quotes.map((quote) => {
       const item = document.createElement("li");
