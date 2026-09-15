@@ -1,6 +1,12 @@
 import { expectTypeOf, it } from "vitest";
 // Exercise the published declarations rather than the source-only internal factory.
-import type { AutonomiClient, PublicFileReader } from "@withautonomi/browser-sdk";
+import type { AutonomiClient, PublicFileReader, NetworkConnectionOptions, NetworkDefaults, getNetworkDefaults } from "@withautonomi/browser-sdk";
+
+it("exposes typed network defaults and both connection forms", () => {
+  expectTypeOf<Awaited<ReturnType<typeof getNetworkDefaults>>>().toEqualTypeOf<NetworkDefaults>();
+  expectTypeOf<typeof AutonomiClient.connect>().toMatchTypeOf<(options?: NetworkConnectionOptions) => Promise<AutonomiClient>>();
+  expectTypeOf<typeof AutonomiClient.connect>().toMatchTypeOf<(multiaddr: string) => Promise<AutonomiClient>>();
+});
 
 it("exposes readers through openFile without a public constructor or factory", () => {
   expectTypeOf<Awaited<ReturnType<AutonomiClient["openFile"]>>>().toEqualTypeOf<PublicFileReader>();

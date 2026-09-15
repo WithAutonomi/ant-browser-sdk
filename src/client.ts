@@ -1,4 +1,4 @@
-import { snapshotNetworkProfile, type NetworkProfile } from "./network-profile.js";
+import { getNetworkDefaults, snapshotNetworkProfile, type NetworkConnectionOptions, type NetworkProfile } from "./network-profile.js";
 import { saveUploadCheckpoint } from "./internal/record-store.js";
 import { assertFileSize, SDK_LIMITS } from "./limits.js";
 import {
@@ -100,7 +100,11 @@ export class AutonomiClient {
 
   /** Connect using application-bundled seeds and payment identity, with seed failover. */
   static async connectNetwork(profile: NetworkProfile, options: Omit<ClientOptions, "expectedPaymentNetwork"> = {}): Promise<AutonomiClient> {
+    throwIfAborted(options.signal);
     const trusted = snapshotNetworkProfile(profile);
+    await abortable(initializeClientWasm(options.wasm), options.signal);
+    // Validate the entire selected set before attempting any seed.
+    const endpoints = trusted.seeds.map(parseBootstrapMultiaddr);
     let lastError: unknown;
     for (const seed of trusted.seeds) {
       throwIfAborted(options.signal);
@@ -108,11 +112,14 @@ export class AutonomiClient {
         const client = await this.connect(seed, { ...options, expectedPaymentNetwork: trusted.payment });
         try {
           const { BrowserNetworkClient } = getBindings();
-          const network = new BrowserNetworkClient(trusted.seeds.map(parseBootstrapMultiaddr));
+          const network = new BrowserNetworkClient(endpoints);
           client.#network.close(); client.#network.free(); client.#network = network;
           return client;
         } catch (error) { client.close(); throw error; }
-      } catch (error) { lastError = error; }
+      } catch (error) {
+        if (isAbort(error, options.signal)) throw error;
+        lastError = error;
+      }
     }
     throw lastError ?? new AutonomiError("CONNECTION_FAILED", "No trusted seed was reachable");
   }
@@ -122,10 +129,22 @@ export class AutonomiClient {
    *
    * Pass one complete, certificate-pinned WebRTC Direct multiaddress.
    */
+  static connect(options?: NetworkConnectionOptions): Promise<AutonomiClient>;
+  static connect(bootstrapMultiaddr: string, options?: ClientOptions): Promise<AutonomiClient>;
   static async connect(
-    bootstrapMultiaddr: string,
+    bootstrapMultiaddr: string | NetworkConnectionOptions = {},
     options: ClientOptions = {},
   ): Promise<AutonomiClient> {
+    if (typeof bootstrapMultiaddr !== "string") {
+      const { network = "mainnet", ...settings } = bootstrapMultiaddr;
+      if (typeof network === "string" && network !== "mainnet") {
+        throw new AutonomiError("INVALID_SOURCE", `Unknown network: ${network}`);
+      }
+      // Snapshot custom trust settings before the first asynchronous operation.
+      const profile = network === "mainnet"
+        ? await getNetworkDefaults(settings) : snapshotNetworkProfile(network);
+      return this.connectNetwork(profile, settings);
+    }
     const report = progressReporter("connect", operationId(), "initializing", (event) => {
       if (options.onProgress) safelyNotify(options.onProgress, event);
     }, options.signal, options.parentOperationId);

@@ -220,6 +220,11 @@ export function decryptPublicFile(data_map_content: Uint8Array, encrypted_conten
 export function encryptPublicFile(content: Uint8Array): any;
 
 /**
+ * Read bundled mainnet WebRTC seeds and evmlib payment defaults without I/O.
+ */
+export function mainnetNetworkDefaults(): any;
+
+/**
  * Validate and normalize browser bootstrap and public-file metadata.
  */
 export function parseBrowserManifest(value: any): any;
@@ -268,6 +273,32 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly __wbg_browserfileencryptor_free: (a: number, b: number) => void;
+    readonly __wbg_browseriterativelookup_free: (a: number, b: number) => void;
+    readonly browserfileencryptor_finish: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
+    readonly browserfileencryptor_new: (a: number, b: any) => [number, number, number];
+    readonly browserfileencryptor_nextRecord: (a: number) => [number, number, number];
+    readonly browseriterativelookup_addCandidates: (a: number, b: any) => [number, number];
+    readonly browseriterativelookup_new: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
+    readonly browseriterativelookup_queriedPeers: (a: number) => [number, number, number];
+    readonly browseriterativelookup_results: (a: number) => [number, number, number];
+    readonly browseriterativelookup_run: (a: number, b: any) => any;
+    readonly contentAddress: (a: number, b: number) => [number, number];
+    readonly decodeMerklePaymentReceipt: (a: any, b: number, c: number, d: any) => [number, number, number];
+    readonly decodePublicDataMap: (a: number, b: number) => [number, number, number];
+    readonly decryptPublicFile: (a: number, b: number, c: any) => [number, number, number];
+    readonly encryptPublicFile: (a: number, b: number) => [number, number, number];
+    readonly mainnetNetworkDefaults: () => [number, number, number];
+    readonly parseBrowserManifest: (a: any) => [number, number, number];
+    readonly parseResponseFrame: (a: number, b: number) => [number, number, number];
+    readonly parseWebRtcDirectMultiaddr: (a: any) => [number, number, number];
+    readonly paymentQuoteHash: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
+    readonly serverAnswerFromEndpoint: (a: any, b: number, c: number) => [number, number, number];
+    readonly start: () => void;
+    readonly verifyRecord: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+    readonly verifyStorageQuote: (a: any, b: number, c: number, d: number, e: number) => [number, number, number];
+    readonly webRtcDirectV2ServerCredential: (a: number, b: number) => [number, number, number, number];
+    readonly browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
     readonly __wbg_browserfilereader_free: (a: number, b: number) => void;
     readonly __wbg_browsernetworkclient_free: (a: number, b: number) => void;
     readonly __wbg_browsernodeclient_free: (a: number, b: number) => void;
@@ -293,31 +324,6 @@ export interface InitOutput {
     readonly browsernodesession_peerId: (a: number) => [number, number];
     readonly browsernodesession_putChunk: (a: number, b: number, c: number, d: number, e: number, f: any, g: number, h: number) => any;
     readonly browsernodesession_quoteChunk: (a: number, b: number, c: number, d: number) => any;
-    readonly browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
-    readonly __wbg_browserfileencryptor_free: (a: number, b: number) => void;
-    readonly __wbg_browseriterativelookup_free: (a: number, b: number) => void;
-    readonly browserfileencryptor_finish: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
-    readonly browserfileencryptor_new: (a: number, b: any) => [number, number, number];
-    readonly browserfileencryptor_nextRecord: (a: number) => [number, number, number];
-    readonly browseriterativelookup_addCandidates: (a: number, b: any) => [number, number];
-    readonly browseriterativelookup_new: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
-    readonly browseriterativelookup_queriedPeers: (a: number) => [number, number, number];
-    readonly browseriterativelookup_results: (a: number) => [number, number, number];
-    readonly browseriterativelookup_run: (a: number, b: any) => any;
-    readonly contentAddress: (a: number, b: number) => [number, number];
-    readonly decodeMerklePaymentReceipt: (a: any, b: number, c: number, d: any) => [number, number, number];
-    readonly decodePublicDataMap: (a: number, b: number) => [number, number, number];
-    readonly decryptPublicFile: (a: number, b: number, c: any) => [number, number, number];
-    readonly encryptPublicFile: (a: number, b: number) => [number, number, number];
-    readonly parseBrowserManifest: (a: any) => [number, number, number];
-    readonly parseResponseFrame: (a: number, b: number) => [number, number, number];
-    readonly parseWebRtcDirectMultiaddr: (a: any) => [number, number, number];
-    readonly paymentQuoteHash: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
-    readonly serverAnswerFromEndpoint: (a: any, b: number, c: number) => [number, number, number];
-    readonly start: () => void;
-    readonly verifyRecord: (a: number, b: number, c: number, d: number) => [number, number, number, number];
-    readonly verifyStorageQuote: (a: any, b: number, c: number, d: number, e: number) => [number, number, number];
-    readonly webRtcDirectV2ServerCredential: (a: number, b: number) => [number, number, number, number];
     readonly BrotliDecoderCreateInstance: (a: number, b: number, c: number) => number;
     readonly BrotliDecoderDecompress: (a: number, b: number, c: number, d: number) => number;
     readonly BrotliDecoderDecompressPrealloc: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => void;
@@ -340,9 +346,9 @@ export interface InitOutput {
     readonly BrotliDecoderVersion: () => number;
     readonly wasm_bindgen__convert__closures_____invoke__h6c639ae6ac52cf17: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen__convert__closures_____invoke__h1a72669c4838b5a0: (a: number, b: number, c: any, d: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h42960cc3c3fd9170: (a: number, b: number, c: any) => any;
-    readonly wasm_bindgen__convert__closures_____invoke__h15f5d3dfb097fb51: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h15f5d3dfb097fb51_3: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__hbb1c7de74af51382: (a: number, b: number, c: any) => any;
+    readonly wasm_bindgen__convert__closures_____invoke__h40f769dcdfcd605a: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h40f769dcdfcd605a_3: (a: number, b: number, c: any) => void;
     readonly wasm_bindgen__convert__closures_____invoke__hc4b509476b4504c4: (a: number, b: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

@@ -44,6 +44,69 @@ npm install @wagmi/core viem
 The package is ESM-only. Installing or building it with npm requires Node.js
 20.19 or newer.
 
+## Network defaults
+
+The SDK reads mainnet configuration from the bundled Rust core:
+
+```ts
+import { AutonomiClient, getNetworkDefaults } from "@withautonomi/browser-sdk";
+
+const defaults = await getNetworkDefaults();
+// defaults: { id, seeds, payment, rpcUrl }
+// `seeds` contains only WebRTC Direct multiaddresses, never native QUIC addresses.
+const client = await AutonomiClient.connect();
+// Equivalent: AutonomiClient.connect({ network: "mainnet", payment, onProgress });
+```
+
+**Mainnet WebRTC seeds have not been published yet.** `getNetworkDefaults()`
+currently returns an empty seed list along with the mainnet payment identity and
+public RPC URL. `connect()` rejects with `CONNECTION_FAILED` and a message naming
+that missing configuration. It does not try QUIC endpoints or contact the RPC.
+Use an explicit devnet address or trusted custom profile until seeds are added.
+
+To use an application-owned network, pass a profile:
+
+```ts
+const client = await AutonomiClient.connect({
+  network: {
+    id: "my-devnet",
+    seeds: trustedWebRtcMultiaddrs,
+    payment: expectedPaymentNetwork,
+  },
+  payment,
+});
+```
+
+Profiles require at least one distinct, complete WebRTC Direct multiaddress.
+`connectNetwork(profile, options)` also remains available. The SDK validates all
+seeds before dialing, tries them in order, and checks the authenticated payment
+identity against the profile. A custom profile never falls back to mainnet.
+Existing `connect(multiaddr, options)` behavior is unchanged.
+
+`getNetworkDefaults({ wasm, signal })` supports a custom WASM source and
+cancellation. Its frozen result can also supply `rpcUrl` when configuring Ethers
+or a Wagmi public-client transport for mainnet; wallet providers and explicit
+application RPC settings remain authoritative. Payment adapters still verify
+provider chains. Obtaining defaults loads WASM as needed and issues no EVM RPC.
+
+### Adding mainnet seeds (SDK maintainers)
+
+The shared client owns `ant-core/resources/bootstrap_peers.toml`, with `quic` and
+`webrtc` arrays of multiaddresses. Native release packaging ships the same file;
+WASM exposes only `webrtc`. To activate browser defaults:
+
+1. Add verified full `/ip4|ip6/.../udp/.../webrtc-direct/certhash/.../p2p/...`
+   addresses to `webrtc`. Keep `quic` addresses in their own array.
+2. Commit the shared source and run
+   `ANT_CLIENT_DIR=/path/to/ant-client-web-support npm run sync:wasm` from a clean
+   checkout. Commit all generated WASM files and provenance together.
+3. Run the SDK checks, example builds, package checks, and a compatible browser
+   devnet test. Validate the real mainnet seeds before publishing the SDK.
+
+No TypeScript endpoint constants or connection changes are needed when the seed
+list is populated. Publish updated artifacts when seeds change and retain an
+operational overlap for old certificate pins.
+
 ## Quick start
 
 Connect with one complete WebRTC Direct multiaddress, then download a public file
@@ -728,7 +791,7 @@ IndexedDB, an upload worker, or payment RPC access.
 - Enough page memory for whole-file downloads and `Uint8Array` uploads
 
 Ensure the bundler or deployment pipeline serves the package's WASM and worker
-assets. Obtain bootstrap multiaddresses through a trusted deployment channel:
+assets. For custom profiles, obtain bootstrap multiaddresses through a trusted deployment channel:
 each address embeds a certificate pin and peer identity. Nodes and storage quotes
 are authenticated, but endpoint publication, certificate rotation, availability,
 and traffic policy remain deployment responsibilities.
@@ -739,7 +802,8 @@ and traffic policy remain deployment responsibilities.
 | --- | --- |
 | `SDK_LIMITS` | Inspect bundled file, range, concurrency, and media limits |
 | `getBrowserCapabilities()` | Inspect browser API availability without prompting |
-| `AutonomiClient.connect()` | Initialize WASM and authenticate a bootstrap node |
+| `AutonomiClient.connect()` | Use mainnet defaults, a trusted profile, or an explicit WebRTC seed |
+| `getNetworkDefaults()` | Read bundled mainnet WebRTC seeds, payment identity, and default RPC |
 | `client.findClosest()` | Discover nodes closest to a 32-byte hex target |
 | `client.upload()` | Self-encrypt, pay for, and publish a public file |
 | `client.pendingUploads` | Inspect retained input and payment history after failures |
@@ -827,7 +891,7 @@ behavior and do not imply parity with native filesystem resume.
   Payment providers receive the selected verified quotes and amounts from Rust.
 - This package owns initialization, TypeScript types, browser file staging,
   wallet adapters, save flows, media bridging, errors, and lifecycle management.
-- Applications own UI, wallet and chain switching, policy, bootstrap distribution,
+- Applications own UI, wallet and chain switching, policy, custom bootstrap distribution,
   and durable metadata for published files.
 
 ### Persisting upload recovery

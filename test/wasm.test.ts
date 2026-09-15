@@ -3,10 +3,29 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 import { corePublicFile, publicFileFromCore } from "../src/internal/protocol.js";
 import { encryptPublicFile, parseBrowserManifest } from "../src/wasm/ant_core.js";
-import { initializeWasm, SDK_LIMITS } from "../src/index.js";
+import { AutonomiClient, getNetworkDefaults, initializeWasm, SDK_LIMITS } from "../src/index.js";
 import { getBindings } from "../src/internal/runtime.js";
 
 describe("packaged Rust/WASM boundary", () => {
+  it("exposes shared mainnet payment defaults with no QUIC seeds or network requests", async () => {
+    await initializeWasm(await readFile(new URL("../src/wasm/ant_core_bg.wasm", import.meta.url)));
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    try {
+      const defaults = await getNetworkDefaults();
+      expect(defaults).toMatchObject({ id: "mainnet", payment: { chainId: 42161 }, rpcUrl: "https://arb1.arbitrum.io/rpc" });
+      for (const seed of defaults.seeds) {
+        expect(getBindings().parseWebRtcDirectMultiaddr(seed).multiaddr).toBe(seed);
+      }
+      expect(defaults.payment.paymentTokenAddress).toMatch(/^0x[0-9a-f]{40}$/);
+      expect(defaults.payment.paymentVaultAddress).toMatch(/^0x[0-9a-f]{40}$/);
+      expect(Object.isFrozen(defaults.seeds)).toBe(true);
+      expect(Object.isFrozen(defaults.payment)).toBe(true);
+      if (defaults.seeds.length === 0) {
+        await expect(AutonomiClient.connect()).rejects.toMatchObject({ code: "CONNECTION_FAILED", message: expect.stringContaining("No WebRTC bootstrap seeds") });
+      }
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally { fetchSpy.mockRestore(); }
+  });
   it("loads the checked-in module and validates WebRTC Direct multiaddresses", async () => {
     const bytes = await readFile(
       new URL("../src/wasm/ant_core_bg.wasm", import.meta.url),

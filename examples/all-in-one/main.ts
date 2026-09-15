@@ -1,4 +1,4 @@
-import { AutonomiClient, type MediaSource } from "@withautonomi/browser-sdk";
+import { AutonomiClient, type ClientOptions, type MediaSource } from "@withautonomi/browser-sdk";
 import { createEthersPaymentProvider } from "@withautonomi/browser-sdk/ethers";
 import "../shared/style.css";
 
@@ -22,9 +22,11 @@ connectButton.addEventListener("click", async () => {
   setBusy(connectButton, true);
   try {
     client?.close();
-    client = await AutonomiClient.connect(bootstrap.value.trim(), {
+    const options: ClientOptions = {
       onProgress: ({ operation, message }) => write(`[${operation}] ${message}`),
-    });
+    };
+    const seed = bootstrap.value.trim();
+    client = seed ? await AutonomiClient.connect(seed, options) : await AutonomiClient.connect(options);
     connection.value = `Connected to ${client.connection.bootstrap.peerId.slice(0, 16)}…`;
     uploadButton.disabled = false;
     downloadButton.disabled = false;

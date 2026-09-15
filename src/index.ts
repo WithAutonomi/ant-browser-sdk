@@ -60,4 +60,4 @@ export type {
 } from "./types.js";
 
 export { storedUploadCheckpoints } from "./internal/record-store.js";
-export type { NetworkProfile } from "./network-profile.js";
+export { getNetworkDefaults, type NetworkProfile, type NetworkDefaults, type NetworkDefaultsOptions, type NetworkConnectionOptions } from "./network-profile.js";

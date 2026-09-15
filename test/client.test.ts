@@ -10,6 +10,7 @@ import type {
 const state = vi.hoisted(() => ({
   failedSeeds: [] as string[],
   attemptedSeeds: [] as string[],
+  defaultSeeds: [] as string[],
   hello: {
     type: "hello",
     protocol: "autonomi.web.poc.v5",
@@ -78,6 +79,7 @@ vi.mock("../src/internal/runtime.js", () => {
   return {
     initializeClientWasm: vi.fn(async (source?: unknown) => source),
     getBindings: () => ({
+      mainnetNetworkDefaults: () => ({ id: "mainnet", seeds: state.defaultSeeds, payment: state.hello.payment, rpc_url: "https://rpc.example" }),
       BrowserNodeClient: NodeClient,
       BrowserNetworkClient: NetworkClient,
       parseWebRtcDirectMultiaddr: (endpoint: unknown) => {
@@ -119,6 +121,7 @@ beforeEach(() => {
   state.networks.length = 0;
   state.failedSeeds.length = 0;
   state.attemptedSeeds.length = 0;
+  state.defaultSeeds.length = 0;
   state.hello.capabilities = ["get_chunk", "put_chunk", "chunk_protocol"];
   vi.stubGlobal("fetch", vi.fn(async () => Response.json({ jsonrpc: "2.0", id: 1, result: "0x7a69" })));
 });
@@ -128,6 +131,48 @@ afterEach(() => {
 });
 
 describe("AutonomiClient", () => {
+  it("reports missing mainnet WebRTC seeds without dialing or accessing payment RPC", async () => {
+    await expect(AutonomiClient.connect()).rejects.toMatchObject({
+      code: "CONNECTION_FAILED", message: expect.stringContaining("No WebRTC bootstrap seeds configured for mainnet"),
+    });
+    expect(state.attemptedSeeds).toEqual([]);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("uses newly populated mainnet seeds with failover", async () => {
+    const second = endpoint.replace("24000", "24001");
+    state.defaultSeeds.push(endpoint, second);
+    state.failedSeeds.push(endpoint);
+    const client = await AutonomiClient.connect({ network: "mainnet" });
+    expect(state.attemptedSeeds).toEqual([endpoint, second]);
+    expect(fetch).not.toHaveBeenCalled();
+    client.close();
+    expect(state.networks.every(n => n.closed && n.freed)).toBe(true);
+  });
+
+  it("cancels a default connection before dialing", async () => {
+    state.defaultSeeds.push(endpoint);
+    const controller = new AbortController();
+    controller.abort("stop");
+    await expect(AutonomiClient.connect({ signal: controller.signal })).rejects.toBe("stop");
+    expect(state.attemptedSeeds).toEqual([]);
+  });
+
+  it("keeps an empty custom profile authoritative even when mainnet has seeds", async () => {
+    state.defaultSeeds.push(endpoint);
+    await expect(AutonomiClient.connect({ network: { id: "devnet", seeds: [], payment: {
+      chainId: 31337, paymentTokenAddress: `0x${"11".repeat(20)}`, paymentVaultAddress: `0x${"22".repeat(20)}`,
+    } } })).rejects.toMatchObject({ code: "CONNECTION_FAILED", message: expect.stringContaining("devnet") });
+    expect(state.attemptedSeeds).toEqual([]);
+  });
+
+  it("validates all custom seeds before dialing a valid first seed", async () => {
+    await expect(AutonomiClient.connectNetwork({ id: "mixed", seeds: [endpoint, "/ip4/127.0.0.1/udp/10000/quic"], payment: {
+      chainId: 31337, paymentTokenAddress: `0x${"11".repeat(20)}`, paymentVaultAddress: `0x${"22".repeat(20)}`,
+    } })).rejects.toMatchObject({ code: "INVALID_SOURCE" });
+    expect(state.attemptedSeeds).toEqual([]);
+  });
+
   it("authenticates a direct endpoint and derives its payment network", async () => {
     const progress: string[] = [];
     const client = await AutonomiClient.connect(endpoint, {

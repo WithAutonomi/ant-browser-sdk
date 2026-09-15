@@ -3,6 +3,7 @@ import initAntCore, {
   BrowserNodeClient,
   parseWebRtcDirectMultiaddr,
   decodeMerklePaymentReceipt,
+  mainnetNetworkDefaults,
 } from "../wasm/ant_core.js";
 import { AutonomiError } from "../errors.js";
 import type { WasmSource } from "../types.js";
@@ -71,6 +72,7 @@ export interface RawNodeSession {
 }
 
 export interface WasmBindings {
+  mainnetNetworkDefaults(): unknown;
   BrowserNetworkClient: new (endpoints: unknown) => RawNetworkClient;
   BrowserNodeClient: new (endpoint: unknown) => RawNodeClient;
   parseWebRtcDirectMultiaddr(value: unknown): { multiaddr: string };
@@ -153,5 +155,6 @@ export function getBindings(): WasmBindings {
     BrowserNodeClient,
     parseWebRtcDirectMultiaddr,
     decodeMerklePaymentReceipt,
+    mainnetNetworkDefaults,
   };
 }
