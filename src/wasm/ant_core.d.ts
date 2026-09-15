@@ -112,6 +112,23 @@ export class BrowserNetworkClient {
      */
     openPublicFile(file: any, on_progress?: Function | null): Promise<BrowserFileReader>;
     /**
+     * Resolve a definitively failed payment, persist the updated checkpoint, and return it.
+     *
+     * Call only after the original upload and wallet request have finished. The trusted
+     * `verify_failure(attempt, scope)` callback must independently verify the entire
+     * journal against the original wallet/payment network, without submitting payment.
+     * It returns `{ status: "notSubmitted", evidence: {...} }` only when it can prove
+     * the wallet never submitted and cannot still submit, or
+     * `{ status: "reverted", transactionHashes: [...], evidence: {...} }` after verifying
+     * final reverts for every transaction. A missing receipt or timeout is insufficient.
+     *
+     * Rust checks the result against the journal; the callback owns wallet/chain
+     * verification, just as payment callbacks own confirmation. Failure evidence is
+     * archived, confirmed proofs are retained, and persistence is awaited before return.
+     * Resume the normal upload explicitly with the returned checkpoint.
+     */
+    reconcileFailedUploadPayment(snapshot: string, verify_failure: Function, on_checkpoint: Function): Promise<string>;
+    /**
      * Self-encrypt, quote, pay through a wallet callback, and store a public file.
      */
     uploadPublicFile(content: Uint8Array, name: string, content_type: string, payment_network: any, pay_for_quotes: Function, on_progress?: Function | null, checkpoint?: string | null, on_checkpoint?: Function | null, payment_mode?: string | null, pay_for_merkle?: Function | null): Promise<any>;
@@ -276,6 +293,7 @@ export interface InitOutput {
     readonly browsernodesession_peerId: (a: number) => [number, number];
     readonly browsernodesession_putChunk: (a: number, b: number, c: number, d: number, e: number, f: any, g: number, h: number) => any;
     readonly browsernodesession_quoteChunk: (a: number, b: number, c: number, d: number) => any;
+    readonly browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
     readonly __wbg_browserfileencryptor_free: (a: number, b: number) => void;
     readonly __wbg_browseriterativelookup_free: (a: number, b: number) => void;
     readonly browserfileencryptor_finish: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
@@ -322,9 +340,9 @@ export interface InitOutput {
     readonly BrotliDecoderVersion: () => number;
     readonly wasm_bindgen__convert__closures_____invoke__h6c639ae6ac52cf17: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen__convert__closures_____invoke__h1a72669c4838b5a0: (a: number, b: number, c: any, d: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h9e7803f769f8c721: (a: number, b: number, c: any) => any;
-    readonly wasm_bindgen__convert__closures_____invoke__h7b4c25afdc678bb6: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen__convert__closures_____invoke__h7b4c25afdc678bb6_3: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h8acc578946c1453e: (a: number, b: number, c: any) => any;
+    readonly wasm_bindgen__convert__closures_____invoke__h20b95883a3b77829: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen__convert__closures_____invoke__h20b95883a3b77829_3: (a: number, b: number, c: any) => void;
     readonly wasm_bindgen__convert__closures_____invoke__hc4b509476b4504c4: (a: number, b: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
