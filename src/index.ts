@@ -17,6 +17,8 @@ export type {
   MerklePaymentRequest, MerklePaymentReceipt, MerklePaymentContext, PaymentLog,
   ClientOptions,
   ConnectionInfo,
+  FailedPaymentResolution,
+  FailedUploadPaymentOptions,
   DownloadOptions,
   DownloadResult,
   HelloInfo,

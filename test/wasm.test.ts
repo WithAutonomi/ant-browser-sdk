@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { corePublicFile, publicFileFromCore } from "../src/internal/protocol.js";
 import { encryptPublicFile, parseBrowserManifest } from "../src/wasm/ant_core.js";
 import { initializeWasm, SDK_LIMITS } from "../src/index.js";
@@ -71,4 +71,21 @@ it("ships provenance matching the bundled production WASM", async () => {
   expect(metadata.revision).toMatch(/^[0-9a-f]{40}$/);
   expect(metadata.features).toEqual(["browser-wasm"]);
   expect(metadata.defaultFeatures).toBe(false);
+});
+
+it("uses the packaged native validator for failed payment reconciliation", async () => {
+  await initializeWasm(await readFile(new URL("../src/wasm/ant_core_bg.wasm", import.meta.url)));
+  const client = new (getBindings().BrowserNetworkClient)([{ multiaddr: endpoint("ab".repeat(32), 0xbb) }]);
+  const verify = vi.fn();
+  const persist = vi.fn();
+  // MessagePack { plans: {}, proofs: {} }: no pending payment to reconcile.
+  const checkpoint = JSON.stringify({ scope: "empty-test-journal", state: "82a5706c616e7380a670726f6f667380" });
+  try {
+    await expect(client.reconcileFailedUploadPayment(checkpoint, verify, persist)).rejects.toBe("no pending payment");
+    expect(verify).not.toHaveBeenCalled();
+    expect(persist).not.toHaveBeenCalled();
+  } finally {
+    client.close();
+    client.free();
+  }
 });

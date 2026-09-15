@@ -29,6 +29,7 @@ import type {
   MerklePaymentRequest, MerklePaymentReceipt,
   ClientOptions,
   ConnectionInfo,
+  FailedUploadPaymentOptions,
   DownloadOptions,
   DownloadResult,
   LookupResult,
@@ -301,6 +302,31 @@ export class AutonomiClient {
       throw failure;
     } finally {
       operation.finish();
+    }
+  }
+
+  /**
+   * Resolve a definitively failed payment using the native journal validator.
+   * Wait for the original upload and wallet work to settle before calling this.
+   * Resume with upload(input, { checkpoint: returnedCheckpoint, ... }); this does
+   * not mutate an existing in-memory recovery handle or submit another payment.
+   */
+  async reconcileFailedUploadPayment(
+    checkpoint: string,
+    options: FailedUploadPaymentOptions,
+  ): Promise<string> {
+    this.#assertOpen();
+    if (typeof options?.verifyFailure !== "function" || typeof options.onCheckpoint !== "function") {
+      throw new TypeError("Failed payment reconciliation requires verification and durable checkpoint callbacks");
+    }
+    try {
+      return await this.#network.reconcileFailedUploadPayment(
+        checkpoint,
+        (attempt, scope) => options.verifyFailure(attempt, scope),
+        value => options.onCheckpoint(value),
+      );
+    } catch (error) {
+      throw wrapError("PAYMENT_FAILED", "Could not reconcile failed storage payment", error);
     }
   }
 

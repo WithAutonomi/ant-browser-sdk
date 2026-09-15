@@ -17,6 +17,11 @@ export interface RawFileReader {
 }
 
 export interface RawNetworkClient {
+  reconcileFailedUploadPayment(
+    checkpoint: string,
+    verifyFailure: (attempt: unknown, scope: string) => unknown,
+    onCheckpoint: (checkpoint: string) => void | Promise<void>,
+  ): Promise<string>;
   findClosest(target: string, onProgress?: (message: string) => void): Promise<unknown>;
   downloadPublicFile(
     file: unknown,

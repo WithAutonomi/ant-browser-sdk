@@ -32,6 +32,7 @@ const state = vi.hoisted(() => ({
     uploadPublicFile: ReturnType<typeof vi.fn>;
     uploadStagedPublicFile: ReturnType<typeof vi.fn>;
     downloadPublicFile: ReturnType<typeof vi.fn>;
+    reconcileFailedUploadPayment: ReturnType<typeof vi.fn>;
   }>,
 }));
 
@@ -59,6 +60,7 @@ vi.mock("../src/internal/runtime.js", () => {
     uploadPublicFile = vi.fn();
     uploadStagedPublicFile = vi.fn(async () => Promise.reject(new Error("not used")));
     downloadPublicFile = vi.fn();
+    reconcileFailedUploadPayment = vi.fn();
 
     constructor(endpoints: unknown) {
       this.endpoints = endpoints;
@@ -1013,4 +1015,44 @@ it("rejects every seed with a payment identity outside the bundled profile", asy
   } })).rejects.toThrow(/does not match/);
   expect(state.attemptedSeeds).toHaveLength(2);
   expect(state.networks).toHaveLength(0);
+});
+
+it("delegates failed payment reconciliation to Rust and awaits durable persistence", async () => {
+  const payment = { pay: vi.fn() };
+  const client = await AutonomiClient.connect(endpoint, { payment });
+  const attempt = { submissions: [{ transactionHash: "0x123" }] };
+  const resolution = { status: "reverted" as const, transactionHashes: ["0x123"], evidence: { finalized: true } };
+  let persisted = false;
+  const verifyFailure = vi.fn(async () => resolution);
+  const onCheckpoint = vi.fn(async () => {
+    await Promise.resolve();
+    persisted = true;
+  });
+  state.networks[0]!.reconcileFailedUploadPayment.mockImplementation(async (checkpoint, verify, save) => {
+    expect(checkpoint).toBe("original journal");
+    expect(await verify(attempt, "native scope")).toEqual(resolution);
+    await save("reconciled journal");
+    return "reconciled journal";
+  });
+  await expect(client.reconcileFailedUploadPayment("original journal", { verifyFailure, onCheckpoint }))
+    .resolves.toBe("reconciled journal");
+  expect(verifyFailure).toHaveBeenCalledExactlyOnceWith(attempt, "native scope");
+  expect(onCheckpoint).toHaveBeenCalledExactlyOnceWith("reconciled journal");
+  expect(persisted).toBe(true);
+  expect(payment.pay).not.toHaveBeenCalled();
+  expect(state.networks[0]!.uploadPublicFile).not.toHaveBeenCalled();
+  client.close();
+});
+
+it("propagates native verification and persistence failures without authorizing payment", async () => {
+  const client = await AutonomiClient.connect(endpoint);
+  for (const reason of ["reverted transaction hashes must cover every journaled transaction", "disk full"]) {
+    state.networks[0]!.reconcileFailedUploadPayment.mockRejectedValueOnce(new Error(reason));
+    await expect(client.reconcileFailedUploadPayment("original journal", {
+      verifyFailure: () => ({ status: "notSubmitted", evidence: { walletRequest: "never started" } }),
+      onCheckpoint: vi.fn(),
+    })).rejects.toThrow(reason);
+  }
+  expect(state.networks[0]!.uploadPublicFile).not.toHaveBeenCalled();
+  client.close();
 });

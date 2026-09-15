@@ -408,8 +408,8 @@ The callback can arrive after cancellation if broadcast was already in flight.
 An upload recovery exposes unresolved submissions in `pendingPayments`.
 `resumeUpload()` reconciles them before requesting quotes or invoking a wallet,
 including when a new provider is explicitly supplied. An observation failure
-produces `PAYMENT_UNRESOLVED`; confirmed payments join `recovery.payments` once,
-and a definitive failure permits a newly authorized payment. Handles are
+produces `PAYMENT_UNRESOLVED`; confirmed payments join `recovery.payments` once.
+A failed journal must be explicitly reconciled before another payment is allowed. Handles are
 page-owned. Discarding retained file bytes does not erase transaction evidence
 from handles already held by the application.
 
@@ -872,6 +872,24 @@ can recover confirmed transactions from the journal by reading their calldata
 and receipts. Custom providers can implement `recover` and `recoverMerkle`;
 these methods must only observe existing transactions. An attempt with no usable
 transaction identity stays unresolved until the wallet supplies that evidence.
+
+For a definitively failed attempt, `client.reconcileFailedUploadPayment(checkpoint,
+{ verifyFailure, onCheckpoint })` exposes the core's explicit reconciliation method.
+Wait for the original upload and wallet work to finish first. The trusted
+`verifyFailure(attempt, scope)` callback must independently verify the original
+wallet and network, without submitting any transaction, and return either:
+
+- `{ status: "notSubmitted", evidence: {...} }` only with proof the wallet never
+  submitted and can no longer submit;
+- `{ status: "reverted", transactionHashes: [...], evidence: {...} }` after
+  verifying final reverts for **every** journaled transaction.
+
+Timeouts and missing receipts do not establish failure. Rust validates the journal
+coverage, archives failure evidence and retains earlier confirmed proofs.
+`onCheckpoint` is required and awaited for durable persistence. Resume explicitly
+using the returned checkpoint with `upload()` and the same input. Existing
+in-memory recovery handles are not modified. The SDK never clears a journal just
+because a payment callback rejected.
 
 A public file is identified by its DataMap address. Read APIs pass only that
 address and optional display metadata to Rust; size and chunk information come

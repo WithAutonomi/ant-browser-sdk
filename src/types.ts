@@ -157,6 +157,22 @@ export interface PaymentProvider {
   ): Promise<PaymentReceipt>;
 }
 
+/** Independently verified terminal failure; a timeout or missing receipt is insufficient. */
+export type FailedPaymentResolution =
+  | { readonly status: "notSubmitted"; readonly evidence: Readonly<Record<string, unknown>> }
+  | { readonly status: "reverted"; readonly transactionHashes: readonly string[]; readonly evidence: Readonly<Record<string, unknown>> };
+
+export interface FailedUploadPaymentOptions {
+  /**
+   * Verify the original wallet/network without submitting. Prove the wallet never
+   * submitted and can no longer submit, or verify final reverts for every journaled
+   * transaction. Rust checks coverage and retains all earlier confirmed proofs.
+   */
+  verifyFailure(attempt: unknown, scope: string): FailedPaymentResolution | Promise<FailedPaymentResolution>;
+  /** Persist durably before returning; required so a failed write cannot enable repayment. */
+  onCheckpoint(checkpoint: string): void | Promise<void>;
+}
+
 export type Operation =
   | "connect"
   | "lookup"
