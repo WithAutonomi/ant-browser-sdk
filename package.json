@@ -1,5 +1,5 @@
 {
-  "name": "@autonomi/browser-sdk",
+  "name": "@withautonomi/browser-sdk",
   "version": "0.1.0",
   "description": "Build browser applications that connect directly to the Autonomi Network over WebRTC.",
   "type": "module",

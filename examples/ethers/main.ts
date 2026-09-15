@@ -1,4 +1,4 @@
-import { AutonomiClient } from "@autonomi/browser-sdk";
+import { AutonomiClient } from "@withautonomi/browser-sdk";
 import {
   connectInjectedWallet,
   connectedEthersPaymentProvider,

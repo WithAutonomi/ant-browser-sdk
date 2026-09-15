@@ -1,5 +1,5 @@
-import { AutonomiClient, type MediaSource } from "@autonomi/browser-sdk";
-import { createEthersPaymentProvider } from "@autonomi/browser-sdk/ethers";
+import { AutonomiClient, type MediaSource } from "@withautonomi/browser-sdk";
+import { createEthersPaymentProvider } from "@withautonomi/browser-sdk/ethers";
 import "../shared/style.css";
 
 const bootstrap = element<HTMLInputElement>("bootstrap");

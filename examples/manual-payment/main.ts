@@ -3,8 +3,8 @@ import {
   createManualPaymentProvider,
   type ManualPaymentRequest,
   type PaymentProvider,
-} from "@autonomi/browser-sdk";
-import { createEthersPaymentProvider } from "@autonomi/browser-sdk/ethers";
+} from "@withautonomi/browser-sdk";
+import { createEthersPaymentProvider } from "@withautonomi/browser-sdk/ethers";
 import {
   connectInjectedWallet,
   connectedEthersPaymentProvider,

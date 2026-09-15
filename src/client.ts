@@ -671,7 +671,7 @@ export class AutonomiClient {
   /**
    * Create a seekable URL suitable for `<video>` or `<audio>`.
    *
-   * Copy `node_modules/@autonomi/browser-sdk/dist/autonomi-stream-sw.js` to
+   * Copy `node_modules/@withautonomi/browser-sdk/dist/autonomi-stream-sw.js` to
    * your site's public root before using the default serviceWorkerUrl.
    */
   async createMediaSource(
