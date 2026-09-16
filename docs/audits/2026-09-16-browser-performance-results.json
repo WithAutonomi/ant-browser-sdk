@@ -1,0 +1,211 @@
+{
+  "current": {
+    "events": [
+      {
+        "phase": "connect-start",
+        "ms": 115
+      },
+      {
+        "phase": "connect-end",
+        "ms": 1417
+      },
+      {
+        "phase": "upload-start",
+        "ms": 1417
+      },
+      {
+        "phase": "payment-start",
+        "ms": 37381,
+        "quotes": 64
+      },
+      {
+        "phase": "payment-done",
+        "ms": 37531
+      },
+      {
+        "phase": "payment-start",
+        "ms": 73060,
+        "quotes": 64
+      },
+      {
+        "phase": "payment-done",
+        "ms": 73198
+      },
+      {
+        "phase": "payment-start",
+        "ms": 95200,
+        "quotes": 20
+      },
+      {
+        "phase": "payment-done",
+        "ms": 95326
+      },
+      {
+        "phase": "upload-end",
+        "ms": 99582
+      },
+      {
+        "phase": "download-start",
+        "ms": 100849,
+        "i": 0
+      },
+      {
+        "phase": "download-end",
+        "ms": 146402,
+        "i": 0,
+        "bytes": 600000000,
+        "matches": true
+      }
+    ],
+    "seconds": {
+      "connect": 1.302,
+      "preparation_and_quotes": 35.964,
+      "upload": 98.165,
+      "download": 45.553
+    }
+  },
+  "fixed": {
+    "events": [
+      {
+        "phase": "connect-start",
+        "ms": 105
+      },
+      {
+        "phase": "connect-end",
+        "ms": 267
+      },
+      {
+        "phase": "upload-start",
+        "ms": 267
+      },
+      {
+        "phase": "payment-start",
+        "ms": 14986,
+        "quotes": 64
+      },
+      {
+        "phase": "payment-done",
+        "ms": 15144
+      },
+      {
+        "phase": "payment-start",
+        "ms": 35474,
+        "quotes": 64
+      },
+      {
+        "phase": "payment-done",
+        "ms": 35625
+      },
+      {
+        "phase": "payment-start",
+        "ms": 52219,
+        "quotes": 20
+      },
+      {
+        "phase": "payment-done",
+        "ms": 52360
+      },
+      {
+        "phase": "upload-end",
+        "ms": 56430
+      },
+      {
+        "phase": "download-start",
+        "ms": 56578,
+        "i": 0
+      },
+      {
+        "phase": "download-end",
+        "ms": 80783,
+        "i": 0,
+        "bytes": 600000000,
+        "matches": true
+      }
+    ],
+    "seconds": {
+      "connect": 0.162,
+      "preparation_and_quotes": 14.719,
+      "upload": 56.163,
+      "download": 24.205
+    }
+  },
+  "raw_core_fixed": [
+    {
+      "phase": "upload-start",
+      "ms": 39,
+      "proofs": null
+    },
+    {
+      "phase": "payment-start",
+      "ms": 2661,
+      "proofs": null,
+      "quotes": 21
+    },
+    {
+      "phase": "payment-done",
+      "ms": 2825,
+      "proofs": null
+    },
+    {
+      "phase": "upload-end",
+      "ms": 7397,
+      "proofs": null,
+      "checkpointBytes": 14766809,
+      "checkpointCount": 5
+    },
+    {
+      "phase": "download-start",
+      "ms": 7405,
+      "proofs": null,
+      "i": 0
+    },
+    {
+      "phase": "download-end",
+      "ms": 10059,
+      "proofs": null,
+      "i": 0,
+      "bytes": 67108864,
+      "matches": true
+    },
+    {
+      "phase": "download-start",
+      "ms": 10064,
+      "proofs": null,
+      "i": 1
+    },
+    {
+      "phase": "download-end",
+      "ms": 12725,
+      "proofs": null,
+      "i": 1,
+      "bytes": 67108864,
+      "matches": true
+    },
+    {
+      "phase": "download-start",
+      "ms": 12725,
+      "proofs": null,
+      "i": 2
+    },
+    {
+      "phase": "download-end",
+      "ms": 15239,
+      "proofs": null,
+      "i": 2,
+      "bytes": 67108864,
+      "matches": true
+    }
+  ],
+  "wasm_source": {
+    "repository": "https://github.com/WithAutonomi/ant-client",
+    "revision": "ffa23d8e83ba11f2bdc20ec5e4b079d7094faed7",
+    "dirty": false,
+    "target": "wasm32-unknown-unknown",
+    "features": [
+      "browser-wasm"
+    ],
+    "defaultFeatures": false,
+    "cargoLockSha256": "dfa47f3aefdbb2ebf17c22d36c56587e013b14e7a20fa3544fc263c6a37e7846",
+    "wasmSha256": "75f535ab8ddceff265750ff49c4d7974ef79c63f80d3356f8436a16abba1e4f5"
+  }
+}
