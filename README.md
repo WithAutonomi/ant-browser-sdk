@@ -651,6 +651,13 @@ versions must migrate the renamed fields before passing it to this API.
 
 ## Errors, progress, and cleanup
 
+The bundled browser core reports quote preparation and confirmed record stores
+incrementally through `onProgress` messages, including Merkle preflight and
+storage. Full-file downloads emit `Downloaded chunk completed/total` after
+verified record fetches; final reconstruction and file verification still follow.
+Core diagnostic messages remain text, separate from the SDK's structured phase
+counters. Applications should not infer byte completion from lookup diagnostics.
+
 Network and client operation failures use `AutonomiError` with a stable `code`
 and the original `cause`:
 
