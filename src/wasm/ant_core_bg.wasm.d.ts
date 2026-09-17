@@ -1,6 +1,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
+export const browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
 export const __wbg_browserfileencryptor_free: (a: number, b: number) => void;
 export const __wbg_browseriterativelookup_free: (a: number, b: number) => void;
 export const browserfileencryptor_finish: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
@@ -26,7 +27,6 @@ export const start: () => void;
 export const verifyRecord: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const verifyStorageQuote: (a: any, b: number, c: number, d: number, e: number) => [number, number, number];
 export const webRtcDirectV2ServerCredential: (a: number, b: number) => [number, number, number, number];
-export const browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
 export const __wbg_browserfilereader_free: (a: number, b: number) => void;
 export const __wbg_browsernetworkclient_free: (a: number, b: number) => void;
 export const __wbg_browsernodeclient_free: (a: number, b: number) => void;

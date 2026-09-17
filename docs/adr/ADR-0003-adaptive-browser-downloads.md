@@ -39,9 +39,11 @@ Native and browser use the same shorter, evidence-bounded observation epochs.
 
 The browser separately admits physical GETs, including speculative requests,
 against a 128 MiB reservation budget for worst-case encrypted, plaintext, and
-decoded responses. Response CPU time and event-loop lateness reduce local
-admission when processing exceeds a 50 ms responsiveness target, with gradual
-recovery after healthy responses. This is not a complete-file memory bound.
+decoded responses. Eight-response windows reduce local admission when GET CPU
+work occupies more than half the window and at least two processing or scheduling
+stalls exceed 50 ms. Healthy windows recover gradually. An individual slow
+response or a clamped background timer does not imply CPU saturation; halving
+concurrency for either alone can unnecessarily serialize network waits. This is not a complete-file memory bound.
 
 The shared read engine can fetch candidates before discovery completes. Content
 and peer authentication remain mandatory; early misses never establish absence.

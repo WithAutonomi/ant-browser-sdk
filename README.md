@@ -530,8 +530,10 @@ image.src = URL.createObjectURL(result.blob);
 
 Downloads default to `concurrency: "auto"`, using the shared native/WASM adaptive
 scheduler. An integer from 1 through 256 sets a ceiling on logical record fetches.
-The browser also bounds physical GET response reservations to 128 MiB and reduces
-admission when response processing or event-loop lateness exceeds 50 ms. These
+The browser also bounds physical GET response reservations to 128 MiB. It reduces
+admission when eight-response windows show sustained GET CPU load above half the
+event loop and repeated processing or scheduling stalls above 50 ms. Isolated
+slow responses and background timer clamping do not trigger that reduction. These
 bounds include speculative GETs and can keep actual concurrency below your ceiling.
 Complete downloads are memory-bound. Use a random-access reader for large media
 or range-oriented formats.
