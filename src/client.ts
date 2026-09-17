@@ -445,10 +445,14 @@ export class AutonomiClient {
         const network = paymentNetworkFromCore(networkValue, state.network);
         const request = snapshot(requestValue as MerklePaymentRequest);
         const previous = state.payments.find((paid) => paid.merkle?.calldata === request.calldata);
-        if (previous) return previous.receipt;
+        if (previous) {
+          report("Reusing a confirmed Merkle storage payment", { phase: "uploading" });
+          return previous.receipt;
+        }
         if (!payment?.payMerkle) throw new AutonomiError("PAYMENT_FAILED", "PaymentProvider must implement payMerkle for this upload, or select paymentMode: single");
         const submitted: TrackedPayment[] = [];
         const journalWrites: Promise<void>[] = [];
+        report("Waiting for Merkle storage payment", { phase: "payment" });
         const pending = Promise.resolve(payment.payMerkle(network, request, {
           report, signal: operation.signal,
           decodeReceipt: (logs) => {
@@ -477,7 +481,9 @@ export class AutonomiClient {
           return recorded.receipt;
         });
         state.paymentTasks.push(pending);
-        return await abortable(pending, operation.signal);
+        const receipt = await abortable(pending, operation.signal);
+        report("Merkle storage payment confirmed", { phase: "uploading" });
+        return receipt;
       } catch (error) {
         paymentFailure = isAbort(error, operation.signal) ? error : wrapError("PAYMENT_FAILED", "Merkle payment failed", error);
         throw paymentFailure;

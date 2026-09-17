@@ -651,12 +651,20 @@ versions must migrate the renamed fields before passing it to this API.
 
 ## Errors, progress, and cleanup
 
-The bundled browser core reports quote preparation and confirmed record stores
-incrementally through `onProgress` messages, including Merkle preflight and
-storage. Full-file downloads emit `Downloaded chunk completed/total` after
-verified record fetches; final reconstruction and file verification still follow.
+The bundled browser core distinguishes existing-storage checks from payment
+quote preparation. Merkle preflight completion is not quote completion: candidate
+payment pools are collected afterwards, with their own current-batch progress.
+`Already present record` identifies chunks needing no new payment;
+`Stored new record` identifies successful writes in this attempt. The aggregate
+`Confirmed available record` includes both and must not be counted as new writes.
+`Quoted record`, `Already present record`, and `Stored new record` carry stable
+record indices, which may arrive out of order; their numerators are not counts.
+Full-file downloads emit `Downloaded chunk completed/total` after verified
+record fetches; final reconstruction and file verification still follow.
 Core diagnostic messages remain text, separate from the SDK's structured phase
 counters. Applications should not infer byte completion from lookup diagnostics.
+Merkle payment review and confirmed/reused payment receipts have explicit SDK
+payment/uploading phase events.
 
 Network and client operation failures use `AutonomiError` with a stable `code`
 and the original `cause`:

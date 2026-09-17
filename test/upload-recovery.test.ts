@@ -232,9 +232,14 @@ it("retains a confirmed Merkle receipt and forwards native mode on resume", asyn
   const receipt = { transactionHash: "0xmerkle", winnerPoolHash: request.poolHashes[0]!, totalAmount: "70" };
   const payment: PaymentProvider = { pay: vi.fn(), payMerkle: vi.fn(async () => receipt) };
   const value = await client(payment);
+  const progress = vi.fn();
+  value.onProgress(progress);
   mocks.upload.mockImplementationOnce(async (_staged, network, _load, _pay, _progress, _checkpoint, _save, mode, merkle) => {
     expect(mode).toBe("merkle");
-    await merkle(network, request);
+    const pending = merkle(network, request);
+    expect(progress).toHaveBeenCalledWith(expect.objectContaining({ phase: "payment", message: "Waiting for Merkle storage payment" }));
+    await pending;
+    expect(progress).toHaveBeenCalledWith(expect.objectContaining({ phase: "uploading", message: "Merkle storage payment confirmed" }));
     throw new Error("store interrupted");
   });
   let recovery;
@@ -247,6 +252,7 @@ it("retains a confirmed Merkle receipt and forwards native mode on resume", asyn
     return { ...result, transactionHash: receipt.transactionHash, storageCostAtto: "0" };
   });
   await value.resumeUpload(recovery!);
+  expect(progress).toHaveBeenCalledWith(expect.objectContaining({ phase: "uploading", message: "Reusing a confirmed Merkle storage payment" }));
   expect(payment.payMerkle).toHaveBeenCalledTimes(1);
   expect(payment.pay).not.toHaveBeenCalled();
 });
