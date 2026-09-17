@@ -577,15 +577,15 @@ export class AutonomiClient {
       this.#assertOpen();
       const limits = SDK_LIMITS.downloadConcurrency;
       const concurrency = options.concurrency ?? limits.default;
-      if (!Number.isInteger(concurrency) || concurrency < limits.min || concurrency > limits.max) {
+      if (concurrency !== "auto" && (!Number.isInteger(concurrency) || concurrency < limits.min || concurrency > limits.max)) {
         throw new AutonomiError(
           "DOWNLOAD_FAILED",
-          `Download concurrency must be an integer from ${limits.min} through ${limits.max}`,
+          `Download concurrency must be "auto" or an integer from ${limits.min} through ${limits.max}`,
         );
       }
       throwIfAborted(operation.signal);
       const raw = (await abortable(
-        this.#network.downloadPublicFile(typeof file === "string" ? file : coreFileReference(file), concurrency, report),
+        this.#network.downloadPublicFile(typeof file === "string" ? file : coreFileReference(file), concurrency === "auto" ? undefined : concurrency, report),
         operation.signal,
       )) as RawDownloadResult;
       throwIfAborted(operation.signal);

@@ -524,21 +524,28 @@ See the complete [manual-payment example](examples/manual-payment).
 returning both bytes and a `Blob`:
 
 ```ts
-const result = await client.download(address, { concurrency: 3 });
+const result = await client.download(address);
 image.src = URL.createObjectURL(result.blob);
 ```
 
-Download concurrency must be an integer from 1 through 6 and defaults to 3.
+Downloads default to `concurrency: "auto"`, using the shared native/WASM adaptive
+scheduler. An integer from 1 through 256 sets a ceiling on logical record fetches.
+The browser also bounds physical GET response reservations to 128 MiB and reduces
+admission when response processing or event-loop lateness exceeds 50 ms. These
+bounds include speculative GETs and can keep actual concurrency below your ceiling.
 Complete downloads are memory-bound. Use a random-access reader for large media
 or range-oriented formats.
 
-For each record, the Rust client first tries the closest discovery responders.
-If those nodes cannot return it, the client tries up to 20 additional known
+For each record, the Rust client can try known or newly discovered candidates
+while discovery continues, accepting only verified content. Early misses do not
+establish absence. After discovery it tries the closest responders and up to 20 additional known
 WebRTC Direct endpoints, including eligible cached routes and configured seeds.
 A failed discovery request does not by itself disqualify a node from serving a
 chunk. Fallback reads still authenticate nodes and verify the record's BLAKE3
 hash. This also applies to DataMaps and media range reads; it cannot recover
 records that are absent from all reachable holders.
+Control and bulk RPCs use separate authenticated DataChannels on one WebRTC
+connection. Nodes must allow two channels per connection (the current default).
 
 These reads now use the same Rust Client as native `ant-core`. Corrupt content
 fails immediately rather than being retried against another peer. Inconclusive
@@ -767,7 +774,7 @@ console.log(SDK_LIMITS.maxFileBytes, SDK_LIMITS.maxRangeBytes);
 | `minFileBytes` / `maxFileBytes` | 3 / 1,000,000,000 bytes |
 | `maxRangeBytes` | 4 MiB per read or stream chunk |
 | `defaultStreamChunkBytes` | 1 MiB |
-| `downloadConcurrency.min` / `.max` / `.default` | 1 / 6 / 3 |
+| `downloadConcurrency.min` / `.max` / `.default` | 1 / 256 / `"auto"` |
 | `mediaMaxFileBytes` | 1,000,000,000 bytes |
 
 The limits and capability reports are immutable. Unsupported input sizes are

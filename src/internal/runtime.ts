@@ -26,7 +26,7 @@ export interface RawNetworkClient {
   findClosest(target: string, onProgress?: (message: string) => void): Promise<unknown>;
   downloadPublicFile(
     file: unknown,
-    concurrency: number,
+    concurrency: number | undefined,
     onProgress?: (message: string) => void,
   ): Promise<unknown>;
   openPublicFile(

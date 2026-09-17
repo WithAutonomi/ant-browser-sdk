@@ -8,7 +8,7 @@ export const SDK_LIMITS = Object.freeze({
   maxFileBytes: MAX_FILE_BYTES,
   maxRangeBytes: 4 * 1024 * 1024,
   defaultStreamChunkBytes: 1024 * 1024,
-  downloadConcurrency: Object.freeze({ min: 1, max: 6, default: 3 }),
+  downloadConcurrency: Object.freeze({ min: 1, max: 256, default: "auto" as const }),
   mediaMaxFileBytes: MAX_FILE_BYTES,
 });
 

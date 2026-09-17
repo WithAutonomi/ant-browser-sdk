@@ -98,7 +98,7 @@ export class BrowserNetworkClient {
     /**
      * Download and reconstruct a complete public Autonomi file.
      */
-    downloadPublicFile(file: any, concurrency: number, on_progress?: Function | null): Promise<any>;
+    downloadPublicFile(file: any, concurrency?: number | null, on_progress?: Function | null): Promise<any>;
     /**
      * Run Saorsa's iterative closest-node lookup over Rust-owned DataChannels.
      */
@@ -298,6 +298,7 @@ export interface InitOutput {
     readonly verifyRecord: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly verifyStorageQuote: (a: any, b: number, c: number, d: number, e: number) => [number, number, number];
     readonly webRtcDirectV2ServerCredential: (a: number, b: number) => [number, number, number, number];
+    readonly browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
     readonly __wbg_browserfilereader_free: (a: number, b: number) => void;
     readonly __wbg_browsernetworkclient_free: (a: number, b: number) => void;
     readonly __wbg_browsernodeclient_free: (a: number, b: number) => void;
@@ -323,7 +324,6 @@ export interface InitOutput {
     readonly browsernodesession_peerId: (a: number) => [number, number];
     readonly browsernodesession_putChunk: (a: number, b: number, c: number, d: number, e: number, f: any, g: number, h: number) => any;
     readonly browsernodesession_quoteChunk: (a: number, b: number, c: number, d: number) => any;
-    readonly browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
     readonly BrotliDecoderCreateInstance: (a: number, b: number, c: number) => number;
     readonly BrotliDecoderDecompress: (a: number, b: number, c: number, d: number) => number;
     readonly BrotliDecoderDecompressPrealloc: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => void;

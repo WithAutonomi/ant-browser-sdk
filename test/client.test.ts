@@ -958,7 +958,7 @@ it("translates public file metadata into the existing wire format for downloads 
   const rawNode = { peer_id: "77".repeat(32), native_addresses: ["/native"], reliability: 1, webrtc_direct: { multiaddr: endpoint } };
   raw.downloadPublicFile.mockResolvedValue({ content: Uint8Array.of(1), hash: file.blake3, file: wireFile, dataMapNode: rawNode });
   const downloaded = await client.download(file);
-  expect(raw.downloadPublicFile).toHaveBeenCalledWith({ address: file.address, name: file.name, content_type: file.contentType }, 3, expect.any(Function));
+  expect(raw.downloadPublicFile).toHaveBeenCalledWith({ address: file.address, name: file.name, content_type: file.contentType }, undefined, expect.any(Function));
   expect(downloaded.file).toEqual(file);
   expect(downloaded.dataMapNode).toEqual({ peerId: rawNode.peer_id, nativeAddresses: ["/native"], reliability: 1, webrtcDirect: { multiaddr: endpoint } });
   expect(downloaded.file).not.toHaveProperty("content_type");
@@ -1000,10 +1000,14 @@ it("accepts the advertised concurrency bounds and rejects values outside them", 
     await client.download(file, { concurrency });
     expect(download).toHaveBeenLastCalledWith({ address: file.address, name: file.name, content_type: file.contentType }, concurrency, expect.any(Function));
   }
-  for (const concurrency of [SDK_LIMITS.downloadConcurrency.min - 1, SDK_LIMITS.downloadConcurrency.max + 1, 1.5]) {
+  for (const concurrency of [SDK_LIMITS.downloadConcurrency.min - 1, SDK_LIMITS.downloadConcurrency.max + 1, 1.5, NaN, Infinity]) {
     await expect(client.download(file, { concurrency })).rejects.toMatchObject({ code: "DOWNLOAD_FAILED" });
   }
   expect(download).toHaveBeenCalledTimes(2);
+  for (const options of [{}, { concurrency: "auto" as const }]) {
+    await client.download(file, options);
+    expect(download).toHaveBeenLastCalledWith({ address: file.address, name: file.name, content_type: file.contentType }, undefined, expect.any(Function));
+  }
   client.close();
 });
 
@@ -1013,7 +1017,7 @@ it("derives read size from the DataMap rather than a supplied descriptor", async
   download.mockResolvedValue({ content: Uint8Array.of(1), hash: file.blake3, file: wireFile,
     dataMapNode: { peer_id: "aa".repeat(32), native_addresses: [], reliability: 1 } });
   await client.download({ ...file, size: Number.MAX_SAFE_INTEGER, chunks: [], blake3: "invalid hint" });
-  expect(download).toHaveBeenCalledWith({ address: file.address, name: file.name, content_type: file.contentType }, 3, expect.any(Function));
+  expect(download).toHaveBeenCalledWith({ address: file.address, name: file.name, content_type: file.contentType }, undefined, expect.any(Function));
   client.close();
 });
 

@@ -308,8 +308,8 @@ export interface UploadResult {
 }
 
 export interface DownloadOptions extends OperationOptions {
-  /** Parallel record fetches, from 1 through 6. Defaults to 3. */
-  concurrency?: number;
+  /** Adaptive by default. An integer from 1 through 256 caps logical record fetches. */
+  concurrency?: number | "auto";
 }
 
 export interface DownloadResult {
