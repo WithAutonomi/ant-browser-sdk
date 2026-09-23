@@ -242,6 +242,17 @@ export class BrowserNetworkClient {
         wasm.browsernetworkclient_close(this.__wbg_ptr);
     }
     /**
+     * Download and reconstruct a private file from the DataMap its uploader kept.
+     * @param {any} file
+     * @param {number | null} [concurrency]
+     * @param {Function | null} [on_progress]
+     * @returns {Promise<any>}
+     */
+    downloadPrivateFile(file, concurrency, on_progress) {
+        const ret = wasm.browsernetworkclient_downloadPrivateFile(this.__wbg_ptr, file, isLikeNone(concurrency) ? Number.MAX_SAFE_INTEGER : (concurrency) >>> 0, isLikeNone(on_progress) ? 0 : addToExternrefTable0(on_progress));
+        return ret;
+    }
+    /**
      * Download and reconstruct a complete public Autonomi file.
      * @param {any} file
      * @param {number | null} [concurrency]
@@ -276,6 +287,16 @@ export class BrowserNetworkClient {
         this.__wbg_ptr = ret[0];
         BrowserNetworkClientFinalization.register(this, this.__wbg_ptr, this);
         return this;
+    }
+    /**
+     * Resolve a private file from its DataMap for random-access range reads.
+     * @param {any} file
+     * @param {Function | null} [on_progress]
+     * @returns {Promise<BrowserFileReader>}
+     */
+    openPrivateFile(file, on_progress) {
+        const ret = wasm.browsernetworkclient_openPrivateFile(this.__wbg_ptr, file, isLikeNone(on_progress) ? 0 : addToExternrefTable0(on_progress));
+        return ret;
     }
     /**
      * Resolve and validate a public file for random-access range reads.
@@ -339,6 +360,33 @@ export class BrowserNetworkClient {
         var ptr4 = isLikeNone(payment_mode) ? 0 : passStringToWasm0(payment_mode, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         var len4 = WASM_VECTOR_LEN;
         const ret = wasm.browsernetworkclient_uploadPublicFile(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2, payment_network, pay_for_quotes, isLikeNone(on_progress) ? 0 : addToExternrefTable0(on_progress), ptr3, len3, isLikeNone(on_checkpoint) ? 0 : addToExternrefTable0(on_checkpoint), ptr4, len4, isLikeNone(pay_for_merkle) ? 0 : addToExternrefTable0(pay_for_merkle));
+        return ret;
+    }
+    /**
+     * Quote, pay for, and store one batch of caller-staged records.
+     *
+     * Callers that cannot hold a whole file's encrypted records at once stage
+     * and upload consecutive batches. Each batch is its own payment and
+     * checkpoint scope; the shared coordinator selects single-node or Merkle
+     * payment for it exactly as for a complete file. Records are loaded
+     * lazily and verified against their addresses on every load.
+     * @param {any} batch
+     * @param {any} payment_network
+     * @param {Function} load_record
+     * @param {Function} pay_for_quotes
+     * @param {Function | null} [on_progress]
+     * @param {string | null} [checkpoint]
+     * @param {Function | null} [on_checkpoint]
+     * @param {string | null} [payment_mode]
+     * @param {Function | null} [pay_for_merkle]
+     * @returns {Promise<any>}
+     */
+    uploadRecords(batch, payment_network, load_record, pay_for_quotes, on_progress, checkpoint, on_checkpoint, payment_mode, pay_for_merkle) {
+        var ptr0 = isLikeNone(checkpoint) ? 0 : passStringToWasm0(checkpoint, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len0 = WASM_VECTOR_LEN;
+        var ptr1 = isLikeNone(payment_mode) ? 0 : passStringToWasm0(payment_mode, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        var len1 = WASM_VECTOR_LEN;
+        const ret = wasm.browsernetworkclient_uploadRecords(this.__wbg_ptr, batch, payment_network, load_record, pay_for_quotes, isLikeNone(on_progress) ? 0 : addToExternrefTable0(on_progress), ptr0, len0, isLikeNone(on_checkpoint) ? 0 : addToExternrefTable0(on_checkpoint), ptr1, len1, isLikeNone(pay_for_merkle) ? 0 : addToExternrefTable0(pay_for_merkle));
         return ret;
     }
     /**
@@ -1240,27 +1288,27 @@ function __wbg_get_imports() {
             return ret;
         },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 1014, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 1026, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__h6c639ae6ac52cf17);
             return ret;
         },
         __wbindgen_cast_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 233, ret: NamedExternref("Promise<any>"), inner_ret: Some(NamedExternref("Promise<any>")) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 436, ret: NamedExternref("Promise<any>"), inner_ret: Some(NamedExternref("Promise<any>")) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__h7374c3bb70d92ee4);
             return ret;
         },
         __wbindgen_cast_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("Event")], shim_idx: 230, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("Event")], shim_idx: 433, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__h25f17b54a9a2955b);
             return ret;
         },
         __wbindgen_cast_0000000000000004: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 230, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 433, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__h25f17b54a9a2955b_3);
             return ret;
         },
         __wbindgen_cast_0000000000000005: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 730, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 742, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__hc4b509476b4504c4);
             return ret;
         },

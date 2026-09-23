@@ -96,6 +96,10 @@ export class BrowserNetworkClient {
      */
     close(): void;
     /**
+     * Download and reconstruct a private file from the DataMap its uploader kept.
+     */
+    downloadPrivateFile(file: any, concurrency?: number | null, on_progress?: Function | null): Promise<any>;
+    /**
      * Download and reconstruct a complete public Autonomi file.
      */
     downloadPublicFile(file: any, concurrency?: number | null, on_progress?: Function | null): Promise<any>;
@@ -107,6 +111,10 @@ export class BrowserNetworkClient {
      * Construct a reusable client around stable WebRTC Direct seed addresses.
      */
     constructor(endpoints: any);
+    /**
+     * Resolve a private file from its DataMap for random-access range reads.
+     */
+    openPrivateFile(file: any, on_progress?: Function | null): Promise<BrowserFileReader>;
     /**
      * Resolve and validate a public file for random-access range reads.
      */
@@ -132,6 +140,16 @@ export class BrowserNetworkClient {
      * Self-encrypt, quote, pay through a wallet callback, and store a public file.
      */
     uploadPublicFile(content: Uint8Array, name: string, content_type: string, payment_network: any, pay_for_quotes: Function, on_progress?: Function | null, checkpoint?: string | null, on_checkpoint?: Function | null, payment_mode?: string | null, pay_for_merkle?: Function | null): Promise<any>;
+    /**
+     * Quote, pay for, and store one batch of caller-staged records.
+     *
+     * Callers that cannot hold a whole file's encrypted records at once stage
+     * and upload consecutive batches. Each batch is its own payment and
+     * checkpoint scope; the shared coordinator selects single-node or Merkle
+     * payment for it exactly as for a complete file. Records are loaded
+     * lazily and verified against their addresses on every load.
+     */
+    uploadRecords(batch: any, payment_network: any, load_record: Function, pay_for_quotes: Function, on_progress?: Function | null, checkpoint?: string | null, on_checkpoint?: Function | null, payment_mode?: string | null, pay_for_merkle?: Function | null): Promise<any>;
     /**
      * Quote, pay for, and upload records produced by `BrowserFileEncryptor`.
      *
@@ -273,6 +291,35 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly __wbg_browserfilereader_free: (a: number, b: number) => void;
+    readonly __wbg_browsernetworkclient_free: (a: number, b: number) => void;
+    readonly __wbg_browsernodeclient_free: (a: number, b: number) => void;
+    readonly __wbg_browsernodesession_free: (a: number, b: number) => void;
+    readonly browserfilereader_close: (a: number) => void;
+    readonly browserfilereader_contentType: (a: number) => [number, number];
+    readonly browserfilereader_name: (a: number) => [number, number];
+    readonly browserfilereader_readRange: (a: number, b: number, c: number) => any;
+    readonly browserfilereader_size: (a: number) => number;
+    readonly browsernetworkclient_close: (a: number) => void;
+    readonly browsernetworkclient_downloadPrivateFile: (a: number, b: any, c: number, d: number) => any;
+    readonly browsernetworkclient_downloadPublicFile: (a: number, b: any, c: number, d: number) => any;
+    readonly browsernetworkclient_findClosest: (a: number, b: number, c: number, d: number) => any;
+    readonly browsernetworkclient_new: (a: any) => [number, number, number];
+    readonly browsernetworkclient_openPrivateFile: (a: number, b: any, c: number) => any;
+    readonly browsernetworkclient_openPublicFile: (a: number, b: any, c: number) => any;
+    readonly browsernetworkclient_uploadPublicFile: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: any, j: number, k: number, l: number, m: number, n: number, o: number, p: number) => any;
+    readonly browsernetworkclient_uploadRecords: (a: number, b: any, c: any, d: any, e: any, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => any;
+    readonly browsernetworkclient_uploadStagedPublicFile: (a: number, b: any, c: any, d: any, e: any, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => any;
+    readonly browsernodeclient_connect: (a: number) => any;
+    readonly browsernodeclient_new: (a: any) => [number, number, number];
+    readonly browsernodesession_close: (a: number) => void;
+    readonly browsernodesession_findNode: (a: number, b: number, c: number, d: number) => any;
+    readonly browsernodesession_getChunk: (a: number, b: number, c: number) => any;
+    readonly browsernodesession_hello: (a: number) => any;
+    readonly browsernodesession_peerId: (a: number) => [number, number];
+    readonly browsernodesession_putChunk: (a: number, b: number, c: number, d: number, e: number, f: any, g: number, h: number) => any;
+    readonly browsernodesession_quoteChunk: (a: number, b: number, c: number, d: number) => any;
+    readonly browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
     readonly __wbg_browserfileencryptor_free: (a: number, b: number) => void;
     readonly __wbg_browseriterativelookup_free: (a: number, b: number) => void;
     readonly browserfileencryptor_finish: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
@@ -298,32 +345,6 @@ export interface InitOutput {
     readonly verifyRecord: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly verifyStorageQuote: (a: any, b: number, c: number, d: number, e: number) => [number, number, number];
     readonly webRtcDirectV2ServerCredential: (a: number, b: number) => [number, number, number, number];
-    readonly __wbg_browserfilereader_free: (a: number, b: number) => void;
-    readonly __wbg_browsernetworkclient_free: (a: number, b: number) => void;
-    readonly __wbg_browsernodeclient_free: (a: number, b: number) => void;
-    readonly __wbg_browsernodesession_free: (a: number, b: number) => void;
-    readonly browserfilereader_close: (a: number) => void;
-    readonly browserfilereader_contentType: (a: number) => [number, number];
-    readonly browserfilereader_name: (a: number) => [number, number];
-    readonly browserfilereader_readRange: (a: number, b: number, c: number) => any;
-    readonly browserfilereader_size: (a: number) => number;
-    readonly browsernetworkclient_close: (a: number) => void;
-    readonly browsernetworkclient_downloadPublicFile: (a: number, b: any, c: number, d: number) => any;
-    readonly browsernetworkclient_findClosest: (a: number, b: number, c: number, d: number) => any;
-    readonly browsernetworkclient_new: (a: any) => [number, number, number];
-    readonly browsernetworkclient_openPublicFile: (a: number, b: any, c: number) => any;
-    readonly browsernetworkclient_uploadPublicFile: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: any, j: number, k: number, l: number, m: number, n: number, o: number, p: number) => any;
-    readonly browsernetworkclient_uploadStagedPublicFile: (a: number, b: any, c: any, d: any, e: any, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => any;
-    readonly browsernodeclient_connect: (a: number) => any;
-    readonly browsernodeclient_new: (a: any) => [number, number, number];
-    readonly browsernodesession_close: (a: number) => void;
-    readonly browsernodesession_findNode: (a: number, b: number, c: number, d: number) => any;
-    readonly browsernodesession_getChunk: (a: number, b: number, c: number) => any;
-    readonly browsernodesession_hello: (a: number) => any;
-    readonly browsernodesession_peerId: (a: number) => [number, number];
-    readonly browsernodesession_putChunk: (a: number, b: number, c: number, d: number, e: number, f: any, g: number, h: number) => any;
-    readonly browsernodesession_quoteChunk: (a: number, b: number, c: number, d: number) => any;
-    readonly browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
     readonly BrotliDecoderCreateInstance: (a: number, b: number, c: number) => number;
     readonly BrotliDecoderDecompress: (a: number, b: number, c: number, d: number) => number;
     readonly BrotliDecoderDecompressPrealloc: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => void;
