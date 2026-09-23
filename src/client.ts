@@ -42,6 +42,7 @@ import type {
   PendingPayment,
   PrivateDownloadResult,
   PrivateFile,
+  PrivateFileReference,
   ProgressEvent,
   ProgressListener,
   PublicFile,
@@ -585,10 +586,10 @@ export class AutonomiClient {
 
   /** Download, reconstruct, and BLAKE3-verify a complete public or private file. */
   download(file: string | PublicFile, options?: DownloadOptions): Promise<DownloadResult>;
-  download(file: PrivateFile, options?: DownloadOptions): Promise<PrivateDownloadResult>;
-  download(file: string | PublicFile | PrivateFile, options?: DownloadOptions): Promise<DownloadResult | PrivateDownloadResult>;
+  download(file: PrivateFileReference, options?: DownloadOptions): Promise<PrivateDownloadResult>;
+  download(file: string | PublicFile | PrivateFileReference, options?: DownloadOptions): Promise<DownloadResult | PrivateDownloadResult>;
   async download(
-    file: string | PublicFile | PrivateFile,
+    file: string | PublicFile | PrivateFileReference,
     options: DownloadOptions = {},
   ): Promise<DownloadResult | PrivateDownloadResult> {
     const operation = this.#startOperation(options);
@@ -639,9 +640,13 @@ export class AutonomiClient {
 
   /** Choose a destination, then download, verify, and save a public or private file. */
   downloadAndSave(file: string | PublicFile, options?: DownloadOptions & SaveOptions): Promise<{ download: DownloadResult; save: SaveResult }>;
-  downloadAndSave(file: PrivateFile, options?: DownloadOptions & SaveOptions): Promise<{ download: PrivateDownloadResult; save: SaveResult }>;
+  downloadAndSave(file: PrivateFileReference, options?: DownloadOptions & SaveOptions): Promise<{ download: PrivateDownloadResult; save: SaveResult }>;
+  downloadAndSave(
+    file: string | PublicFile | PrivateFileReference,
+    options?: DownloadOptions & SaveOptions,
+  ): Promise<{ download: DownloadResult | PrivateDownloadResult; save: SaveResult }>;
   async downloadAndSave(
-    file: string | PublicFile | PrivateFile,
+    file: string | PublicFile | PrivateFileReference,
     options: DownloadOptions & SaveOptions = {},
   ): Promise<{ download: DownloadResult | PrivateDownloadResult; save: SaveResult }> {
     const operation = this.#startOperation(options);
@@ -689,7 +694,7 @@ export class AutonomiClient {
 
   /** Open a bounded random-access reader without reconstructing the whole file. */
   async openFile(
-    file: string | PublicFile | PrivateFile,
+    file: string | PublicFile | PrivateFileReference,
     options: OperationOptions = {},
   ): Promise<PublicFileReader> {
     const operation = this.#startOperation(options);
@@ -729,7 +734,7 @@ export class AutonomiClient {
    * your site's public root before using the default serviceWorkerUrl.
    */
   async createMediaSource(
-    file: string | PublicFile | PrivateFile,
+    file: string | PublicFile | PrivateFileReference,
     options: MediaOptions = {},
   ): Promise<MediaSource> {
     const operation = this.#startOperation(options);
@@ -846,7 +851,7 @@ export class AutonomiClient {
   }
 }
 
-function visibilityLabel(file: string | PublicFile | PrivateFile): "Public" | "Private" {
+function visibilityLabel(file: string | PublicFile | PrivateFileReference): "Public" | "Private" {
   return isPrivateFile(file) ? "Private" : "Public";
 }
 

@@ -1,5 +1,7 @@
 import { AutonomiError } from "../errors.js";
-import type { HelloInfo, LookupFailure, LookupResult, NetworkNode, PaymentNetwork, PrivateFile, PublicFile } from "../types.js";
+import type {
+  HelloInfo, LookupFailure, LookupResult, NetworkNode, PaymentNetwork, PrivateFile, PrivateFileReference, PublicFile,
+} from "../types.js";
 
 /** Rust/WASM wire representations stay private to the SDK. */
 export interface CorePublicFile {
@@ -87,16 +89,16 @@ export function corePublicFile(file: PublicFile): CorePublicFile {
   };
 }
 
-export function isPrivateFile(file: string | PublicFile | PrivateFile): file is PrivateFile {
+export function isPrivateFile(file: string | PublicFile | PrivateFileReference): file is PrivateFileReference {
   return typeof file === "object" && file !== null && "dataMap" in file;
 }
 
-/** Private reads pass the caller-held DataMap; Rust fetches its nested records. */
-export function corePrivateFile(file: PrivateFile): { data_map: Uint8Array; name: string; content_type: string } {
+/** Private reads pass the caller-held DataMap; Rust fetches its nested records and names unnamed files. */
+export function corePrivateFile(file: PrivateFileReference): { data_map: Uint8Array; name: string; content_type: string } {
   if (!(file.dataMap instanceof Uint8Array) || file.dataMap.byteLength === 0) {
     throw new AutonomiError("INVALID_SOURCE", "A private file requires its DataMap bytes");
   }
-  return { data_map: file.dataMap, name: file.name, content_type: file.contentType };
+  return { data_map: file.dataMap, name: file.name ?? "", content_type: file.contentType ?? "" };
 }
 
 /** Rust describes a private file like a public one; the SDK keeps the caller's DataMap instead of an address. */

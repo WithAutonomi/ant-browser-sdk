@@ -2,13 +2,18 @@ import { expectTypeOf, it } from "vitest";
 // Exercise the published declarations rather than the source-only internal factory.
 import type {
   AutonomiClient, PublicFileReader, NetworkConnectionOptions, NetworkDefaults, getNetworkDefaults,
-  PrivateDownloadResult, PrivateFile, PublicFile, UploadResult, DownloadResult,
+  PrivateDownloadResult, PrivateFile, PrivateFileReference, PublicFile, UploadResult, DownloadResult,
 } from "@withautonomi/browser-sdk";
 
 it("types private uploads and reads by the DataMap their holder keeps", () => {
   const uploadPublic = (client: AutonomiClient, bytes: Uint8Array) => client.upload(bytes);
   const uploadPrivate = (client: AutonomiClient, bytes: Uint8Array) => client.upload(bytes, { visibility: "private" });
   const downloadPrivate = (client: AutonomiClient, file: PrivateFile) => client.download(file);
+  const downloadDataMap = (client: AutonomiClient, dataMap: Uint8Array) => client.download({ dataMap });
+  expectTypeOf<Awaited<ReturnType<typeof downloadDataMap>>>().toEqualTypeOf<PrivateDownloadResult>();
+  expectTypeOf<PrivateFile>().toMatchTypeOf<PrivateFileReference>();
+  const saveEither = (client: AutonomiClient, file: string | PrivateFileReference) => client.downloadAndSave(file);
+  expectTypeOf<Awaited<ReturnType<typeof saveEither>>["download"]>().toEqualTypeOf<DownloadResult | PrivateDownloadResult>();
   const downloadPublic = (client: AutonomiClient, address: string) => client.download(address);
   expectTypeOf<Awaited<ReturnType<typeof uploadPublic>>>().toEqualTypeOf<UploadResult>();
   expectTypeOf<Awaited<ReturnType<typeof uploadPrivate>>>().toEqualTypeOf<UploadResult<PrivateFile>>();

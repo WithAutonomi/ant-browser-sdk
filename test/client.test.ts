@@ -417,6 +417,13 @@ describe("AutonomiClient", () => {
     expect(reader.address).toBe("");
     reader.close();
 
+    // A bare DataMap, such as a native .datamap file, is enough to read; the core names the file.
+    raw.downloadPrivateFile.mockResolvedValueOnce({ content: Uint8Array.of(1), hash: file.blake3,
+      file: { ...wireFile, name: "private-file-0123456789abcdef.bin" } });
+    const bare = await client.download({ dataMap });
+    expect(raw.downloadPrivateFile).toHaveBeenLastCalledWith({ data_map: dataMap, name: "", content_type: "" }, undefined, expect.any(Function));
+    expect(bare.file).toMatchObject({ name: "private-file-0123456789abcdef.bin", dataMap });
+
     await expect(client.download({ ...privateFile, dataMap: new Uint8Array() })).rejects.toMatchObject({ code: "INVALID_SOURCE" });
     client.close();
   });

@@ -274,16 +274,18 @@ for as usual; a private upload stores and pays for one record fewer than a publi
 const { file } = await client.upload(input, { visibility: "private" });
 await dataMapStore.save(`${file.name}.datamap`, file.dataMap);
 
-const dataMap = await dataMapStore.load(`${file.name}.datamap`);
-const { bytes } = await client.download({ ...file, dataMap });
+// Later, or with a `.datamap` file written by the native CLI:
+const dataMap = new Uint8Array(await datamapFile.arrayBuffer());
+const { bytes } = await client.download({ dataMap, name: "holiday.jpg" });
 ```
 
 `download()`, `downloadAndSave()`, `openFile()`, and `createMediaSource()` accept a
-`PrivateFile`. Only `dataMap`, `name`, and `contentType` are sent to the core; size
-and chunks come from the resolved DataMap. Private download results have no
-`dataMapNode`, private readers have an empty `address`, and private files never
-appear in `client.files`. A MessagePack `.datamap` written by the native CLI can be
-read by passing its bytes as `dataMap`. Upload recoveries report their
+`PrivateFile` or any `PrivateFileReference`: the `dataMap` bytes plus an optional
+`name` and `contentType`. Only those fields reach the core; size and chunks come
+from the resolved DataMap, and an unnamed file gets a name derived from it. Private
+download results have no `dataMapNode`, private readers have an empty `address`,
+and private files never appear in `client.files`. Native tools write `.datamap`
+files as the same MessagePack bytes. Upload recoveries report their
 `visibility`, and `resumeUpload()` returns a `PublicFile` or `PrivateFile` to match.
 
 ### Resume a failed upload

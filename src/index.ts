@@ -41,6 +41,7 @@ export type {
   PendingPayment,
   PrivateDownloadResult,
   PrivateFile,
+  PrivateFileReference,
   ProgressDetails,
   ProgressPhase,
   ProgressEvent,

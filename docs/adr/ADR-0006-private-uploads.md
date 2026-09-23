@@ -58,10 +58,12 @@ We will adopt option 2.
   `UploadRecovery.visibility` identifies retained uploads, and `resumeUpload()`
   returns `UploadResult<PublicFile | PrivateFile>`.
 - `download()`, `downloadAndSave()`, `openFile()`, and `createMediaSource()` accept
-  a `PrivateFile`. Only its DataMap, name, and content type reach the core, which
-  resolves nested DataMap records from the network and bounds the DataMap by the
-  maximum record size. `PrivateDownloadResult` has no `dataMapNode`, private
-  readers report an empty `address`, and private files never enter `client.files`.
+  a `PrivateFile` or a `PrivateFileReference` holding just the DataMap and an
+  optional name and content type, as a bare `.datamap` file provides. Only those
+  fields reach the core, which resolves nested DataMap records from the network
+  and bounds the DataMap by the maximum record size. `PrivateDownloadResult` has
+  no `dataMapNode`, private readers report an empty `address`, and private files
+  never enter `client.files`.
 
 ## Consequences
 

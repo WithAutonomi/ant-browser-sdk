@@ -43,6 +43,12 @@ export interface PrivateFile {
   readonly replicas: number;
 }
 
+/**
+ * Reads need only the DataMap, such as the content of a native `.datamap` file;
+ * size and chunks come from the resolved DataMap.
+ */
+export type PrivateFileReference = Pick<PrivateFile, "dataMap"> & Partial<Pick<PrivateFile, "name" | "contentType">>;
+
 /** Who can read an uploaded file, as in native `Visibility`. */
 export type UploadVisibility = "public" | "private";
 
