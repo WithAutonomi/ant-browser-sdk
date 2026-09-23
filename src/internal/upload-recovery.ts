@@ -1,13 +1,13 @@
-import { deleteUploadCheckpoint } from "./record-store.js";
+import { deleteStagedSession, deleteUploadCheckpoint } from "./record-store.js";
 import { AutonomiError } from "../errors.js";
 import type {
   MerklePaymentRequest, PaymentNetwork, PaymentReceipt, PaymentSettlement, PaymentSubmission, PendingPayment, PublicFile, UploadPayment, UploadRecovery,
   UploadResult, VerifiedStorageQuote,
 } from "../types.js";
-import { clearStagedUpload, type StagedUpload } from "./staging.js";
+import { newStagingSessionId } from "./staging.js";
 import { snapshot } from "./snapshot.js";
 import { abortable, isAbort } from "./abort.js";
-import type { UploadedFile } from "./upload-sources.js";
+import type { StagingCursor, UploadedFile } from "./upload-sources.js";
 
 export interface RetainedUpload {
   paymentMode?: "auto" | "single" | "merkle";
@@ -20,7 +20,9 @@ export interface RetainedUpload {
   contentType: string;
   size: number;
   bytes?: Uint8Array;
-  staged?: StagedUpload;
+  /** A File or Blob is re-read per attempt; only its current window stays staged. */
+  blob?: Blob;
+  cursor?: StagingCursor;
   payments: UploadPayment[];
   paymentTasks: Promise<unknown>[];
   submissions: TrackedPayment[];
@@ -33,12 +35,11 @@ const states = new WeakMap<UploadRecovery, RetainedUpload>();
 
 export function retainUpload(
   network: PaymentNetwork,
-  input: { bytes: Uint8Array; name: string; contentType: string } | { staged: StagedUpload },
+  input: { name: string; contentType: string } & ({ bytes: Uint8Array } | { blob: Blob }),
   id: string,
 ): RetainedUpload {
-  const name = "staged" in input ? input.staged.staged.name : input.name;
-  const size = "staged" in input ? input.staged.staged.size : input.bytes.byteLength;
-  const contentType = "staged" in input ? input.staged.staged.content_type : input.contentType;
+  const { name, contentType } = input;
+  const size = "blob" in input ? input.blob.size : input.bytes.byteLength;
   let discarding: Promise<void> | undefined;
   const handle: UploadRecovery = Object.freeze({
     id, name, size, contentType,
@@ -64,8 +65,11 @@ export function retainUpload(
     },
   });
   const state: RetainedUpload = {
-    handle, network: snapshot(network), name, contentType, size,
+    handle, network: snapshot(network), size,
     ...input, payments: [], paymentTasks: [], submissions: [], status: "active", settled: Promise.resolve(),
+    ...("blob" in input
+      ? { cursor: { sessionId: newStagingSessionId(), nextRecord: 0, windowed: false, usedMerkle: false } }
+      : {}),
   };
   states.set(handle, state);
   return state;
@@ -188,9 +192,10 @@ export async function releaseUpload(
   state: RetainedUpload,
   status: "completed" | "discarded",
 ): Promise<void> {
-  if (state.staged) await clearStagedUpload(state.staged);
+  if (state.cursor) await deleteStagedSession(state.cursor.sessionId);
   if (state.checkpointStoredLocally) await deleteUploadCheckpoint(state.handle.id);
-  delete state.staged;
+  delete state.cursor;
+  delete state.blob;
   delete state.bytes;
   delete state.work;
   state.paymentTasks = [];

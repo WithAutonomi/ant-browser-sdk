@@ -85,30 +85,23 @@ export async function getStagedRecord(
   return result instanceof Uint8Array ? result : new Uint8Array(result as ArrayBuffer);
 }
 
-export async function deleteStagedRecords(
+/** Remove a session's records from `start` up to, but excluding, `end`. */
+export async function deleteStagedRecordRange(
   sessionId: string,
-  recordCount: number,
+  start: number,
+  end = Number.MAX_SAFE_INTEGER,
 ): Promise<void> {
-  if (recordCount === 0) return;
+  if (end <= start) return;
   const database = await uploadDatabase();
   const transaction = database.transaction(RECORD_STORE, "readwrite");
-  const store = transaction.objectStore(RECORD_STORE);
-  for (let index = 0; index < recordCount; index += 1) {
-    store.delete([sessionId, index]);
-  }
+  const range = IDBKeyRange.bound([sessionId, start], [sessionId, end], false, true);
+  transaction.objectStore(RECORD_STORE).delete(range);
   await transactionDone(transaction);
 }
 
-/** Remove every record for a session when its worker was terminated mid-stage. */
+/** Remove every record a session staged, including windows a terminated worker left behind. */
 export async function deleteStagedSession(sessionId: string): Promise<void> {
-  const database = await uploadDatabase();
-  const transaction = database.transaction(RECORD_STORE, "readwrite");
-  const range = IDBKeyRange.bound(
-    [sessionId, 0],
-    [sessionId, Number.MAX_SAFE_INTEGER],
-  );
-  transaction.objectStore(RECORD_STORE).delete(range);
-  await transactionDone(transaction);
+  await deleteStagedRecordRange(sessionId, 0);
 }
 
 /** Persist the core payment journal before the signer is invoked. */

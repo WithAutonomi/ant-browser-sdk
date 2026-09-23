@@ -10,8 +10,11 @@ import { createPublicFileReader, type PublicFileReader } from "./file-reader.js"
 import { abortable, isAbort, throwIfAborted } from "./internal/abort.js";
 import { getBindings, initializeClientWasm, type RawNetworkClient } from "./internal/runtime.js";
 import { MediaBridge } from "./internal/media.js";
-import { stageBlob, type WorkerWasmSource } from "./internal/staging.js";
-import { uploadBytes, uploadStaged, type RecordBatchUploader } from "./internal/upload-sources.js";
+import { assertStagingSupported, type WorkerWasmSource } from "./internal/staging.js";
+import {
+  restoreCheckpoint, uploadBytes, uploadFileInWindows, type RecordBatchUploader,
+} from "./internal/upload-sources.js";
+import { unwrapWindowCheckpoint, wrapWindowCheckpoint } from "./internal/window-checkpoint.js";
 import { operationId, progressReporter, type Reporter, type OperationOutcome } from "./internal/progress.js";
 import {
   awaitUploadSettlement, claimUpload, paidReceipt, releaseUpload, retainUpload,
@@ -268,8 +271,8 @@ export class AutonomiClient {
   /**
    * Self-encrypt, pay, and store a public file.
    *
-   * Files and Blobs are encrypted in a worker and staged in IndexedDB. A
-   * Uint8Array uses the lower-latency in-memory path.
+   * Files and Blobs are encrypted in a worker and staged in IndexedDB one
+   * storage-bounded window at a time. A Uint8Array uses the in-memory path.
    */
   async upload(
     input: File | Blob | Uint8Array,
@@ -296,18 +299,18 @@ export class AutonomiClient {
         }, operation.id);
       } else if (typeof Blob === "function" && input instanceof Blob) {
         assertFileSize(input.size);
+        assertStagingSupported();
         const isFile = typeof File === "function" && input instanceof File;
-        const staged = await stageBlob(
-          input, options.name ?? (isFile ? input.name : "public-file.bin"),
-          options.contentType || input.type || "application/octet-stream",
-          report, this.#workerWasm, operation.signal,
-        );
-        retained = retainUpload(this.#connection.paymentNetwork, { staged }, operation.id);
+        const name = options.name ?? (isFile ? input.name : "public-file.bin");
+        report(`Preparing ${name}`);
+        retained = retainUpload(this.#connection.paymentNetwork, {
+          blob: input, name, contentType: options.contentType || input.type || "application/octet-stream",
+        }, operation.id);
       } else {
         throw new TypeError("upload input must be a File, Blob, or Uint8Array");
       }
       if (options.paymentMode !== undefined) retained.paymentMode = options.paymentMode;
-      if (options.checkpoint !== undefined) retained.coreCheckpoint = options.checkpoint;
+      if (options.checkpoint !== undefined) restoreCheckpoint(retained, options.checkpoint);
       if (options.onCheckpoint !== undefined) retained.onCheckpoint = options.onCheckpoint;
       return await this.#runUpload(
         retained, payment, false, options.retainOnFailure !== false, operation, report, options.onPaymentSubmitted,
@@ -336,11 +339,14 @@ export class AutonomiClient {
       throw new TypeError("Failed payment reconciliation requires verification and durable checkpoint callbacks");
     }
     try {
-      return await this.#network.reconcileFailedUploadPayment(
-        checkpoint,
+      // A windowed checkpoint keeps naming its window after reconciliation.
+      const windowed = unwrapWindowCheckpoint(checkpoint);
+      const envelope = (value: string): string => windowed ? wrapWindowCheckpoint(value, windowed.window) : value;
+      return envelope(await this.#network.reconcileFailedUploadPayment(
+        windowed?.checkpoint ?? checkpoint,
         (attempt, scope) => options.verifyFailure(attempt, scope),
-        value => options.onCheckpoint(value),
-      );
+        value => options.onCheckpoint(envelope(value)),
+      ));
     } catch (error) {
       throw wrapError("PAYMENT_FAILED", "Could not reconcile failed storage payment", error);
     }
@@ -516,18 +522,21 @@ export class AutonomiClient {
       if (resuming) await reconcilePayments(state, operation.signal);
       if (!state.result) {
         report(`Preparing storage for ${state.name}`, { phase: "preparing" });
-        const checkpoint = async (value: string) => {
-          state.coreCheckpoint = value;
-          if (state.onCheckpoint) await state.onCheckpoint(value);
-          else { await saveUploadCheckpoint(state.handle.id, value); state.checkpointStoredLocally = true; }
-        };
         const network = this.#network;
-        const uploadBatch: RecordBatchUploader = async (batch, load) => await network.uploadRecords(
-          batch, corePaymentNetwork(state.network), load, payForQuotes, report, state.coreCheckpoint, checkpoint,
-          state.paymentMode ?? "auto", payForMerkle,
-        ) as CoreRecordBatchResult;
-        const uploading = state.staged
-          ? uploadStaged(state, uploadBatch, operation.signal)
+        const uploadBatch: RecordBatchUploader = async (batch, load, window) => {
+          const checkpoint = async (value: string) => {
+            state.coreCheckpoint = value;
+            const persisted = window ? wrapWindowCheckpoint(value, window) : value;
+            if (state.onCheckpoint) await state.onCheckpoint(persisted);
+            else { await saveUploadCheckpoint(state.handle.id, persisted); state.checkpointStoredLocally = true; }
+          };
+          return await network.uploadRecords(
+            batch, corePaymentNetwork(state.network), load, payForQuotes, report, state.coreCheckpoint, checkpoint,
+            state.paymentMode ?? "auto", payForMerkle,
+          ) as CoreRecordBatchResult;
+        };
+        const uploading = state.cursor
+          ? uploadFileInWindows(state, uploadBatch, { report, signal: operation.signal, wasm: this.#workerWasm })
           : uploadBytes(state, uploadBatch, report);
         state.work = uploading.then((uploaded) => {
           state.result = uploadResult(state, uploaded);

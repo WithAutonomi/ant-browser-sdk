@@ -16,7 +16,8 @@ with them directly.
 
 - Certificate-pinned WebRTC Direct connections and authenticated node discovery
 - Public-file self-encryption, content addressing, paid upload, and verified download
-- Incremental `File` and `Blob` processing in a worker with IndexedDB staging
+- Incremental `File` and `Blob` processing in a worker with IndexedDB staging,
+  in storage-bounded windows when a file does not fit the origin's quota
 - Optional Ethers v6 and Wagmi/Viem payment adapters
 - A wallet-independent `PaymentProvider` interface
 - Explicit quote review before wallet payment
@@ -201,10 +202,24 @@ console.log(result.transactionHash);
 
 `File` and `Blob` inputs are incrementally self-encrypted in a dedicated worker.
 Encrypted records are staged in IndexedDB instead of being accumulated in page
-memory, then cleared after a successful upload. After failure or cancellation,
-prepared input is retained for explicit resume or discard; failed encryption
-staging is still cleared immediately. The browser must have enough storage quota
-for staged records, including retained failures.
+memory. A file whose encrypted records fit the origin's storage quota is staged
+and uploaded as one batch. A larger file is uploaded in windows: the worker stages
+as many records as the quota estimate allows, the native coordinator quotes, pays
+for, and stores that window, and the SDK deletes it before the worker continues.
+Each record is encrypted once, and IndexedDB never holds more than one window. A
+window ends early if IndexedDB runs out of space before the estimate, and must hold
+at least one encrypted record of up to 4 MiB.
+
+Each window is a separate payment batch. `paymentMode: "auto"` applies the native
+Merkle threshold to each window, and every window that needs payment requires its
+own wallet transaction. Progress reports the window's record positions within the
+whole file, and `staging` progress counts records encrypted so far.
+
+After failure or cancellation, the `File` or `Blob` is retained for explicit
+resume or discard, together with the window being uploaded; completed windows are
+already released. Resuming uploads that staged window again, then re-encrypts the
+file in the worker to continue after it. A partially staged window is cleared
+when staging fails.
 
 Use a `Uint8Array` for an in-memory upload. A name is optional and defaults to
 `public-file.bin`. The SDK copies the byte array so later application edits cannot
@@ -786,7 +801,8 @@ The limits and capability reports are immutable. Unsupported input sizes are
 rejected before copying byte arrays, staging Blobs, or opening files from supplied
 metadata. Address-only reads learn the size from the core; media setup checks it
 before registering a worker or creating a URL. These are protocol ceilings;
-whole-file transfers still need sufficient memory and staging needs storage quota.
+whole-file transfers still need sufficient memory, and staging needs quota for at
+least one encrypted record.
 
 `getBrowserCapabilities()` safely runs outside a browser and makes no network
 requests, allocations of workers, or permission prompts. `features` reports each
@@ -811,7 +827,8 @@ IndexedDB, an upload worker, or payment RPC access.
   containing `/webrtc-direct/certhash/.../p2p/...`
 - For uploads, at least seven discoverable initial peers and enough eligible
   witnesses to support the paid quote; four successful stores complete delivery
-- Enough IndexedDB quota to stage encrypted records for `File` and `Blob` uploads
+- IndexedDB quota for at least one 4 MiB encrypted record per `File` or `Blob`
+  upload window; a smaller quota means more windows and more payments
 - CORS access to the application's payment RPC when the payment adapter queries
   it directly; injected wallets manage their own provider access
 - A secure context and service-worker support for seekable media URLs
@@ -944,7 +961,14 @@ await client.upload(file, {
 is awaited before payment or record uploads proceed. A confirmed proof remains
 usable with newly discovered peers and new quotes until the shared native expiry
 policy says otherwise. Checkpoints are bound to the input records and payment
-network, and contain no file bytes or private keys. Submission evidence and raw
+network, and contain no file bytes or private keys. When a `File` or `Blob` is
+uploaded in several windows, each window has its own Rust checkpoint, which the SDK
+wraps in an envelope naming the window's record range. Passing that checkpoint back
+re-encrypts the file up to the window, stages exactly that window again, and
+continues from there; windows before it are already stored. A plain checkpoint
+covers the whole file, which must then be staged as one window. Windowed
+checkpoints resume only `File` and `Blob` inputs. `reconcileFailedUploadPayment`
+accepts either form and returns the same form. Submission evidence and raw
 receipts are journaled before validation. Promise-based settlement observers stay
 in the page; after reload the wallet's recovery methods observe the saved
 transaction identity without submitting another payment.

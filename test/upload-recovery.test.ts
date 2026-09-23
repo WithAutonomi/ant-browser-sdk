@@ -1,9 +1,9 @@
 import "fake-indexeddb/auto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { PaymentProvider } from "../src/types.js";
-import type { StagedUpload } from "../src/internal/staging.js";
+import type { StagingSessionOptions } from "../src/internal/staging.js";
 const mocks = vi.hoisted(() => ({
-  staged: undefined as StagedUpload | undefined,
+  sessionId: "",
   upload: vi.fn(),
   stage: vi.fn(),
   network: {
@@ -24,7 +24,8 @@ vi.mock("../src/internal/runtime.js", () => ({
 }));
 vi.mock("../src/internal/staging.js", async (original) => ({
   ...await original<typeof import("../src/internal/staging.js")>(),
-  stageBlob: mocks.stage,
+  assertStagingSupported: () => undefined,
+  openStagingSession: mocks.stage,
 }));
 import { AutonomiClient, UploadError, createPaymentSubmission } from "../src/index.js";
 import { getStagedRecord, putStagedRecord } from "../src/internal/record-store.js";
@@ -43,12 +44,16 @@ beforeEach(async () => {
   vi.stubGlobal("fetch", vi.fn(async () => Response.json({ jsonrpc: "2.0", id: 1, result: "0x7a69" })));
   mocks.upload.mockReset(); mocks.stage.mockReset();
   mocks.network = { ...mocks.network, chain_id: 31337, payment_vault_address: `0x${"22".repeat(20)}` };
-  mocks.staged = {
-    sessionId: crypto.randomUUID(),
-    staged: { ...file, chunks: [], records: [{ address: file.address, size: 3 }] },
-  };
-  await putStagedRecord(mocks.staged.sessionId, 0, Uint8Array.of(1, 2, 3));
-  mocks.stage.mockResolvedValue(mocks.staged);
+  // The whole file fits in one window: one record, staged by a worker stand-in.
+  mocks.stage.mockImplementation((options: StagingSessionOptions) => ({
+    async next() {
+      mocks.sessionId = options.sessionId;
+      await putStagedRecord(options.sessionId, 0, Uint8Array.of(1, 2, 3));
+      const records = [{ address: file.address, size: 3 }];
+      return { firstIndex: 0, records, file: { ...file, chunks: [], records } };
+    },
+    close: vi.fn(),
+  }));
 });
 afterEach(async () => {
   for (const value of clients.splice(0)) {
@@ -64,7 +69,7 @@ it("retains staged bytes after failure and cleans them only after a successful r
     await pay(network, quotes); throw new Error("quorum failed");
   });
   await expect(value.upload(new Blob(["abc"]))).rejects.toBeInstanceOf(UploadError);
-  expect(await getStagedRecord(mocks.staged!.sessionId, 0)).toEqual(Uint8Array.of(1, 2, 3));
+  expect(await getStagedRecord(mocks.sessionId, 0)).toEqual(Uint8Array.of(1, 2, 3));
   const recovery = value.pendingUploads[0]!;
   mocks.upload.mockImplementationOnce(async (_batch, network, load, pay) => {
     expect(await load(0, file.address, 3)).toEqual(Uint8Array.of(1, 2, 3));
@@ -76,7 +81,7 @@ it("retains staged bytes after failure and cleans them only after a successful r
   });
   expect(mocks.stage).toHaveBeenCalledOnce();
   expect(payment.pay).toHaveBeenCalledOnce();
-  await expect(getStagedRecord(mocks.staged!.sessionId, 0)).rejects.toThrow("is missing");
+  await expect(getStagedRecord(mocks.sessionId, 0)).rejects.toThrow("is missing");
 });
 it("lets applications opt out of retained input", async () => {
   const value = await client(wallet());
@@ -85,7 +90,7 @@ it("lets applications opt out of retained input", async () => {
   expect(error).toBeInstanceOf(UploadError);
   await (error as UploadError).recovery.discard();
   expect(value.pendingUploads).toEqual([]);
-  await expect(getStagedRecord(mocks.staged!.sessionId, 0)).rejects.toThrow("is missing");
+  await expect(getStagedRecord(mocks.sessionId, 0)).rejects.toThrow("is missing");
 });
 it("does not discard staged bytes while a submitted payment is still settling", async () => {
   let confirm!: (receipt: { transactionHash: string; totalAmount: string }) => void;
@@ -100,11 +105,11 @@ it("does not discard staged bytes while a submitted payment is still settling", 
   const recovery = value.pendingUploads[0]!;
   const discarded = recovery.discard();
   expect(recovery.status).toBe("discarding");
-  expect(await getStagedRecord(mocks.staged!.sessionId, 0)).toHaveLength(3);
+  expect(await getStagedRecord(mocks.sessionId, 0)).toHaveLength(3);
   confirm({ transactionHash: "0xpaid", totalAmount: "42" });
   await discarded;
   expect(recovery.payments[0]!.receipt.transactionHash).toBe("0xpaid");
-  await expect(getStagedRecord(mocks.staged!.sessionId, 0)).rejects.toThrow("is missing");
+  await expect(getStagedRecord(mocks.sessionId, 0)).rejects.toThrow("is missing");
 });
 it("refuses recovery against a different payment network", async () => {
   const original = await client(wallet());

@@ -1,20 +1,22 @@
 import "fake-indexeddb/auto";
 import { describe, expect, it } from "vitest";
 import {
-  deleteStagedRecords,
+  deleteStagedRecordRange,
   deleteStagedSession,
   getStagedRecord,
   putStagedRecord,
 } from "../src/internal/record-store.js";
 
 describe("upload record staging", () => {
-  it("stores, retrieves, and clears isolated session records", async () => {
+  it("stores, retrieves, and clears one window of a session", async () => {
     const session = crypto.randomUUID();
-    const content = Uint8Array.of(1, 3, 3, 7);
-    await putStagedRecord(session, 0, content);
-    expect(await getStagedRecord(session, 0)).toEqual(content);
-    await deleteStagedRecords(session, 1);
+    for (const index of [0, 1, 2]) await putStagedRecord(session, index, Uint8Array.of(index, 3, 3, 7));
+    expect(await getStagedRecord(session, 1)).toEqual(Uint8Array.of(1, 3, 3, 7));
+    await deleteStagedRecordRange(session, 0, 2);
     await expect(getStagedRecord(session, 0)).rejects.toThrow(/is missing/);
+    await expect(getStagedRecord(session, 1)).rejects.toThrow(/is missing/);
+    expect(await getStagedRecord(session, 2)).toEqual(Uint8Array.of(2, 3, 3, 7));
+    await deleteStagedSession(session);
   });
 
   it("clears all records left by a terminated staging worker", async () => {

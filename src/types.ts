@@ -249,9 +249,12 @@ export interface OperationOptions {
 export interface UploadOptions extends OperationOptions {
   /** Native selection policy; defaults to auto. */
   paymentMode?: "auto" | "single" | "merkle";
-  /** Restore a Rust checkpoint with the same file bytes and payment network. */
+  /**
+   * Restore a checkpoint from `onCheckpoint` with the same input and payment network.
+   * A File or Blob checkpoint may name the upload window whose scope it covers.
+   */
   checkpoint?: string;
-  /** Persist Rust recovery state; awaited before requesting payment or storing records. */
+  /** Persist recovery state; awaited before requesting payment or storing records. */
   onCheckpoint?: (checkpoint: string) => void | Promise<void>;
   /** Receives submission evidence immediately; may run after cancellation during broadcast. */
   onPaymentSubmitted?: (payment: PendingPayment) => void;
@@ -292,7 +295,7 @@ export interface UploadRecovery {
   readonly pendingPayments: readonly PendingPayment[];
   /** Wait for the previous attempt and any submitted payment to finish. Never rejects. */
   readonly settled: Promise<void>;
-  /** Release retained bytes and staged records once the attempt has settled. */
+  /** Release retained input and its staged window once the attempt has settled. */
   discard(): Promise<void>;
 }
 

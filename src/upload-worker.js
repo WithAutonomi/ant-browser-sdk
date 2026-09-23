@@ -1,54 +1,60 @@
 import initAntCore, { BrowserFileEncryptor } from "./wasm/ant_core.js";
-import { deleteStagedRecords, putStagedRecord } from "./internal/record-store.js";
+import { putStagedRecord } from "./internal/record-store.js";
+import { WindowStager } from "./internal/window-stager.js";
 
-self.addEventListener("message", async (event) => {
-  if (event.data?.type !== "stage-file") return;
-  const { blob, name, contentType, sessionId, wasm } = event.data;
-  let storedRecords = 0;
-  let encryptor;
-  try {
-    await initAntCore(wasm === undefined ? undefined : { module_or_path: wasm });
-    if (typeof FileReaderSync !== "function") {
-      throw new Error("This browser cannot read files inside an upload worker");
-    }
-    const reader = new FileReaderSync();
-    encryptor = new BrowserFileEncryptor(blob.size, (offset, length) =>
-      new Uint8Array(reader.readAsArrayBuffer(blob.slice(offset, offset + length))),
-    );
-    self.postMessage({
-      type: "progress",
-      message: `Self-encrypting ${name} without loading it into page memory`,
-    });
+// One upload per worker. The encryptor keeps its stream position between windows,
+// so each record is self-encrypted once while IndexedDB holds only one window.
+let session;
+let queue = Promise.resolve();
 
-    while (true) {
-      const record = encryptor.nextRecord();
-      if (record === undefined) break;
-      await putStagedRecord(sessionId, storedRecords, record.content.slice());
-      storedRecords += 1;
-      self.postMessage({
-        type: "progress",
-        message: `Encrypted and staged record ${storedRecords}`,
-        completed: storedRecords,
-      });
-    }
-    const staged = encryptor.finish(name, contentType);
-    if (staged.records.length !== storedRecords) {
-      throw new Error(
-        `Encryption produced ${staged.records.length} records but staged ${storedRecords}`,
-      );
-    }
-    self.postMessage({ type: "complete", staged });
-  } catch (error) {
-    try {
-      await deleteStagedRecords(sessionId, storedRecords);
-    } catch {
-      // Preserve the encryption or storage error.
-    }
+self.addEventListener("message", (event) => {
+  queue = queue.then(() => handle(event.data)).catch((error) => {
     self.postMessage({
       type: "error",
       message: error instanceof Error ? error.message : String(error),
     });
-  } finally {
-    encryptor?.free();
-  }
+  });
 });
+
+async function handle(message) {
+  if (message?.type === "start") await start(message);
+  if (message?.type === "stage") await stage(message);
+}
+
+async function start({ blob, name, contentType, sessionId, wasm, skip }) {
+  await initAntCore(wasm === undefined ? undefined : { module_or_path: wasm });
+  if (typeof FileReaderSync !== "function") {
+    throw new Error("This browser cannot read files inside an upload worker");
+  }
+  const reader = new FileReaderSync();
+  const encryptor = new BrowserFileEncryptor(blob.size, (offset, length) =>
+    new Uint8Array(reader.readAsArrayBuffer(blob.slice(offset, offset + length))),
+  );
+  const stager = new WindowStager(
+    () => encryptor.nextRecord(),
+    (index, content) => putStagedRecord(sessionId, index, content.slice()),
+  );
+  session = { encryptor, stager, name, contentType };
+  if (skip > 0) {
+    progress(`Self-encrypting ${name} again to resume after record ${skip}`);
+    stager.skip(skip, (produced) => progress(`Re-encrypted stored record ${produced}/${skip}`, produced));
+  } else {
+    progress(`Self-encrypting ${name} without loading it into page memory`);
+  }
+}
+
+async function stage({ limit }) {
+  if (!session) throw new Error("Upload staging has not started");
+  const window = await session.stager.stage(limit, (staged) =>
+    progress(`Encrypted and staged record ${staged}`, staged),
+  );
+  self.postMessage({
+    type: "window",
+    ...window,
+    ...(window.complete ? { file: session.encryptor.finish(session.name, session.contentType) } : {}),
+  });
+}
+
+function progress(message, completed) {
+  self.postMessage({ type: "progress", message, ...(completed === undefined ? {} : { completed }) });
+}
