@@ -136,6 +136,10 @@ window is deleted when staging fails. Discard and completion delete the session.
 - Records of a window retained across a page reload stay in IndexedDB, as whole
   retained files did before; the leak is now bounded by one window.
 - Every attempt still requests persistent storage, which Firefox may prompt for.
+- Windowing needs the browser to reuse the space of deleted records. Chromium
+  on-disk profiles did so at once; incognito profiles keep IndexedDB in memory
+  and did not within two minutes, so a file larger than their quota fails after
+  its first window, with that window paid and the upload retained.
 
 ### Neutral / Operational
 
@@ -157,7 +161,9 @@ window is deleted when staging fails. Discard and completion delete the session.
 - ant-core WASM tests: consecutive batches downloading as one file, file-level
   progress positions, reported payment modes, and batch validation.
 - A real-browser run with a quota smaller than the file, recorded in
-  `docs/audits/` with SDK, WASM, and node revisions.
+  [the 2026-09-23 audit](../audits/2026-09-23-windowed-private-uploads.md) with SDK,
+  WASM, and node revisions, covering quota-error and estimate-bounded windows,
+  Merkle windows, resume, and the incognito limitation.
 - Review triggers: changes to the coordinator's preflight or storage order that
   would allow one payment across windows, a random-access self-encryption API
   (the ADR-0004 option), or browser quota API changes.

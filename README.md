@@ -208,7 +208,10 @@ as many records as the quota estimate allows, the native coordinator quotes, pay
 for, and stores that window, and the SDK deletes it before the worker continues.
 Each record is encrypted once, and IndexedDB never holds more than one window. A
 window ends early if IndexedDB runs out of space before the estimate, and must hold
-at least one encrypted record of up to 4 MiB.
+at least one encrypted record of up to 4 MiB. Windowing relies on the browser
+reusing the space of deleted records. Chromium incognito profiles keep IndexedDB in
+memory and did not reuse that space in testing, so there a file larger than the
+quota fails after its first window with a retained recovery.
 
 Each window is a separate payment batch. `paymentMode: "auto"` applies the native
 Merkle threshold to each window, and every window that needs payment requires its
