@@ -913,7 +913,9 @@ The examples use the following fixed local addresses:
 | Review quotes, then pay | `npm run dev:manual-payment` | `http://127.0.0.1:5178` |
 
 Each application is available under [`examples/`](examples). Build all five with
-`npm run build:examples`.
+`npm run build:examples`. The all-in-one example chooses public or private
+visibility and the payment mode, saves a private upload's DataMap as a `.datamap`
+file, and reads either a public address or a loaded `.datamap` file.
 
 ## Maintainer workflow
 

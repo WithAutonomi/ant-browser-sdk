@@ -12,7 +12,7 @@
       <h1>A complete client in one page</h1>
       <p class="lede">
         Connect directly to Autonomi nodes over certificate-pinned WebRTC, then
-        upload, download, or stream a public file.
+        upload, download, or stream a public or private file.
       </p>
 
       <section>
@@ -34,15 +34,35 @@
         <input id="payment-rpc" type="url" autocomplete="off" placeholder="http://127.0.0.1:8545" />
         <label for="wallet">Paying wallet private key (local devnet only)</label>
         <input id="wallet" type="password" autocomplete="off" />
-        <label for="upload-input">Public file</label>
+        <label for="upload-input">File</label>
         <input id="upload-input" type="file" />
-        <button id="upload" disabled>Pay and upload</button>
+        <label for="visibility">Visibility</label>
+        <select id="visibility">
+          <option value="public">Public: store the DataMap and share its address</option>
+          <option value="private">Private: keep the DataMap and save it as a file</option>
+        </select>
+        <label for="payment-mode">Payment mode</label>
+        <select id="payment-mode">
+          <option value="auto">Automatic: Merkle for 64 or more records, like native</option>
+          <option value="single">Single-node payments</option>
+          <option value="merkle">Merkle batch payment</option>
+        </select>
+        <div class="actions">
+          <button id="upload" disabled>Pay and upload</button>
+          <button id="save-datamap" hidden>Save private DataMap</button>
+        </div>
+        <p>
+          Files larger than this site's browser storage quota are uploaded in
+          windows, with one payment per window.
+        </p>
       </section>
 
       <section>
         <h2>3. Read</h2>
         <label for="address">Public DataMap address</label>
         <input id="address" placeholder="64 hexadecimal characters" />
+        <label for="datamap-input">Or a private .datamap file</label>
+        <input id="datamap-input" type="file" accept=".datamap" />
         <div class="actions">
           <button id="download" disabled>Download and save</button>
           <button id="stream" disabled>Stream as media</button>
