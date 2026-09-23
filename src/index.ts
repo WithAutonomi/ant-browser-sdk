@@ -39,6 +39,8 @@ export type {
   PaymentSubmission,
   PaymentSubmissionInfo,
   PendingPayment,
+  PrivateDownloadResult,
+  PrivateFile,
   ProgressDetails,
   ProgressPhase,
   ProgressEvent,
@@ -55,6 +57,7 @@ export type {
   UploadRecovery,
   UploadOptions,
   UploadResult,
+  UploadVisibility,
   VerifiedStorageQuote,
   WasmSource,
 } from "./types.js";

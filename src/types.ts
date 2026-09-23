@@ -26,6 +26,26 @@ export interface PublicFile {
   readonly replicas: number;
 }
 
+/**
+ * A file only holders of its DataMap can read, like a native private upload.
+ * The DataMap grants read access: store and share it as carefully as the file.
+ */
+export interface PrivateFile {
+  readonly name: string;
+  readonly size: number;
+  readonly contentType: string;
+  /** Whole-file plaintext hash, known once an upload or download has read all plaintext; otherwise empty. */
+  readonly blake3: string;
+  /** Canonical MessagePack DataMap, byte-for-byte the content of a native `.datamap` file. */
+  readonly dataMap: Uint8Array;
+  readonly dataMapSize: number;
+  readonly chunks: readonly ChunkInfo[];
+  readonly replicas: number;
+}
+
+/** Who can read an uploaded file, as in native `Visibility`. */
+export type UploadVisibility = "public" | "private";
+
 export interface HelloInfo {
   readonly type: string;
   readonly protocol: string;
@@ -247,6 +267,12 @@ export interface OperationOptions {
 }
 
 export interface UploadOptions extends OperationOptions {
+  /**
+   * Defaults to `public`, which stores the DataMap record so anyone with its
+   * address can read the file. `private` keeps the DataMap out of the network
+   * and returns it only in the result's `PrivateFile`.
+   */
+  visibility?: UploadVisibility;
   /** Native selection policy; defaults to auto. */
   paymentMode?: "auto" | "single" | "merkle";
   /**
@@ -289,6 +315,7 @@ export interface UploadRecovery {
   readonly name: string;
   readonly size: number;
   readonly contentType: string;
+  readonly visibility: UploadVisibility;
   readonly status: "active" | "settling" | "ready" | "discarding" | "discarded" | "completed";
   readonly payments: readonly UploadPayment[];
   /** Submitted transactions without a definitive outcome. Resume reconciles these first. */
@@ -299,10 +326,11 @@ export interface UploadRecovery {
   discard(): Promise<void>;
 }
 
-export interface UploadResult {
+/** A public upload returns a `PublicFile`; a private upload returns a `PrivateFile`. */
+export interface UploadResult<F extends PublicFile | PrivateFile = PublicFile> {
   /** All confirmed payments made by this upload and its resumed attempts. */
   payments: readonly UploadPayment[];
-  file: PublicFile;
+  file: F;
   /** Final storage transaction, when present. See payments for the complete history. */
   transactionHash?: string;
   /** Total confirmed storage payments across this upload and its resumed attempts. */
@@ -323,6 +351,14 @@ export interface DownloadResult {
   hash: string;
   file: PublicFile;
   dataMapNode: NetworkNode;
+}
+
+/** No node serves a private file's DataMap, so no DataMap node is reported. */
+export interface PrivateDownloadResult {
+  bytes: Uint8Array;
+  blob: Blob;
+  hash: string;
+  file: PrivateFile;
 }
 
 /** Minimal writable surface returned by a browser file-system handle. */

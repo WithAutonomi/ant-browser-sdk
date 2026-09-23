@@ -93,14 +93,15 @@ beforeEach(() => {
   mocks.stage.mockImplementation((options: StagingSessionOptions) => {
     opened.push(options);
     const source = [...encrypted];
-    const stager = new WindowStager(() => source.shift(), (index, content) => putStagedRecord(options.sessionId, index, content));
+    const stager = new WindowStager(() => source.shift(), (index, content) => putStagedRecord(options.sessionId, index, content),
+      { withholdDataMap: options.withholdDataMap });
     stager.skip(options.skip);
     return {
       async next(limit: WindowLimit) {
         limits.push(limit);
         const window = await stager.stage(limit);
         return {
-          firstIndex: window.firstIndex, records: window.records,
+          firstIndex: window.firstIndex, records: window.records, ...(window.dataMap ? { dataMap: window.dataMap } : {}),
           ...(window.complete ? { file: {
             name: "large.bin", content_type: "application/octet-stream", address: dataMap.address, blake3: "ee".repeat(32),
             size: 12, data_map_size: RECORD_BYTES, chunks: [], records: encrypted.map(({ address }) => ({ address, size: RECORD_BYTES })),
@@ -147,6 +148,26 @@ describe("windowed File and Blob uploads", () => {
       file: { address: dataMap.address, name: "large.bin", blake3: "ee".repeat(32), replicas: 4 } });
     expect(opened).toHaveLength(1);
     await expect(getStagedRecord(opened[0]!.sessionId, 4)).rejects.toThrow("is missing");
+  });
+
+  it("uploads a private file without staging or storing its DataMap record", async () => {
+    const value = await client();
+    const batches: Batch[] = [];
+    mocks.upload.mockImplementation(async (batch: Batch, network, load: Load, pay: Pay, _report, _checkpoint, save: Save) => {
+      batches.push(batch);
+      return payAndStore(batch, network, load, pay, save);
+    });
+    const uploaded = await value.upload(new Blob(["large file"]), { visibility: "private" });
+    expect(opened[0]!.withholdDataMap).toBe(true);
+    // The withheld DataMap completes the second window instead of opening a third.
+    expect(batches.map(({ records, first_index, total_records }) => [records.length, first_index, total_records]))
+      .toEqual([[2, 0, undefined], [2, 2, RECORD_COUNT - 1]]);
+    expect(batches.flatMap(({ records }) => records.map(({ address }) => address))).not.toContain(dataMap.address);
+    expect(uploaded.records).toBe(RECORD_COUNT - 1);
+    expect(uploaded.file).toEqual({ name: "private-file.bin", size: 12, contentType: "application/octet-stream",
+      blake3: "ee".repeat(32), dataMap: dataMap.content, dataMapSize: RECORD_BYTES, chunks: [], replicas: 4 });
+    expect(uploaded.file).not.toHaveProperty("address");
+    expect(value.files).toEqual([]);
   });
 
   it("keeps plain Rust checkpoints when the whole file fits in one window", async () => {

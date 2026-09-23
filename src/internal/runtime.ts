@@ -34,6 +34,15 @@ export interface RawNetworkClient {
     file: unknown,
     onProgress?: (message: string) => void,
   ): Promise<RawFileReader>;
+  downloadPrivateFile(
+    file: unknown,
+    concurrency: number | undefined,
+    onProgress?: (message: string) => void,
+  ): Promise<unknown>;
+  openPrivateFile(
+    file: unknown,
+    onProgress?: (message: string) => void,
+  ): Promise<RawFileReader>;
   /** Quote, pay for, and store one batch; `loadRecord` receives the batch-local index. */
   uploadRecords(
     batch: unknown,

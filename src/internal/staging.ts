@@ -30,6 +30,8 @@ export interface StagedWindow {
   records: CoreRecordInfo[];
   /** Present on the final window, once the file has been completely encrypted. */
   file?: StagedFile;
+  /** The withheld DataMap record, on the final window of a private upload. */
+  dataMap?: Uint8Array;
 }
 
 export interface StagingSessionOptions {
@@ -39,6 +41,8 @@ export interface StagingSessionOptions {
   sessionId: string;
   /** Records earlier windows already stored; the worker re-encrypts and discards them. */
   skip: number;
+  /** Keep the DataMap record out of IndexedDB and the network for a private upload. */
+  withholdDataMap: boolean;
   wasm?: WorkerWasmSource | undefined;
   report(message: string, progress?: ProgressDetails): void;
 }
@@ -103,7 +107,7 @@ export function openStagingSession(options: StagingSessionOptions): StagingSessi
   worker.addEventListener("message", (event: MessageEvent<unknown>) => {
     const message = event.data as
       | { type: "progress"; message: string; completed?: number }
-      | ({ type: "window"; complete: boolean; file?: StagedFile } & Omit<StagedWindow, "file">)
+      | ({ type: "window"; complete: boolean } & StagedWindow)
       | { type: "error"; message: string };
     if (closed) return;
     if (message?.type === "progress") {
@@ -118,6 +122,7 @@ export function openStagingSession(options: StagingSessionOptions): StagingSessi
       pending?.resolve({
         firstIndex: message.firstIndex, records: message.records,
         ...(message.complete && message.file ? { file: message.file } : {}),
+        ...(message.dataMap ? { dataMap: message.dataMap } : {}),
       });
     } else if (message?.type === "error") {
       fail(new Error(message.message));
@@ -129,7 +134,7 @@ export function openStagingSession(options: StagingSessionOptions): StagingSessi
   try {
     worker.postMessage({
       type: "start", blob: options.blob, name: options.name, contentType: options.contentType,
-      sessionId: options.sessionId, wasm: options.wasm, skip: options.skip,
+      sessionId: options.sessionId, wasm: options.wasm, skip: options.skip, withholdDataMap: options.withholdDataMap,
     });
   } catch (error) {
     fail(error);

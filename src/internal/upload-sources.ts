@@ -1,5 +1,5 @@
 import { AutonomiError } from "../errors.js";
-import type { PublicFile } from "../types.js";
+import type { PrivateFile, PublicFile } from "../types.js";
 import { throwIfAborted } from "./abort.js";
 import {
   chunksFromCore,
@@ -53,7 +53,7 @@ export interface WindowedUploadContext {
 
 /** A stored file, before the SDK adds the payment history retained across attempts. */
 export interface UploadedFile {
-  file: PublicFile;
+  file: PublicFile | PrivateFile;
   records: number;
   paymentMode: string;
   transactionHash?: string;
@@ -88,14 +88,16 @@ export async function uploadBytes(
 ): Promise<UploadedFile> {
   report(`Self-encrypting ${state.name} (${state.size} bytes)`, { phase: "preparing" });
   const encrypted = getBindings().encryptPublicFile(state.bytes!) as CoreEncryptedFile;
-  const { records } = encrypted;
+  // Native self-encryption always ends with the canonical DataMap record.
+  const dataMap = encrypted.records.at(-1)!.content;
+  const records = state.visibility === "private" ? encrypted.records.slice(0, -1) : encrypted.records;
   const result = await upload(
     { records: records.map(({ address, content }) => ({ address, size: content.byteLength })), total_records: records.length },
     (index) => records[index]!.content,
   );
-  return uploadedFile(result, records.length, {
-    name: state.name, address: encrypted.address, size: state.size, contentType: state.contentType,
-    blake3: encrypted.blake3, dataMapSize: encrypted.data_map_size, chunks: chunksFromCore(encrypted.chunks),
+  return uploadedFile(state, result, records.length, {
+    address: encrypted.address, size: state.size, blake3: encrypted.blake3,
+    dataMapSize: encrypted.data_map_size, chunks: chunksFromCore(encrypted.chunks), dataMap,
   });
 }
 
@@ -118,8 +120,8 @@ export async function uploadFileInWindows(
       throwIfAborted(signal);
       if (!cursor.window) {
         session ??= openStagingSession({
-          blob: state.blob!, name: state.name, contentType: state.contentType,
-          sessionId: cursor.sessionId, skip: cursor.nextRecord, wasm, report,
+          blob: state.blob!, name: state.name, contentType: state.contentType, sessionId: cursor.sessionId,
+          skip: cursor.nextRecord, withholdDataMap: state.visibility === "private", wasm, report,
         });
         cursor.window = await stageWindow(session, cursor, signal);
       }
@@ -141,9 +143,9 @@ export async function uploadFileInWindows(
       delete cursor.window;
       if (window.file) {
         const { file } = window;
-        return uploadedFile({ ...result, paymentMode: cursor.usedMerkle ? "merkle" : result.paymentMode }, end, {
-          name: file.name, address: file.address, size: file.size, contentType: file.content_type,
-          blake3: file.blake3, dataMapSize: file.data_map_size, chunks: chunksFromCore(file.chunks),
+        return uploadedFile(state, { ...result, paymentMode: cursor.usedMerkle ? "merkle" : result.paymentMode }, end, {
+          address: file.address, size: file.size, blake3: file.blake3, dataMapSize: file.data_map_size,
+          chunks: chunksFromCore(file.chunks), ...(window.dataMap ? { dataMap: window.dataMap } : {}),
         });
       }
     }
@@ -166,13 +168,27 @@ async function stageWindow(session: StagingSession, cursor: StagingCursor, signa
   }
 }
 
+/** Encryptor output describing a stored file; `dataMap` is its canonical DataMap record. */
+interface EncryptedFileMetadata {
+  address: string;
+  size: number;
+  blake3: string;
+  dataMapSize: number;
+  chunks: PublicFile["chunks"];
+  dataMap?: Uint8Array;
+}
+
 function uploadedFile(
+  state: RetainedUpload,
   result: CoreRecordBatchResult,
   records: number,
-  file: Omit<PublicFile, "replicas">,
+  { address, dataMap, ...metadata }: EncryptedFileMetadata,
 ): UploadedFile {
+  const described = { ...metadata, name: state.name, contentType: state.contentType, replicas: result.replicas };
+  if (state.visibility === "private" && !dataMap) throw new Error("Self-encryption did not return the private DataMap");
   return {
-    file: { ...file, replicas: result.replicas },
+    // A private file is read through its DataMap; the address would only name an unstored record.
+    file: state.visibility === "private" ? { ...described, dataMap: dataMap!.slice() } : { ...described, address },
     records,
     paymentMode: result.paymentMode,
     ...(result.transactionHash ? { transactionHash: result.transactionHash } : {}),

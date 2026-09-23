@@ -2,7 +2,7 @@ import { getNetworkDefaults, snapshotNetworkProfile, type NetworkConnectionOptio
 import { saveUploadCheckpoint } from "./internal/record-store.js";
 import { assertFileSize, SDK_LIMITS } from "./limits.js";
 import {
-  coreFileReference, helloFromCore, lookupFromCore, nodeFromCore, publicFileFromCore,
+  coreFileReference, corePrivateFile, helloFromCore, isPrivateFile, lookupFromCore, nodeFromCore, privateFileFromCore, publicFileFromCore,
   type CoreHelloInfo, type CoreLookupResult, type CoreNetworkNode, type CorePublicFile, type CoreRecordBatchResult,
 } from "./internal/protocol.js";
 import { AutonomiError, UploadError, wrapError } from "./errors.js";
@@ -40,6 +40,8 @@ import type {
   PaymentProvider,
   PaymentNetwork,
   PendingPayment,
+  PrivateDownloadResult,
+  PrivateFile,
   ProgressEvent,
   ProgressListener,
   PublicFile,
@@ -56,7 +58,8 @@ interface RawDownloadResult {
   content: Uint8Array;
   hash: string;
   file: CorePublicFile;
-  dataMapNode: CoreNetworkNode;
+  /** Absent for a private file, whose DataMap no node served. */
+  dataMapNode?: CoreNetworkNode;
 }
 
 interface OperationScope {
@@ -269,15 +272,19 @@ export class AutonomiClient {
   }
 
   /**
-   * Self-encrypt, pay, and store a public file.
+   * Self-encrypt, pay, and store a file. Public by default; `visibility: "private"`
+   * keeps the DataMap out of the network and returns it in a `PrivateFile`.
    *
    * Files and Blobs are encrypted in a worker and staged in IndexedDB one
    * storage-bounded window at a time. A Uint8Array uses the in-memory path.
    */
+  upload(input: File | Blob | Uint8Array, options?: UploadOptions & { visibility?: "public" }): Promise<UploadResult>;
+  upload(input: File | Blob | Uint8Array, options: UploadOptions & { visibility: "private" }): Promise<UploadResult<PrivateFile>>;
+  upload(input: File | Blob | Uint8Array, options?: UploadOptions): Promise<UploadResult<PublicFile | PrivateFile>>;
   async upload(
     input: File | Blob | Uint8Array,
     options: UploadOptions = {},
-  ): Promise<UploadResult> {
+  ): Promise<UploadResult<PublicFile | PrivateFile>> {
     const operation = this.#startOperation(options);
     const report = this.#reporter("upload", options.onProgress, operation);
     try {
@@ -289,22 +296,26 @@ export class AutonomiClient {
         );
       }
       throwIfAborted(operation.signal);
+      const visibility = options.visibility ?? "public";
+      if (visibility !== "public" && visibility !== "private") {
+        throw new AutonomiError("INVALID_SOURCE", 'Upload visibility must be "public" or "private"');
+      }
       let retained: RetainedUpload;
       if (input instanceof Uint8Array) {
         assertFileSize(input.byteLength);
-        const name = options.name ?? "public-file.bin";
+        const name = options.name ?? `${visibility}-file.bin`;
         report(`Preparing ${name}`);
         retained = retainUpload(this.#connection.paymentNetwork, {
-          bytes: input.slice(), name, contentType: options.contentType ?? "application/octet-stream",
+          bytes: input.slice(), name, contentType: options.contentType ?? "application/octet-stream", visibility,
         }, operation.id);
       } else if (typeof Blob === "function" && input instanceof Blob) {
         assertFileSize(input.size);
         assertStagingSupported();
         const isFile = typeof File === "function" && input instanceof File;
-        const name = options.name ?? (isFile ? input.name : "public-file.bin");
+        const name = options.name ?? (isFile ? input.name : `${visibility}-file.bin`);
         report(`Preparing ${name}`);
         retained = retainUpload(this.#connection.paymentNetwork, {
-          blob: input, name, contentType: options.contentType || input.type || "application/octet-stream",
+          blob: input, name, contentType: options.contentType || input.type || "application/octet-stream", visibility,
         }, operation.id);
       } else {
         throw new TypeError("upload input must be a File, Blob, or Uint8Array");
@@ -316,7 +327,7 @@ export class AutonomiClient {
         retained, payment, false, options.retainOnFailure !== false, operation, report, options.onPaymentSubmitted,
       );
     } catch (error) {
-      const failure = isAbort(error, operation.signal) ? error : wrapError("UPLOAD_FAILED", "Public file upload failed", error);
+      const failure = isAbort(error, operation.signal) ? error : wrapError("UPLOAD_FAILED", "File upload failed", error);
       operation.fail(failure);
       throw failure;
     } finally {
@@ -352,11 +363,14 @@ export class AutonomiClient {
     }
   }
 
-  /** Retry retained input. New payments require an explicit provider on this call. */
+  /**
+   * Retry retained input. New payments require an explicit provider on this call.
+   * The result's file is a `PrivateFile` when `recovery.visibility` is `private`.
+   */
   async resumeUpload(
     recovery: UploadRecovery,
     options: ResumeUploadOptions = {},
-  ): Promise<UploadResult> {
+  ): Promise<UploadResult<PublicFile | PrivateFile>> {
     const operation = this.#startOperation(options);
     const report = this.#reporter("upload", options.onProgress, operation);
     try {
@@ -384,7 +398,7 @@ export class AutonomiClient {
     operation: OperationScope,
     report: Reporter,
     onPaymentSubmitted?: (payment: PendingPayment) => void,
-  ): Promise<UploadResult> {
+  ): Promise<UploadResult<PublicFile | PrivateFile>> {
     operation.recovery = state.handle;
     let paymentFailure: unknown;
     const payForQuotes = async (networkValue: unknown, quoteValue: unknown, persistValue?: unknown) => {
@@ -546,7 +560,7 @@ export class AutonomiClient {
       }
       throwIfAborted(operation.signal);
       const result = state.result!;
-      this.#rememberFile(result.file);
+      if ("address" in result.file) this.#rememberFile(result.file);
       report(`Uploaded ${result.file.name}`, {
         phase: "complete", completed: result.file.size, total: result.file.size, unit: "bytes",
       });
@@ -564,16 +578,19 @@ export class AutonomiClient {
       this.#pendingUploads.add(state.handle);
       if (!retainOnFailure) void state.handle.discard().catch(() => undefined);
       if (isAbort(error, operation.signal)) throw error;
-      const failure = wrapError("UPLOAD_FAILED", "Public file upload failed", paymentFailure ?? error);
+      const failure = wrapError("UPLOAD_FAILED", "File upload failed", paymentFailure ?? error);
       throw new UploadError(failure, state.handle);
     }
   }
 
-  /** Download, reconstruct, and BLAKE3-verify a complete public file. */
+  /** Download, reconstruct, and BLAKE3-verify a complete public or private file. */
+  download(file: string | PublicFile, options?: DownloadOptions): Promise<DownloadResult>;
+  download(file: PrivateFile, options?: DownloadOptions): Promise<PrivateDownloadResult>;
+  download(file: string | PublicFile | PrivateFile, options?: DownloadOptions): Promise<DownloadResult | PrivateDownloadResult>;
   async download(
-    file: string | PublicFile,
+    file: string | PublicFile | PrivateFile,
     options: DownloadOptions = {},
-  ): Promise<DownloadResult> {
+  ): Promise<DownloadResult | PrivateDownloadResult> {
     const operation = this.#startOperation(options);
     const report = this.#reporter("download", options.onProgress, operation);
     try {
@@ -587,27 +604,32 @@ export class AutonomiClient {
         );
       }
       throwIfAborted(operation.signal);
+      const cap = concurrency === "auto" ? undefined : concurrency;
       const raw = (await abortable(
-        this.#network.downloadPublicFile(typeof file === "string" ? file : coreFileReference(file), concurrency === "auto" ? undefined : concurrency, report),
+        isPrivateFile(file)
+          ? this.#network.downloadPrivateFile(corePrivateFile(file), cap, report)
+          : this.#network.downloadPublicFile(typeof file === "string" ? file : coreFileReference(file), cap, report),
         operation.signal,
       )) as RawDownloadResult;
       throwIfAborted(operation.signal);
-      const publicFile = publicFileFromCore(raw.file);
-      this.#rememberFile(publicFile);
       report(`Downloaded ${raw.file.name}`, { phase: "complete", completed: raw.content.byteLength, total: raw.content.byteLength, unit: "bytes" });
       const blobBytes = new Uint8Array(raw.content.byteLength);
       blobBytes.set(raw.content);
-      return {
+      const downloaded = {
         bytes: raw.content,
         blob: new Blob([blobBytes], {
           type: raw.file.content_type || "application/octet-stream",
         }),
         hash: raw.hash,
-        file: publicFile,
-        dataMapNode: nodeFromCore(raw.dataMapNode),
       };
+      // Private files stay out of client.files, which lists public metadata only.
+      if (isPrivateFile(file)) return { ...downloaded, file: privateFileFromCore(raw.file, file.dataMap) };
+      const publicFile = publicFileFromCore(raw.file);
+      this.#rememberFile(publicFile);
+      if (!raw.dataMapNode) throw new Error("The core did not report the node serving the public DataMap");
+      return { ...downloaded, file: publicFile, dataMapNode: nodeFromCore(raw.dataMapNode) };
     } catch (error) {
-      const failure = isAbort(error, operation.signal) ? error : wrapError("DOWNLOAD_FAILED", "Public file download failed", error);
+      const failure = isAbort(error, operation.signal) ? error : wrapError("DOWNLOAD_FAILED", `${visibilityLabel(file)} file download failed`, error);
       operation.fail(failure);
       throw failure;
     } finally {
@@ -615,11 +637,13 @@ export class AutonomiClient {
     }
   }
 
-  /** Choose a destination, then download, verify, and save a public file. */
+  /** Choose a destination, then download, verify, and save a public or private file. */
+  downloadAndSave(file: string | PublicFile, options?: DownloadOptions & SaveOptions): Promise<{ download: DownloadResult; save: SaveResult }>;
+  downloadAndSave(file: PrivateFile, options?: DownloadOptions & SaveOptions): Promise<{ download: PrivateDownloadResult; save: SaveResult }>;
   async downloadAndSave(
-    file: string | PublicFile,
+    file: string | PublicFile | PrivateFile,
     options: DownloadOptions & SaveOptions = {},
-  ): Promise<{ download: DownloadResult; save: SaveResult }> {
+  ): Promise<{ download: DownloadResult | PrivateDownloadResult; save: SaveResult }> {
     const operation = this.#startOperation(options);
     const report = this.#reporter("download-and-save", options.onProgress, operation);
     try {
@@ -665,7 +689,7 @@ export class AutonomiClient {
 
   /** Open a bounded random-access reader without reconstructing the whole file. */
   async openFile(
-    file: string | PublicFile,
+    file: string | PublicFile | PrivateFile,
     options: OperationOptions = {},
   ): Promise<PublicFileReader> {
     const operation = this.#startOperation(options);
@@ -675,20 +699,22 @@ export class AutonomiClient {
       this.#assertOpen();
       throwIfAborted(operation.signal);
       raw = await abortable(
-        this.#network.openPublicFile(typeof file === "string" ? file : coreFileReference(file), report),
+        isPrivateFile(file)
+          ? this.#network.openPrivateFile(corePrivateFile(file), report)
+          : this.#network.openPublicFile(typeof file === "string" ? file : coreFileReference(file), report),
         operation.signal,
         undefined,
         closeReader,
       );
       throwIfAborted(operation.signal);
-      const address = typeof file === "string" ? normalizeAddress(file) : file.address;
+      const address = isPrivateFile(file) ? "" : typeof file === "string" ? normalizeAddress(file) : file.address;
       const reader = createPublicFileReader(raw, address);
       report(`Opened ${reader.name}`, { phase: "complete" });
       raw = undefined;
       return reader;
     } catch (error) {
       if (raw) closeReader(raw);
-      const failure = isAbort(error, operation.signal) ? error : wrapError("OPEN_FILE_FAILED", "Could not open the public file", error);
+      const failure = isAbort(error, operation.signal) ? error : wrapError("OPEN_FILE_FAILED", `Could not open the ${visibilityLabel(file).toLowerCase()} file`, error);
       operation.fail(failure);
       throw failure;
     } finally {
@@ -703,7 +729,7 @@ export class AutonomiClient {
    * your site's public root before using the default serviceWorkerUrl.
    */
   async createMediaSource(
-    file: string | PublicFile,
+    file: string | PublicFile | PrivateFile,
     options: MediaOptions = {},
   ): Promise<MediaSource> {
     const operation = this.#startOperation(options);
@@ -818,6 +844,10 @@ export class AutonomiClient {
     if (index === -1) this.#files.push(snapshot(file));
     else this.#files[index] = snapshot(file);
   }
+}
+
+function visibilityLabel(file: string | PublicFile | PrivateFile): "Public" | "Private" {
+  return isPrivateFile(file) ? "Private" : "Public";
 }
 
 function closeReader(reader: Awaited<ReturnType<RawNetworkClient["openPublicFile"]>>): void {

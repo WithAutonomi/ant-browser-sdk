@@ -246,9 +246,9 @@ endpoints into the connection-failure cache. Payment is requested only after its
 was made: inspect both `payments` and `pendingPayments` before presenting retry
 actions.
 
-This SDK currently publishes public files. Persist the returned DataMap address
-in application storage if it must survive a page reload; `client.files` is only
-an in-memory list for the current client instance.
+Uploads are public by default. Persist the returned DataMap address in application
+storage if it must survive a page reload; `client.files` is only an in-memory list
+of public files for the current client instance.
 
 Uploads use the shared native coordinator. `paymentMode` defaults to `"auto"`,
 which selects Merkle payment at the native record-count threshold and falls back
@@ -260,6 +260,31 @@ to submit Rust-generated calldata and decode the confirmed receipt through
 Results report the mode actually used as `paymentMode`, like native
 `payment_mode_used`: `"merkle"` once any record was paid through a Merkle batch,
 otherwise `"single"`.
+
+### Private uploads
+
+Pass `visibility: "private"` to keep the file's DataMap off the network, as native
+private uploads do. The result's `file` is a `PrivateFile` whose `dataMap` holds the
+canonical MessagePack DataMap, byte-for-byte the content of a native `.datamap`
+file. Holding it is what grants read access, so store it as carefully as the file
+itself. Every other record, including nested DataMap records, is stored and paid
+for as usual; a private upload stores and pays for one record fewer than a public one.
+
+```ts
+const { file } = await client.upload(input, { visibility: "private" });
+await dataMapStore.save(`${file.name}.datamap`, file.dataMap);
+
+const dataMap = await dataMapStore.load(`${file.name}.datamap`);
+const { bytes } = await client.download({ ...file, dataMap });
+```
+
+`download()`, `downloadAndSave()`, `openFile()`, and `createMediaSource()` accept a
+`PrivateFile`. Only `dataMap`, `name`, and `contentType` are sent to the core; size
+and chunks come from the resolved DataMap. Private download results have no
+`dataMapNode`, private readers have an empty `address`, and private files never
+appear in `client.files`. A MessagePack `.datamap` written by the native CLI can be
+read by passing its bytes as `dataMap`. Upload recoveries report their
+`visibility`, and `resumeUpload()` returns a `PublicFile` or `PrivateFile` to match.
 
 ### Resume a failed upload
 

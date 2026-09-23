@@ -21,7 +21,7 @@ async function handle(message) {
   if (message?.type === "stage") await stage(message);
 }
 
-async function start({ blob, name, contentType, sessionId, wasm, skip }) {
+async function start({ blob, name, contentType, sessionId, wasm, skip, withholdDataMap }) {
   await initAntCore(wasm === undefined ? undefined : { module_or_path: wasm });
   if (typeof FileReaderSync !== "function") {
     throw new Error("This browser cannot read files inside an upload worker");
@@ -33,6 +33,7 @@ async function start({ blob, name, contentType, sessionId, wasm, skip }) {
   const stager = new WindowStager(
     () => encryptor.nextRecord(),
     (index, content) => putStagedRecord(sessionId, index, content.slice()),
+    { withholdDataMap },
   );
   session = { encryptor, stager, name, contentType };
   if (skip > 0) {

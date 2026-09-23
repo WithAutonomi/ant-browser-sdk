@@ -1,8 +1,8 @@
 import { deleteStagedSession, deleteUploadCheckpoint } from "./record-store.js";
 import { AutonomiError } from "../errors.js";
 import type {
-  MerklePaymentRequest, PaymentNetwork, PaymentReceipt, PaymentSettlement, PaymentSubmission, PendingPayment, PublicFile, UploadPayment, UploadRecovery,
-  UploadResult, VerifiedStorageQuote,
+  MerklePaymentRequest, PaymentNetwork, PaymentReceipt, PaymentSettlement, PaymentSubmission, PendingPayment, PrivateFile, PublicFile,
+  UploadPayment, UploadRecovery, UploadResult, UploadVisibility, VerifiedStorageQuote,
 } from "../types.js";
 import { newStagingSessionId } from "./staging.js";
 import { snapshot } from "./snapshot.js";
@@ -19,6 +19,7 @@ export interface RetainedUpload {
   name: string;
   contentType: string;
   size: number;
+  visibility: UploadVisibility;
   bytes?: Uint8Array;
   /** A File or Blob is re-read per attempt; only its current window stays staged. */
   blob?: Blob;
@@ -27,7 +28,7 @@ export interface RetainedUpload {
   paymentTasks: Promise<unknown>[];
   submissions: TrackedPayment[];
   work?: Promise<unknown>;
-  result?: UploadResult;
+  result?: UploadResult<PublicFile | PrivateFile>;
   status: UploadRecovery["status"];
   settled: Promise<void>;
 }
@@ -35,14 +36,14 @@ const states = new WeakMap<UploadRecovery, RetainedUpload>();
 
 export function retainUpload(
   network: PaymentNetwork,
-  input: { name: string; contentType: string } & ({ bytes: Uint8Array } | { blob: Blob }),
+  input: { name: string; contentType: string; visibility: UploadVisibility } & ({ bytes: Uint8Array } | { blob: Blob }),
   id: string,
 ): RetainedUpload {
-  const { name, contentType } = input;
+  const { name, contentType, visibility } = input;
   const size = "blob" in input ? input.blob.size : input.bytes.byteLength;
   let discarding: Promise<void> | undefined;
   const handle: UploadRecovery = Object.freeze({
-    id, name, size, contentType,
+    id, name, size, contentType, visibility,
     get status() { return state.status; },
     get payments() { return Object.freeze([...state.payments]); },
     get pendingPayments() { return Object.freeze(state.submissions.filter(({ handle }) => handle.status === "pending").map(({ handle }) => handle)); },
@@ -254,7 +255,7 @@ export function paidReceipt(
   return undefined;
 }
 
-export function uploadResult(state: RetainedUpload, uploaded: UploadedFile): UploadResult {
+export function uploadResult(state: RetainedUpload, uploaded: UploadedFile): UploadResult<PublicFile | PrivateFile> {
   const last = state.payments.at(-1)?.receipt.transactionHash;
   const transactionHash = uploaded.transactionHash ?? last;
   return {

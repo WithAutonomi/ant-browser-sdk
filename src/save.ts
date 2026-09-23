@@ -3,6 +3,7 @@ import { abortable, isAbort, throwIfAborted } from "./internal/abort.js";
 import { operationId, progressReporter } from "./internal/progress.js";
 import type {
   DownloadResult,
+  PrivateDownloadResult,
   SaveFileHandle,
   SaveFileWritable,
   SaveOptions,
@@ -15,7 +16,7 @@ interface SaveFilePickerWindow extends Window {
 
 /** Save a completed download through the File System Access API or an anchor fallback. */
 export async function saveDownload(
-  download: DownloadResult,
+  download: DownloadResult | PrivateDownloadResult,
   options: SaveOptions = {},
 ): Promise<SaveResult> {
   const name = options.suggestedName ?? download.file.name;

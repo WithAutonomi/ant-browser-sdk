@@ -5,10 +5,14 @@ function records(...sizes: number[]): EncryptedRecord[] {
   return sizes.map((size, index) => ({ address: String(index).repeat(64), content: new Uint8Array(size) }));
 }
 
-function stager(source: EncryptedRecord[], put = vi.fn(async (_index: number, _content: Uint8Array) => {})) {
+function stager(
+  source: EncryptedRecord[],
+  put = vi.fn(async (_index: number, _content: Uint8Array) => {}),
+  withholdDataMap = false,
+) {
   const pending = [...source];
   const next = vi.fn(() => pending.shift());
-  return { stager: new WindowStager(next, put), next, put };
+  return { stager: new WindowStager(next, put, { withholdDataMap }), next, put };
 }
 
 const quotaExceeded = () => Object.assign(new Error("quota"), { name: "QuotaExceededError" });
@@ -56,6 +60,20 @@ describe("windowed record staging", () => {
     // An exact window ignores quota errors' early-end rule and fails instead.
     put.mockRejectedValueOnce(quotaExceeded());
     await expect(windows.stage({})).rejects.toMatchObject({ name: "QuotaExceededError" });
+  });
+
+  it("withholds a private upload's DataMap record instead of staging it", async () => {
+    const source = records(3, 3, 3, 2);
+    const { stager: windows, put } = stager(source, undefined, true);
+    const window = await windows.stage({ bytes: 100 });
+    expect(window).toMatchObject({ firstIndex: 0, records: [{}, {}, {}], complete: true });
+    expect(window.dataMap).toBe(source[3]!.content);
+    expect(put.mock.calls.map(([index]) => index)).toEqual([0, 1, 2]);
+  });
+
+  it("completes a full window with the withheld DataMap rather than open another", async () => {
+    const { stager: windows } = stager(records(3, 3, 2), undefined, true);
+    expect(await windows.stage({ bytes: 6 })).toMatchObject({ records: [{}, {}], complete: true, dataMap: expect.any(Uint8Array) });
   });
 
   it("rejects a checkpoint window beyond the end of the selected file", () => {

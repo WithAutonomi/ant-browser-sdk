@@ -27,7 +27,7 @@ function session(overrides: Partial<StagingSessionOptions> = {}) {
   const report = vi.fn();
   const staging = openStagingSession({
     blob: new Blob([Uint8Array.of(1, 2, 3)]), name: "three.bin", contentType: "application/octet-stream",
-    sessionId: "session", skip: 0, report, ...overrides,
+    sessionId: "session", skip: 0, withholdDataMap: false, report, ...overrides,
   });
   return { staging, report, worker: FakeWorker.instances.at(-1)! };
 }

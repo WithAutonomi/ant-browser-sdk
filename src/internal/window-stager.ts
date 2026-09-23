@@ -21,6 +21,13 @@ export interface StagedWindowRecords {
   records: WindowRecord[];
   /** The encryptor has produced every record, including the DataMap record. */
   complete: boolean;
+  /** A withheld DataMap record, on the final window of a private upload. */
+  dataMap?: Uint8Array;
+}
+
+export interface WindowStagerOptions {
+  /** Keep the encryptor's final record, the DataMap, out of storage for a private upload. */
+  withholdDataMap?: boolean;
 }
 
 /**
@@ -30,15 +37,20 @@ export interface StagedWindowRecords {
 export class WindowStager {
   readonly #next: () => EncryptedRecord | undefined;
   readonly #put: (index: number, content: Uint8Array) => Promise<void>;
-  #pending: EncryptedRecord | undefined;
+  readonly #withholdDataMap: boolean;
+  /** Produced but not yet staged, in encryptor order: a held-back or looked-ahead record. */
+  readonly #buffered: EncryptedRecord[] = [];
+  #exhausted = false;
   #produced = 0;
 
   constructor(
     next: () => EncryptedRecord | undefined,
     put: (index: number, content: Uint8Array) => Promise<void>,
+    { withholdDataMap = false }: WindowStagerOptions = {},
   ) {
     this.#next = next;
     this.#put = put;
+    this.#withholdDataMap = withholdDataMap;
   }
 
   /** Re-encrypt and discard records that earlier windows already stored. */
@@ -57,9 +69,13 @@ export class WindowStager {
     for (;;) {
       const record = this.#take();
       if (!record) return { firstIndex, records, complete: true };
+      // The withheld DataMap needs no storage, so it never opens a window of its own.
+      if (this.#withholdDataMap && this.#isLast()) {
+        return { firstIndex, records, complete: true, dataMap: record.content };
+      }
       const size = record.content.byteLength;
       if (windowIsFull(limit, records.length, bytes, size)) {
-        this.#pending = record;
+        this.#buffered.unshift(record);
         return { firstIndex, records, complete: false };
       }
       try {
@@ -67,7 +83,7 @@ export class WindowStager {
       } catch (error) {
         // Quota estimates are hints; end a byte-bounded window early rather than fail it.
         if ("bytes" in limit && records.length > 0 && isQuotaExceeded(error)) {
-          this.#pending = record;
+          this.#buffered.unshift(record);
           return { firstIndex, records, complete: false };
         }
         throw error;
@@ -80,8 +96,22 @@ export class WindowStager {
   }
 
   #take(): EncryptedRecord | undefined {
-    const record = this.#pending ?? this.#next();
-    this.#pending = undefined;
+    return this.#buffered.shift() ?? this.#produce();
+  }
+
+  /** Whether the record just taken was the encryptor's last, looking one record ahead. */
+  #isLast(): boolean {
+    if (this.#buffered.length > 0) return false;
+    const following = this.#produce();
+    if (!following) return true;
+    this.#buffered.push(following);
+    return false;
+  }
+
+  #produce(): EncryptedRecord | undefined {
+    if (this.#exhausted) return undefined;
+    const record = this.#next();
+    this.#exhausted = record === undefined;
     return record;
   }
 }

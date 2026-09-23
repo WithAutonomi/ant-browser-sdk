@@ -9,6 +9,7 @@ export let createPublicFileReader: (raw: RawFileReader, address: string) => Publ
 
 /** Bounded random-access reader backed by direct WebRTC record fetches. */
 export class PublicFileReader {
+  /** DataMap address; empty for a private file, which has no network DataMap. */
   readonly address: string;
   readonly name: string;
   readonly size: number;

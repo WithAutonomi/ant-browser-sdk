@@ -38,6 +38,8 @@ const state = vi.hoisted(() => ({
     openPublicFile: ReturnType<typeof vi.fn>;
     uploadRecords: ReturnType<typeof vi.fn>;
     downloadPublicFile: ReturnType<typeof vi.fn>;
+    downloadPrivateFile: ReturnType<typeof vi.fn>;
+    openPrivateFile: ReturnType<typeof vi.fn>;
     reconcileFailedUploadPayment: ReturnType<typeof vi.fn>;
   }>,
 }));
@@ -65,6 +67,8 @@ vi.mock("../src/internal/runtime.js", () => {
     openPublicFile = vi.fn(async () => Promise.reject(new Error("not used")));
     uploadRecords = vi.fn();
     downloadPublicFile = vi.fn();
+    downloadPrivateFile = vi.fn();
+    openPrivateFile = vi.fn();
     reconcileFailedUploadPayment = vi.fn();
 
     constructor(endpoints: unknown) {
@@ -358,6 +362,62 @@ describe("AutonomiClient", () => {
     expect(upload.mock.calls[0]![7]).toBe("merkle");
     upload.mockResolvedValueOnce(batchResult());
     await expect(client.upload(new Uint8Array(3_072))).resolves.toMatchObject({ paymentMode: "single" });
+    client.close();
+  });
+
+  it("uploads private bytes without their DataMap record and returns the DataMap", async () => {
+    const client = await AutonomiClient.connect(endpoint, { payment: { pay: async () => ({ totalAmount: "0" }) } });
+    const network = state.networks[0]!;
+    network.uploadRecords.mockImplementationOnce(async (batch: { records: Array<{ address: string }>; total_records: number }) => {
+      expect(batch.records.map(({ address }) => address)).toEqual(["aa", "bb", "cc"].map((byte) => byte.repeat(32)));
+      expect(batch.total_records).toBe(3);
+      return batchResult({ records: 3 });
+    });
+    const bytes = Uint8Array.of(7, 8, 9);
+    const result = await client.upload(bytes, { visibility: "private", contentType: "text/plain" });
+    expect(result.file).toEqual({
+      name: "private-file.bin", size: 3, contentType: "text/plain", blake3: file.blake3, dataMap: Uint8Array.of(7),
+      dataMapSize: file.dataMapSize, chunks: [{ ...file.chunks[0]!, srcSize: 3 }], replicas: 5,
+    });
+    expect(result.file).not.toHaveProperty("address");
+    expect(client.files).toEqual([]);
+
+    network.uploadRecords.mockRejectedValueOnce(new Error("quorum failed"));
+    const failure = await client.upload(bytes, { visibility: "private" }).catch((error: unknown) => error);
+    expect((failure as UploadError).recovery.visibility).toBe("private");
+    await (failure as UploadError).recovery.discard();
+    await expect(client.upload(bytes, { visibility: "secret" as never })).rejects.toMatchObject({ code: "INVALID_SOURCE" });
+    client.close();
+  });
+
+  it("downloads, saves, and opens a private file through its DataMap", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    const raw = state.networks[0]!;
+    const dataMap = Uint8Array.of(0x93, 1, 2);
+    const privateFile = { name: "secret.txt", size: 12, contentType: "text/plain", blake3: "", dataMap,
+      dataMapSize: 3, chunks: [], replicas: 0 };
+    raw.downloadPrivateFile.mockResolvedValue({ content: Uint8Array.of(1), hash: file.blake3,
+      file: { ...wireFile, name: "secret.txt", address: "ab".repeat(32) } });
+    const downloaded = await client.download(privateFile, { concurrency: 3 });
+    expect(raw.downloadPrivateFile).toHaveBeenCalledWith({ data_map: dataMap, name: "secret.txt", content_type: "text/plain" }, 3, expect.any(Function));
+    expect(raw.downloadPublicFile).not.toHaveBeenCalled();
+    expect(downloaded.file).toMatchObject({ name: "secret.txt", size: file.size, blake3: file.blake3, dataMap });
+    expect(downloaded.file).not.toHaveProperty("address");
+    expect(downloaded).not.toHaveProperty("dataMapNode");
+    expect(client.files).toEqual([]);
+
+    const writable = { write: vi.fn(), close: vi.fn(), abort: vi.fn() };
+    const saved = await client.downloadAndSave(privateFile, { fileHandle: { createWritable: async () => writable } });
+    expect(saved.save.name).toBe("secret.txt");
+
+    raw.openPrivateFile.mockResolvedValue({ size: 12, name: "secret.txt", contentType: "text/plain",
+      readRange: vi.fn(), close: vi.fn(), free: vi.fn() });
+    const reader = await client.openFile(privateFile);
+    expect(raw.openPrivateFile).toHaveBeenCalledWith({ data_map: dataMap, name: "secret.txt", content_type: "text/plain" }, expect.any(Function));
+    expect(reader.address).toBe("");
+    reader.close();
+
+    await expect(client.download({ ...privateFile, dataMap: new Uint8Array() })).rejects.toMatchObject({ code: "INVALID_SOURCE" });
     client.close();
   });
 
