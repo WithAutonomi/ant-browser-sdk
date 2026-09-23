@@ -8,6 +8,12 @@ import type {
 } from "../src/types.js";
 
 const state = vi.hoisted(() => ({
+  // Native self-encryption stand-in: three data records followed by the DataMap record.
+  encrypt: vi.fn((content: Uint8Array) => ({
+    address: "33".repeat(32), blake3: "44".repeat(32), data_map_size: 100,
+    chunks: [{ index: 0, dst_hash: "55".repeat(32), src_hash: "66".repeat(32), src_size: content.byteLength }],
+    records: ["aa", "bb", "cc", "33"].map((byte) => ({ address: byte.repeat(32), content: content.slice(0, 1) })),
+  })),
   failedSeeds: [] as string[],
   attemptedSeeds: [] as string[],
   defaultSeeds: [] as string[],
@@ -30,8 +36,7 @@ const state = vi.hoisted(() => ({
     freed: boolean;
     findClosest: ReturnType<typeof vi.fn>;
     openPublicFile: ReturnType<typeof vi.fn>;
-    uploadPublicFile: ReturnType<typeof vi.fn>;
-    uploadStagedPublicFile: ReturnType<typeof vi.fn>;
+    uploadRecords: ReturnType<typeof vi.fn>;
     downloadPublicFile: ReturnType<typeof vi.fn>;
     reconcileFailedUploadPayment: ReturnType<typeof vi.fn>;
   }>,
@@ -58,8 +63,7 @@ vi.mock("../src/internal/runtime.js", () => {
     freed = false;
     findClosest = vi.fn(async () => ({ nodes: [], queried: [], failures: [] }));
     openPublicFile = vi.fn(async () => Promise.reject(new Error("not used")));
-    uploadPublicFile = vi.fn();
-    uploadStagedPublicFile = vi.fn(async () => Promise.reject(new Error("not used")));
+    uploadRecords = vi.fn();
     downloadPublicFile = vi.fn();
     reconcileFailedUploadPayment = vi.fn();
 
@@ -82,6 +86,7 @@ vi.mock("../src/internal/runtime.js", () => {
       mainnetNetworkDefaults: () => ({ id: "mainnet", seeds: state.defaultSeeds, payment: state.hello.payment, rpc_url: "https://rpc.example" }),
       BrowserNodeClient: NodeClient,
       BrowserNetworkClient: NetworkClient,
+      encryptPublicFile: state.encrypt,
       parseWebRtcDirectMultiaddr: (endpoint: unknown) => {
         if (typeof endpoint !== "string" || !endpoint.includes("/webrtc-direct/")) {
           throw new Error("invalid WebRTC Direct multiaddress");
@@ -117,7 +122,13 @@ const file: PublicFile = {
   chunks: [{ index: 0, dstHash: "55".repeat(32), srcHash: "66".repeat(32), srcSize: 12 }], replicas: 5,
 };
 
+/** Native batch accounting; the SDK derives file metadata from self-encryption. */
+function batchResult(overrides: Record<string, unknown> = {}) {
+  return { transactionHash: "0xpayment", storageCostAtto: "42", records: 4, replicas: 5, paymentMode: "single", ...overrides };
+}
+
 beforeEach(() => {
+  state.encrypt.mockClear();
   state.networks.length = 0;
   state.failedSeeds.length = 0;
   state.attemptedSeeds.length = 0;
@@ -301,14 +312,16 @@ describe("AutonomiClient", () => {
     const client = await AutonomiClient.connect(endpoint, { payment });
     const network = state.networks[0];
     expect(network).toBeDefined();
-    network!.uploadPublicFile.mockImplementation(
+    network!.uploadRecords.mockImplementation(
       async (
-        _bytes: Uint8Array,
-        _name: string,
-        _type: string,
+        batch: { records: Array<{ address: string; size: number }> },
         paymentNetwork: unknown,
+        load: (index: number) => Uint8Array,
         payForQuotes: (network: unknown, quotes: unknown) => Promise<unknown>,
       ) => {
+        expect(batch.records).toHaveLength(4);
+        expect(batch.records.at(-1)!.address).toBe(file.address);
+        expect(load(3)).toEqual(Uint8Array.of(0));
         expect(paymentNetwork).toEqual(state.hello.payment);
         expect(paymentNetwork).not.toHaveProperty("chainId");
         await payForQuotes(paymentNetwork, [
@@ -319,12 +332,7 @@ describe("AutonomiClient", () => {
             amount: "42",
           },
         ]);
-        return {
-          file: wireFile,
-          transactionHash: "0xpayment",
-          storageCostAtto: "42",
-          records: 4,
-        };
+        return batchResult();
       },
     );
 
@@ -333,20 +341,22 @@ describe("AutonomiClient", () => {
       contentType: "text/plain",
     });
 
-    expect(result.file).toEqual(file);
+    const uploaded = { ...file, size: 3_072, chunks: [{ ...file.chunks[0]!, srcSize: 3_072 }] };
+    expect(result.file).toEqual(uploaded);
+    expect(result.records).toBe(4);
     expect(payment.pay).toHaveBeenCalledOnce();
     expect(payment.pay).toHaveBeenCalledWith(client.connection.paymentNetwork, expect.any(Array), expect.any(Object));
-    expect(client.files).toContainEqual(file);
+    expect(client.files).toContainEqual(uploaded);
     client.close();
   });
 
   it("reports the payment mode the native coordinator used", async () => {
     const client = await AutonomiClient.connect(endpoint, { payment: { pay: async () => ({ totalAmount: "0" }) } });
-    const upload = state.networks[0]!.uploadPublicFile;
-    upload.mockResolvedValueOnce({ file: wireFile, storageCostAtto: "0", records: 4, paymentMode: "merkle" });
+    const upload = state.networks[0]!.uploadRecords;
+    upload.mockResolvedValueOnce(batchResult({ paymentMode: "merkle" }));
     await expect(client.upload(new Uint8Array(3_072), { paymentMode: "merkle" })).resolves.toMatchObject({ paymentMode: "merkle" });
-    expect(upload.mock.calls[0]![8]).toBe("merkle");
-    upload.mockResolvedValueOnce({ file: wireFile, storageCostAtto: "0", records: 4, paymentMode: "single" });
+    expect(upload.mock.calls[0]![7]).toBe("merkle");
+    upload.mockResolvedValueOnce(batchResult());
     await expect(client.upload(new Uint8Array(3_072))).resolves.toMatchObject({ paymentMode: "single" });
     client.close();
   });
@@ -367,12 +377,11 @@ describe("AutonomiClient", () => {
     });
     const client = await AutonomiClient.connect(endpoint, { payment });
     let continuedAfterPayment = false;
-    state.networks[0]!.uploadPublicFile.mockImplementation(
+    state.networks[0]!.uploadRecords.mockImplementation(
       async (
-        _bytes: Uint8Array,
-        _name: string,
-        _type: string,
+        _batch: unknown,
         paymentNetwork: unknown,
+        _load: unknown,
         payForQuotes: (network: unknown, quotes: unknown) => Promise<unknown>,
       ) => {
         await payForQuotes(paymentNetwork, [
@@ -384,12 +393,7 @@ describe("AutonomiClient", () => {
           },
         ]);
         continuedAfterPayment = true;
-        return {
-          file: wireFile,
-          transactionHash: "0xpayment",
-          storageCostAtto: "42",
-          records: 4,
-        };
+        return batchResult();
       },
     );
 
@@ -580,7 +584,7 @@ describe("AutonomiClient", () => {
     await expect(client.upload(new Uint8Array(3_072))).rejects.toMatchObject({
       code: "PAYMENT_REQUIRED",
     });
-    expect(state.networks[0]!.uploadPublicFile).not.toHaveBeenCalled();
+    expect(state.networks[0]!.uploadRecords).not.toHaveBeenCalled();
     client.close();
   });
 });
@@ -632,10 +636,10 @@ describe("structured operation progress", () => {
       payment: { pay: async () => ({ totalAmount: "0" }) },
       onProgress: (event) => events.push(event),
     });
-    state.networks[0]!.uploadPublicFile.mockImplementation(async (_bytes, name, _type, _network, _pay, report) => {
+    state.networks[0]!.uploadRecords.mockImplementation(async (_batch, _network, _load, _pay, report) => {
       report("An opaque Rust diagnostic");
       await Promise.resolve();
-      return { file: { ...wireFile, name }, storageCostAtto: "0", records: 1 };
+      return batchResult({ storageCostAtto: "0" });
     });
     await Promise.all([
       client.upload(Uint8Array.of(1, 2, 3), { name: "first" }),
@@ -647,7 +651,7 @@ describe("structured operation progress", () => {
     for (const id of ids) {
       const group = uploads.filter((event) => event.operationId === id);
       expect(group[0]!.phase).toBe("preparing");
-      expect(group.at(-1)).toMatchObject({ phase: "complete", completed: file.size, total: file.size, unit: "bytes" });
+      expect(group.at(-1)).toMatchObject({ phase: "complete", completed: 3, total: 3, unit: "bytes" });
       expect(Object.isFrozen(group[0])).toBe(true);
     }
     client.close();
@@ -658,7 +662,7 @@ describe("structured operation progress", () => {
     await expect(client.upload(Uint8Array.of(1, 2, 3), {
       signal: controller.signal, onProgress: () => controller.abort(),
     })).rejects.toMatchObject({ name: "AbortError" });
-    expect(state.networks[0]!.uploadPublicFile).not.toHaveBeenCalled();
+    expect(state.networks[0]!.uploadRecords).not.toHaveBeenCalled();
     client.close();
   });
 });
@@ -667,7 +671,7 @@ const recoveryQuotes = [
   { quote: {}, quoteHash: "55".repeat(32), rewardsAddress: `0x${"66".repeat(20)}`, amount: "40" },
   { quote: {}, quoteHash: "77".repeat(32), rewardsAddress: `0x${"66".repeat(20)}`, amount: "2" },
 ];
-const successfulUpload = { file: wireFile, transactionHash: "0xpayment", storageCostAtto: "42", records: 4 };
+const successfulUpload = batchResult();
 const recoveryPayment = (): PaymentProvider => ({
   pay: vi.fn<PaymentProvider["pay"]>(async (_network, quotes) => ({
     transactionHash: "0xpayment",
@@ -675,7 +679,7 @@ const recoveryPayment = (): PaymentProvider => ({
   })),
 });
 function paidThenFailed(network: (typeof state.networks)[number]) {
-  network.uploadPublicFile.mockImplementationOnce(async (_bytes, _name, _type, paymentNetwork, pay) => {
+  network.uploadRecords.mockImplementationOnce(async (_batch, paymentNetwork, _load, pay) => {
     await pay(paymentNetwork, recoveryQuotes);
     throw new Error("storage quorum failed after payment");
   });
@@ -696,8 +700,8 @@ describe("upload recovery", () => {
     bytes.fill(9);
     expect(recovery.payments[0]!.receipt.totalAmount).toBe("42");
     expect(Object.isFrozen(recovery.payments[0]!.quotes[0])).toBe(true);
-    network.uploadPublicFile.mockImplementationOnce(async (retried, _name, _type, paymentNetwork, pay) => {
-      expect(retried).toEqual(Uint8Array.of(1, 2, 3));
+    network.uploadRecords.mockImplementationOnce(async (_batch, paymentNetwork, _load, pay) => {
+      expect(state.encrypt).toHaveBeenLastCalledWith(Uint8Array.of(1, 2, 3));
       expect(await pay(paymentNetwork, recoveryQuotes)).toMatchObject({ transactionHash: "0xpayment", totalAmount: "42" });
       return successfulUpload;
     });
@@ -717,7 +721,7 @@ describe("upload recovery", () => {
     await expect(client.upload(Uint8Array.of(1, 2, 3))).rejects.toBeInstanceOf(UploadError);
     const recovery = client.pendingUploads[0]!;
     const changed = [{ ...recoveryQuotes[0]!, quoteHash: "88".repeat(32), amount: "43" }];
-    network.uploadPublicFile.mockImplementation(async (_bytes, _name, _type, paymentNetwork, pay) => {
+    network.uploadRecords.mockImplementation(async (_batch, paymentNetwork, _load, pay) => {
       await pay(paymentNetwork, changed);
       return successfulUpload;
     });
@@ -735,7 +739,7 @@ describe("upload recovery", () => {
     const network = state.networks[0]!;
     paidThenFailed(network);
     await expect(client.upload(Uint8Array.of(1, 2, 3))).rejects.toBeInstanceOf(UploadError);
-    network.uploadPublicFile.mockImplementationOnce(async (_bytes, _name, _type, paymentNetwork, pay) => {
+    network.uploadRecords.mockImplementationOnce(async (_batch, paymentNetwork, _load, pay) => {
       expect(await pay(paymentNetwork, [recoveryQuotes[1]!])).toMatchObject({ transactionHash: "0xpayment", totalAmount: "2" });
       return successfulUpload;
     });
@@ -759,12 +763,12 @@ describe("upload recovery", () => {
     expect(recovery.payments).toEqual([]);
     client.close();
     const replacement = await AutonomiClient.connect(endpoint);
-    state.networks[1]!.uploadPublicFile.mockImplementation(async (_bytes, _name, _type, paymentNetwork, pay) => {
+    state.networks[1]!.uploadRecords.mockImplementation(async (_batch, paymentNetwork, _load, pay) => {
       await pay(paymentNetwork, recoveryQuotes); return successfulUpload;
     });
     const resumed = replacement.resumeUpload(recovery);
     await Promise.resolve();
-    expect(state.networks[1]!.uploadPublicFile).not.toHaveBeenCalled();
+    expect(state.networks[1]!.uploadRecords).not.toHaveBeenCalled();
     confirm({ transactionHash: "0xpayment", totalAmount: "42" });
     await expect(resumed).resolves.toMatchObject({ storageCostAtto: "42" });
     expect(recovery.payments).toHaveLength(1);
@@ -776,7 +780,7 @@ describe("upload recovery", () => {
     const client = await AutonomiClient.connect(endpoint, { payment: recoveryPayment() });
     const network = state.networks[0]!;
     let complete!: (result: typeof successfulUpload) => void;
-    network.uploadPublicFile.mockReturnValueOnce(new Promise((resolve) => { complete = resolve; }));
+    network.uploadRecords.mockReturnValueOnce(new Promise((resolve) => { complete = resolve; }));
     const controller = new AbortController();
     const upload = client.upload(Uint8Array.of(1, 2, 3), { signal: controller.signal });
     const failure = expect(upload).rejects.toMatchObject({ name: "AbortError" });
@@ -784,8 +788,8 @@ describe("upload recovery", () => {
     const recovery = client.pendingUploads[0]!;
     complete(successfulUpload);
     await recovery.settled;
-    await expect(client.resumeUpload(recovery)).resolves.toMatchObject({ file });
-    expect(network.uploadPublicFile).toHaveBeenCalledOnce();
+    await expect(client.resumeUpload(recovery)).resolves.toMatchObject({ file: { address: file.address, size: 3 }, records: 4 });
+    expect(network.uploadRecords).toHaveBeenCalledOnce();
     client.close();
   });
   it("prevents concurrent resumes and makes discard idempotent", async () => {
@@ -795,10 +799,10 @@ describe("upload recovery", () => {
     await expect(client.upload(Uint8Array.of(1, 2, 3))).rejects.toBeInstanceOf(UploadError);
     const recovery = client.pendingUploads[0]!;
     let fail!: (error: Error) => void;
-    network.uploadPublicFile.mockReturnValueOnce(new Promise((_resolve, reject) => { fail = reject; }));
+    network.uploadRecords.mockReturnValueOnce(new Promise((_resolve, reject) => { fail = reject; }));
     const first = client.resumeUpload(recovery);
     const failure = expect(first).rejects.toBeInstanceOf(UploadError);
-    await vi.waitFor(() => expect(network.uploadPublicFile).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(network.uploadRecords).toHaveBeenCalledTimes(2));
     await expect(client.resumeUpload(recovery)).rejects.toMatchObject({ code: "UPLOAD_IN_PROGRESS" });
     await expect(recovery.discard()).rejects.toMatchObject({ code: "UPLOAD_IN_PROGRESS" });
     fail(new Error("network unavailable")); await failure;
@@ -814,7 +818,7 @@ it("cancels a resume waiting for settlement without claiming or discarding its i
   const client = await AutonomiClient.connect(endpoint, { payment: recoveryPayment() });
   const network = state.networks[0]!;
   let fail!: (error: Error) => void;
-  network.uploadPublicFile.mockReturnValueOnce(new Promise((_resolve, reject) => { fail = reject; }));
+  network.uploadRecords.mockReturnValueOnce(new Promise((_resolve, reject) => { fail = reject; }));
   const firstController = new AbortController();
   const upload = client.upload(Uint8Array.of(1, 2, 3), { signal: firstController.signal });
   const failed = expect(upload).rejects.toMatchObject({ name: "AbortError" });
@@ -824,7 +828,7 @@ it("cancels a resume waiting for settlement without claiming or discarding its i
   const resumed = client.resumeUpload(recovery, { signal: controller.signal });
   const cancelled = expect(resumed).rejects.toMatchObject({ name: "AbortError" });
   controller.abort(); await cancelled;
-  expect(network.uploadPublicFile).toHaveBeenCalledOnce();
+  expect(network.uploadRecords).toHaveBeenCalledOnce();
   expect(recovery.status).toBe("settling");
   fail(new Error("original operation stopped"));
   await recovery.settled;
@@ -889,7 +893,7 @@ describe("terminal operation events", () => {
     const client = await AutonomiClient.connect(endpoint, { payment: recoveryPayment(), onProgress: (event) => events.push(event) });
     let rejectWork!: (error: unknown) => void;
     let diagnostic!: (message: string) => void;
-    state.networks[0]!.uploadPublicFile.mockImplementation((_bytes, _name, _type, _network, _pay, report) => {
+    state.networks[0]!.uploadRecords.mockImplementation((_batch, _network, _load, _pay, report) => {
       diagnostic = report;
       return new Promise((_resolve, reject) => { rejectWork = reject; });
     });
@@ -994,8 +998,7 @@ it("rejects unsupported file sizes before copying, staging, or opening the netwo
   const tooLarge = new Blob(["abc"]);
   Object.defineProperty(tooLarge, "size", { value: SDK_LIMITS.maxFileBytes + 1 });
   await expect(client.upload(tooLarge)).rejects.toMatchObject({ code: "INVALID_SOURCE" });
-  expect(state.networks[0]!.uploadPublicFile).not.toHaveBeenCalled();
-  expect(state.networks[0]!.uploadStagedPublicFile).not.toHaveBeenCalled();
+  expect(state.networks[0]!.uploadRecords).not.toHaveBeenCalled();
   expect(state.networks[0]!.downloadPublicFile).not.toHaveBeenCalled();
   expect(state.networks[0]!.openPublicFile).not.toHaveBeenCalled();
   expect(client.pendingUploads).toEqual([]);
@@ -1040,8 +1043,8 @@ for (const withSubmission of [false, true]) it(`journals malformed wallet eviden
   }) };
   const client = await AutonomiClient.connect(endpoint, { payment: provider });
   const evidence: unknown[] = [];
-  state.networks[0]!.uploadPublicFile.mockImplementation(async (...args: unknown[]) => {
-    const pay = args[4] as (network: unknown, quotes: unknown, persist: (value: unknown) => Promise<void>) => Promise<unknown>;
+  state.networks[0]!.uploadRecords.mockImplementation(async (...args: unknown[]) => {
+    const pay = args[3] as (network: unknown, quotes: unknown, persist: (value: unknown) => Promise<void>) => Promise<unknown>;
     return pay(state.hello.payment, recoveryQuotes, async value => { evidence.push(value); });
   });
   try {
@@ -1100,7 +1103,7 @@ it("delegates failed payment reconciliation to Rust and awaits durable persisten
   expect(onCheckpoint).toHaveBeenCalledExactlyOnceWith("reconciled journal");
   expect(persisted).toBe(true);
   expect(payment.pay).not.toHaveBeenCalled();
-  expect(state.networks[0]!.uploadPublicFile).not.toHaveBeenCalled();
+  expect(state.networks[0]!.uploadRecords).not.toHaveBeenCalled();
   client.close();
 });
 
@@ -1113,6 +1116,6 @@ it("propagates native verification and persistence failures without authorizing 
       onCheckpoint: vi.fn(),
     })).rejects.toThrow(reason);
   }
-  expect(state.networks[0]!.uploadPublicFile).not.toHaveBeenCalled();
+  expect(state.networks[0]!.uploadRecords).not.toHaveBeenCalled();
   client.close();
 });

@@ -35,11 +35,46 @@ export interface CoreLookupResult {
   failures: LookupFailure[];
 }
 
+export type CoreChunkInfo = CorePublicFile["chunks"][number];
+
+export interface CoreRecordInfo {
+  address: string;
+  size: number;
+}
+
+/** Records paid and stored together; positions only affect progress text. */
+export interface CoreRecordBatch {
+  records: CoreRecordInfo[];
+  first_index?: number;
+  total_records?: number;
+}
+
+export interface CoreRecordBatchResult {
+  transactionHash?: string;
+  storageCostAtto: string;
+  records: number;
+  replicas: number;
+  paymentMode: string;
+}
+
+/** Native self-encryption output: data records, then the canonical DataMap record. */
+export interface CoreEncryptedFile {
+  address: string;
+  blake3: string;
+  data_map_size: number;
+  chunks: CoreChunkInfo[];
+  records: { address: string; content: Uint8Array }[];
+}
+
+export function chunksFromCore(chunks: readonly CoreChunkInfo[]): PublicFile["chunks"] {
+  return chunks.map((chunk) => ({ index: chunk.index, dstHash: chunk.dst_hash, srcHash: chunk.src_hash, srcSize: chunk.src_size }));
+}
+
 export function publicFileFromCore(file: CorePublicFile): PublicFile {
   return {
     name: file.name, address: file.address, size: file.size, contentType: file.content_type,
     blake3: file.blake3, dataMapSize: file.data_map_size, replicas: file.replicas,
-    chunks: file.chunks.map((chunk) => ({ index: chunk.index, dstHash: chunk.dst_hash, srcHash: chunk.src_hash, srcSize: chunk.src_size })),
+    chunks: chunksFromCore(file.chunks),
   };
 }
 

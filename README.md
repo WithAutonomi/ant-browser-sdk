@@ -986,9 +986,9 @@ because a payment callback rejected.
 
 A public file is identified by its DataMap address. Read APIs pass only that
 address and optional display metadata to Rust; size and chunk information come
-from the verified map. A staged upload's returned `blake3` is empty until a full
-plaintext read computes it. Native Rust file APIs and stored record formats are
-unchanged.
+from the verified map. Uploads return the `blake3` that native self-encryption
+computed while reading all plaintext, including for `File` and `Blob` inputs.
+Native Rust file APIs and stored record formats are unchanged.
 
 Low-level WASM consumers now call `BrowserNodeClient.connect()` and use its
 returned `BrowserNodeSession` for HELLO metadata and application requests. Close

@@ -3,6 +3,7 @@ import initAntCore, {
   BrowserNodeClient,
   parseWebRtcDirectMultiaddr,
   decodeMerklePaymentReceipt,
+  encryptPublicFile,
   mainnetNetworkDefaults,
 } from "../wasm/ant_core.js";
 import { AutonomiError } from "../errors.js";
@@ -33,22 +34,11 @@ export interface RawNetworkClient {
     file: unknown,
     onProgress?: (message: string) => void,
   ): Promise<RawFileReader>;
-  uploadPublicFile(
-    content: Uint8Array,
-    name: string,
-    contentType: string,
+  /** Quote, pay for, and store one batch; `loadRecord` receives the batch-local index. */
+  uploadRecords(
+    batch: unknown,
     paymentNetwork: unknown,
-    payForQuotes: (...args: unknown[]) => Promise<unknown>,
-    onProgress?: (message: string) => void,
-    checkpoint?: string,
-    onCheckpoint?: (checkpoint: string) => void | Promise<void>,
-    paymentMode?: string,
-    payForMerkle?: (...args: unknown[]) => Promise<unknown>,
-  ): Promise<unknown>;
-  uploadStagedPublicFile(
-    staged: unknown,
-    paymentNetwork: unknown,
-    loadRecord: (...args: unknown[]) => Promise<Uint8Array>,
+    loadRecord: (index: number, address: string, size: number) => Promise<Uint8Array> | Uint8Array,
     payForQuotes: (...args: unknown[]) => Promise<unknown>,
     onProgress?: (message: string) => void,
     checkpoint?: string,
@@ -77,6 +67,7 @@ export interface WasmBindings {
   BrowserNodeClient: new (endpoint: unknown) => RawNodeClient;
   parseWebRtcDirectMultiaddr(value: unknown): { multiaddr: string };
   decodeMerklePaymentReceipt?(request: unknown, vault: string, logs: unknown): unknown;
+  encryptPublicFile(content: Uint8Array): unknown;
 }
 
 type LoadedSource = ArrayBuffer | WebAssembly.Module;
@@ -155,6 +146,7 @@ export function getBindings(): WasmBindings {
     BrowserNodeClient,
     parseWebRtcDirectMultiaddr,
     decodeMerklePaymentReceipt,
+    encryptPublicFile,
     mainnetNetworkDefaults,
   };
 }

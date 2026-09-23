@@ -18,7 +18,7 @@ vi.mock("../src/internal/runtime.js", () => ({
       async hello() { return { type: "hello", protocol: "autonomi.web.poc.v5", peer_id: "ab".repeat(32), endpoint: { multiaddr: "/mock" }, max_chunk_size: 4194304, capabilities: ["chunk_protocol"], payment: mocks.network }; }
       close() {} free() {}
     },
-    BrowserNetworkClient: class { uploadStagedPublicFile = mocks.upload; close() {} free() {} },
+    BrowserNetworkClient: class { uploadRecords = mocks.upload; close() {} free() {} },
     parseWebRtcDirectMultiaddr: (multiaddr: string) => ({ multiaddr }),
   }),
 }));
@@ -38,7 +38,7 @@ async function client(payment?: PaymentProvider) {
   clients.push(value); return value;
 }
 const wallet = (): PaymentProvider => ({ pay: vi.fn(async () => ({ transactionHash: "0xpaid", totalAmount: "42" })) });
-const result = { file, transactionHash: "0xpaid", storageCostAtto: "42", records: 1 };
+const result = { transactionHash: "0xpaid", storageCostAtto: "42", records: 1, replicas: 1, paymentMode: "single" };
 beforeEach(async () => {
   vi.stubGlobal("fetch", vi.fn(async () => Response.json({ jsonrpc: "2.0", id: 1, result: "0x7a69" })));
   mocks.upload.mockReset(); mocks.stage.mockReset();
@@ -59,18 +59,21 @@ afterEach(async () => {
 });
 it("retains staged bytes after failure and cleans them only after a successful resume", async () => {
   const payment = wallet(); const value = await client(payment);
-  mocks.upload.mockImplementationOnce(async (_staged, network, load, pay) => {
+  mocks.upload.mockImplementationOnce(async (_batch, network, load, pay) => {
     expect(await load(0, file.address, 3)).toEqual(Uint8Array.of(1, 2, 3));
     await pay(network, quotes); throw new Error("quorum failed");
   });
   await expect(value.upload(new Blob(["abc"]))).rejects.toBeInstanceOf(UploadError);
   expect(await getStagedRecord(mocks.staged!.sessionId, 0)).toEqual(Uint8Array.of(1, 2, 3));
   const recovery = value.pendingUploads[0]!;
-  mocks.upload.mockImplementationOnce(async (_staged, network, load, pay) => {
+  mocks.upload.mockImplementationOnce(async (_batch, network, load, pay) => {
     expect(await load(0, file.address, 3)).toEqual(Uint8Array.of(1, 2, 3));
     await pay(network, quotes); return result;
   });
-  await value.resumeUpload(recovery);
+  // Staged metadata comes from the worker's encryptor, which read the complete plaintext.
+  await expect(value.resumeUpload(recovery)).resolves.toMatchObject({
+    file: { address: file.address, blake3: file.blake3, contentType: file.content_type, replicas: 1 }, records: 1,
+  });
   expect(mocks.stage).toHaveBeenCalledOnce();
   expect(payment.pay).toHaveBeenCalledOnce();
   await expect(getStagedRecord(mocks.staged!.sessionId, 0)).rejects.toThrow("is missing");
@@ -88,7 +91,7 @@ it("does not discard staged bytes while a submitted payment is still settling", 
   let confirm!: (receipt: { transactionHash: string; totalAmount: string }) => void;
   const payment: PaymentProvider = { pay: vi.fn<PaymentProvider["pay"]>(() => new Promise((resolve) => { confirm = resolve; })) };
   const value = await client(payment);
-  mocks.upload.mockImplementationOnce(async (_staged, network, _load, pay) => { await pay(network, quotes); return result; });
+  mocks.upload.mockImplementationOnce(async (_batch, network, _load, pay) => { await pay(network, quotes); return result; });
   const controller = new AbortController();
   const pending = value.upload(new Blob(["abc"]), { signal: controller.signal });
   const rejection = expect(pending).rejects.toMatchObject({ name: "AbortError" });
@@ -137,7 +140,7 @@ it("retains broadcast evidence and blocks new payment until its outcome is known
   }) };
   const value = await client(payment);
   const submitted = vi.fn();
-  mocks.upload.mockImplementation(async (_staged, network, _load, pay) => { await pay(network, quotes); return result; });
+  mocks.upload.mockImplementation(async (_batch, network, _load, pay) => { await pay(network, quotes); return result; });
   await expect(value.upload(new Blob(["abc"]), { onPaymentSubmitted: submitted })).rejects.toBeInstanceOf(UploadError);
   const recovery = value.pendingUploads[0]!;
   const pending = recovery.pendingPayments[0]!;
@@ -163,7 +166,7 @@ it("permits explicitly authorized payment after a definitive failure", async () 
   const value = await client({ pay: async (_network, _quotes, context) => {
     context.submitted(submission); throw new Error("reverted");
   } });
-  mocks.upload.mockImplementation(async (_staged, network, _load, pay) => { await pay(network, quotes); return result; });
+  mocks.upload.mockImplementation(async (_batch, network, _load, pay) => { await pay(network, quotes); return result; });
   await expect(value.upload(new Blob(["abc"]))).rejects.toBeInstanceOf(UploadError);
   const recovery = value.pendingUploads[0]!;
   const pending = recovery.pendingPayments[0]!;
@@ -182,7 +185,7 @@ it("delivers submission evidence even when broadcast resolves after cancellation
       async () => ({ status: "confirmed", receipt: { transactionHash: "0xlate", totalAmount: "42" } })));
     throw new Error("RPC disconnected");
   } });
-  mocks.upload.mockImplementation(async (_staged, network, _load, pay) => { await pay(network, quotes); return result; });
+  mocks.upload.mockImplementation(async (_batch, network, _load, pay) => { await pay(network, quotes); return result; });
   const controller = new AbortController();
   const submitted = vi.fn();
   const uploading = value.upload(new Blob(["abc"]), { signal: controller.signal, onPaymentSubmitted: submitted });
@@ -201,7 +204,7 @@ it("delivers submission evidence even when broadcast resolves after cancellation
 it("retains Rust checkpoints across retries and awaits the persistence hook", async () => {
   const payment = wallet(); const value = await client(payment);
   const saved: string[] = [];
-  mocks.upload.mockImplementationOnce(async (_staged, _network, _load, _pay, _progress, checkpoint, save) => {
+  mocks.upload.mockImplementationOnce(async (_batch, _network, _load, _pay, _progress, checkpoint, save) => {
     expect(checkpoint).toBeUndefined();
     await save("paid-rust-checkpoint");
     throw new Error("storage interrupted after payment");
@@ -209,7 +212,7 @@ it("retains Rust checkpoints across retries and awaits the persistence hook", as
   await expect(value.upload(new Blob(["abc"]), { onCheckpoint: async checkpoint => { saved.push(checkpoint); } })).rejects.toBeInstanceOf(UploadError);
   const recovery = value.pendingUploads[0]!;
   await recovery.settled;
-  mocks.upload.mockImplementationOnce(async (_staged, _network, _load, _pay, _progress, checkpoint) => {
+  mocks.upload.mockImplementationOnce(async (_batch, _network, _load, _pay, _progress, checkpoint) => {
     expect(checkpoint).toBe("paid-rust-checkpoint");
     return { ...result, storageCostAtto: "0" };
   });
@@ -220,7 +223,7 @@ it("retains Rust checkpoints across retries and awaits the persistence hook", as
 
 it("accepts a persisted checkpoint with restaged input without requiring a new wallet", async () => {
   const value = await client();
-  mocks.upload.mockImplementationOnce(async (_staged, _network, _load, _pay, _progress, checkpoint) => {
+  mocks.upload.mockImplementationOnce(async (_batch, _network, _load, _pay, _progress, checkpoint) => {
     expect(checkpoint).toBe("restored-rust-checkpoint");
     return { ...result, storageCostAtto: "0" };
   });
@@ -234,7 +237,7 @@ it("retains a confirmed Merkle receipt and forwards native mode on resume", asyn
   const value = await client(payment);
   const progress = vi.fn();
   value.onProgress(progress);
-  mocks.upload.mockImplementationOnce(async (_staged, network, _load, _pay, _progress, _checkpoint, _save, mode, merkle) => {
+  mocks.upload.mockImplementationOnce(async (_batch, network, _load, _pay, _progress, _checkpoint, _save, mode, merkle) => {
     expect(mode).toBe("merkle");
     const pending = merkle(network, request);
     expect(progress).toHaveBeenCalledWith(expect.objectContaining({ phase: "payment", message: "Waiting for Merkle storage payment" }));
@@ -246,7 +249,7 @@ it("retains a confirmed Merkle receipt and forwards native mode on resume", asyn
   try { await value.upload(new Blob(["abc"]), { paymentMode: "merkle" }); }
   catch (error) { recovery = (error as UploadError).recovery; }
   expect(recovery).toBeDefined();
-  mocks.upload.mockImplementationOnce(async (_staged, network, _load, _pay, _progress, _checkpoint, _save, mode, merkle) => {
+  mocks.upload.mockImplementationOnce(async (_batch, network, _load, _pay, _progress, _checkpoint, _save, mode, merkle) => {
     expect(mode).toBe("merkle");
     expect(await merkle(network, request)).toEqual(receipt);
     return { ...result, transactionHash: receipt.transactionHash, storageCostAtto: "0" };

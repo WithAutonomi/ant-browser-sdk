@@ -19,7 +19,7 @@ export interface PublicFile {
   readonly address: string;
   readonly size: number;
   readonly contentType: string;
-  /** Computed after a complete plaintext read; empty until then for staged uploads. */
+  /** Whole-file plaintext hash, known once an upload or download has read all plaintext; otherwise empty. */
   readonly blake3: string;
   readonly dataMapSize: number;
   readonly chunks: readonly ChunkInfo[];

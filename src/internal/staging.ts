@@ -7,6 +7,7 @@ import {
   getStagedRecord,
 } from "./record-store.js";
 import { abortable, abortReason, throwIfAborted } from "./abort.js";
+import type { CoreChunkInfo } from "./protocol.js";
 
 export type WorkerWasmSource = ArrayBuffer | WebAssembly.Module;
 
@@ -22,7 +23,7 @@ export interface StagedFile {
   blake3: string;
   size: number;
   data_map_size: number;
-  chunks: unknown[];
+  chunks: CoreChunkInfo[];
   records: StagedRecord[];
 }
 
@@ -133,7 +134,6 @@ export async function stageBlob(
 export async function loadStagedRecord(
   sessionId: string,
   index: number,
-  _address: string,
   expectedSize: number,
   signal?: AbortSignal,
 ): Promise<Uint8Array> {

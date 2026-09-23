@@ -7,6 +7,7 @@ import type {
 import { clearStagedUpload, type StagedUpload } from "./staging.js";
 import { snapshot } from "./snapshot.js";
 import { abortable, isAbort } from "./abort.js";
+import type { UploadedFile } from "./upload-sources.js";
 
 export interface RetainedUpload {
   paymentMode?: "auto" | "single" | "merkle";
@@ -248,15 +249,14 @@ export function paidReceipt(
   return undefined;
 }
 
-export function uploadResult(
-  state: RetainedUpload,
-  raw: { file: PublicFile; records: number; storageCostAtto: string; transactionHash?: string; paymentMode?: string },
-): UploadResult {
+export function uploadResult(state: RetainedUpload, uploaded: UploadedFile): UploadResult {
   const last = state.payments.at(-1)?.receipt.transactionHash;
+  const transactionHash = uploaded.transactionHash ?? last;
   return {
-    ...raw,
-    paymentMode: raw.paymentMode === "merkle" ? "merkle" : "single",
-    ...(raw.transactionHash || !last ? {} : { transactionHash: last }),
+    file: uploaded.file,
+    records: uploaded.records,
+    paymentMode: uploaded.paymentMode === "merkle" ? "merkle" : "single",
+    ...(transactionHash ? { transactionHash } : {}),
     storageCostAtto: state.payments.reduce((sum, payment) => sum + BigInt(payment.receipt.totalAmount), 0n).toString(),
     payments: Object.freeze([...state.payments]),
   };

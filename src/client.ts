@@ -3,18 +3,15 @@ import { saveUploadCheckpoint } from "./internal/record-store.js";
 import { assertFileSize, SDK_LIMITS } from "./limits.js";
 import {
   coreFileReference, helloFromCore, lookupFromCore, nodeFromCore, publicFileFromCore,
-  type CoreHelloInfo, type CoreLookupResult, type CoreNetworkNode, type CorePublicFile,
+  type CoreHelloInfo, type CoreLookupResult, type CoreNetworkNode, type CorePublicFile, type CoreRecordBatchResult,
 } from "./internal/protocol.js";
 import { AutonomiError, UploadError, wrapError } from "./errors.js";
 import { createPublicFileReader, type PublicFileReader } from "./file-reader.js";
 import { abortable, isAbort, throwIfAborted } from "./internal/abort.js";
 import { getBindings, initializeClientWasm, type RawNetworkClient } from "./internal/runtime.js";
 import { MediaBridge } from "./internal/media.js";
-import {
-  loadStagedRecord,
-  stageBlob,
-  type WorkerWasmSource,
-} from "./internal/staging.js";
+import { stageBlob, type WorkerWasmSource } from "./internal/staging.js";
+import { uploadBytes, uploadStaged, type RecordBatchUploader } from "./internal/upload-sources.js";
 import { operationId, progressReporter, type Reporter, type OperationOutcome } from "./internal/progress.js";
 import {
   awaitUploadSettlement, claimUpload, paidReceipt, releaseUpload, retainUpload,
@@ -524,19 +521,16 @@ export class AutonomiClient {
           if (state.onCheckpoint) await state.onCheckpoint(value);
           else { await saveUploadCheckpoint(state.handle.id, value); state.checkpointStoredLocally = true; }
         };
-        const raw = state.staged
-          ? this.#network.uploadStagedPublicFile(
-              state.staged.staged, corePaymentNetwork(state.network),
-              (index: unknown, address: unknown, size: unknown) => loadStagedRecord(
-                state.staged!.sessionId, Number(index), String(address), Number(size), operation.signal,
-              ), payForQuotes, report, state.coreCheckpoint, checkpoint, state.paymentMode ?? "auto", payForMerkle,
-            )
-          : this.#network.uploadPublicFile(
-              state.bytes!, state.name, state.contentType, corePaymentNetwork(state.network), payForQuotes, report, state.coreCheckpoint, checkpoint, state.paymentMode ?? "auto", payForMerkle,
-            );
-        state.work = Promise.resolve(raw).then((result) => {
-          const rawResult = result as Omit<UploadResult, "file" | "payments"> & { file: CorePublicFile };
-          state.result = uploadResult(state, { ...rawResult, file: publicFileFromCore(rawResult.file) });
+        const network = this.#network;
+        const uploadBatch: RecordBatchUploader = async (batch, load) => await network.uploadRecords(
+          batch, corePaymentNetwork(state.network), load, payForQuotes, report, state.coreCheckpoint, checkpoint,
+          state.paymentMode ?? "auto", payForMerkle,
+        ) as CoreRecordBatchResult;
+        const uploading = state.staged
+          ? uploadStaged(state, uploadBatch, operation.signal)
+          : uploadBytes(state, uploadBatch, report);
+        state.work = uploading.then((uploaded) => {
+          state.result = uploadResult(state, uploaded);
           return state.result;
         });
         await abortable(state.work, operation.signal);
