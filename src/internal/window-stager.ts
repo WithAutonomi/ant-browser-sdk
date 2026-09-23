@@ -81,12 +81,16 @@ export class WindowStager {
       try {
         await this.#put(this.#produced, record.content);
       } catch (error) {
+        if (!isQuotaExceeded(error)) throw error;
         // Quota estimates are hints; end a byte-bounded window early rather than fail it.
-        if ("bytes" in limit && records.length > 0 && isQuotaExceeded(error)) {
+        if ("bytes" in limit && records.length > 0) {
           this.#buffered.unshift(record);
           return { firstIndex, records, complete: false };
         }
-        throw error;
+        throw new Error(
+          `Not enough browser storage to stage an upload window: IndexedDB refused a ${size.toLocaleString()}-byte record`,
+          { cause: error },
+        );
       }
       records.push({ address: record.address, size });
       bytes += size;

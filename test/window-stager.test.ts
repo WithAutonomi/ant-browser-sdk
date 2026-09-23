@@ -47,7 +47,10 @@ describe("windowed record staging", () => {
   it("fails rather than stage an empty window", async () => {
     await expect(stager(records(8)).stager.stage({ bytes: 7 })).rejects.toThrow(/Not enough browser storage/);
     const put = vi.fn(async () => { throw quotaExceeded(); });
-    await expect(stager(records(3), put).stager.stage({ bytes: 7 })).rejects.toMatchObject({ name: "QuotaExceededError" });
+    await expect(stager(records(3), put).stager.stage({ bytes: 7 })).rejects.toMatchObject({
+      message: expect.stringMatching(/Not enough browser storage.*IndexedDB refused a 3-byte record/u),
+      cause: { name: "QuotaExceededError" },
+    });
   });
 
   it("restores a checkpoint's exact window after skipping stored records", async () => {
@@ -59,7 +62,7 @@ describe("windowed record staging", () => {
     expect(await windows.stage({ records: 2 })).toMatchObject({ firstIndex: 2, records: [{}, {}], complete: false });
     // An exact window ignores quota errors' early-end rule and fails instead.
     put.mockRejectedValueOnce(quotaExceeded());
-    await expect(windows.stage({})).rejects.toMatchObject({ name: "QuotaExceededError" });
+    await expect(windows.stage({})).rejects.toThrow(/Not enough browser storage/u);
   });
 
   it("withholds a private upload's DataMap record instead of staging it", async () => {
