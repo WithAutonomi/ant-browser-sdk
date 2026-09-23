@@ -242,6 +242,9 @@ to single-node waves if candidate pools cannot be filled before payment. Set
 wagmi providers support both; custom providers implement optional `payMerkle`
 to submit Rust-generated calldata and decode the confirmed receipt through
 `context.decodeReceipt(receipt.logs)`. Forced Merkle never falls back silently.
+Results report the mode actually used as `paymentMode`, like native
+`payment_mode_used`: `"merkle"` once any record was paid through a Merkle batch,
+otherwise `"single"`.
 
 ### Resume a failed upload
 

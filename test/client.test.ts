@@ -340,6 +340,17 @@ describe("AutonomiClient", () => {
     client.close();
   });
 
+  it("reports the payment mode the native coordinator used", async () => {
+    const client = await AutonomiClient.connect(endpoint, { payment: { pay: async () => ({ totalAmount: "0" }) } });
+    const upload = state.networks[0]!.uploadPublicFile;
+    upload.mockResolvedValueOnce({ file: wireFile, storageCostAtto: "0", records: 4, paymentMode: "merkle" });
+    await expect(client.upload(new Uint8Array(3_072), { paymentMode: "merkle" })).resolves.toMatchObject({ paymentMode: "merkle" });
+    expect(upload.mock.calls[0]![8]).toBe("merkle");
+    upload.mockResolvedValueOnce({ file: wireFile, storageCostAtto: "0", records: 4, paymentMode: "single" });
+    await expect(client.upload(new Uint8Array(3_072))).resolves.toMatchObject({ paymentMode: "single" });
+    client.close();
+  });
+
   it("pauses at verified quotes and continues after explicit payment", async () => {
     const walletPayment: PaymentProvider = {
       pay: vi.fn(async (_network, quotes) => ({

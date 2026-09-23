@@ -250,11 +250,12 @@ export function paidReceipt(
 
 export function uploadResult(
   state: RetainedUpload,
-  raw: { file: PublicFile; records: number; storageCostAtto: string; transactionHash?: string },
+  raw: { file: PublicFile; records: number; storageCostAtto: string; transactionHash?: string; paymentMode?: string },
 ): UploadResult {
   const last = state.payments.at(-1)?.receipt.transactionHash;
   return {
     ...raw,
+    paymentMode: raw.paymentMode === "merkle" ? "merkle" : "single",
     ...(raw.transactionHash || !last ? {} : { transactionHash: last }),
     storageCostAtto: state.payments.reduce((sum, payment) => sum + BigInt(payment.receipt.totalAmount), 0n).toString(),
     payments: Object.freeze([...state.payments]),

@@ -305,6 +305,8 @@ export interface UploadResult {
   /** Total confirmed storage payments across this upload and its resumed attempts. */
   storageCostAtto: string;
   records: number;
+  /** Mode the native coordinator used, like native `payment_mode_used`: `merkle` once any record was paid through a Merkle batch. */
+  paymentMode: "single" | "merkle";
 }
 
 export interface DownloadOptions extends OperationOptions {
