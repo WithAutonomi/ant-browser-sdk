@@ -59,11 +59,11 @@ const client = await AutonomiClient.connect();
 // Equivalent: AutonomiClient.connect({ network: "mainnet", payment, onProgress });
 ```
 
-**Mainnet WebRTC seeds have not been published yet.** `getNetworkDefaults()`
-currently returns an empty seed list along with the mainnet payment identity and
-public RPC URL. `connect()` rejects with `CONNECTION_FAILED` and a message naming
-that missing configuration. It does not try QUIC endpoints or contact the RPC.
-Use an explicit devnet address or trusted custom profile until seeds are added.
+`getNetworkDefaults()` returns seven bundled, certificate-pinned mainnet WebRTC
+seeds along with the mainnet payment identity and public RPC URL. `connect()`
+uses that profile, checks the authenticated payment identity, and supplies all
+seven seeds to the shared network client. Reading defaults does not dial nodes
+or contact the RPC. Use an explicit address or trusted custom profile for a devnet.
 
 To use an application-owned network, pass a profile:
 

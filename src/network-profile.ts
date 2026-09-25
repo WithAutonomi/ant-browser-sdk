@@ -11,7 +11,7 @@ export interface NetworkProfile {
   readonly payment: PaymentNetwork;
 }
 
-/** Rust-owned mainnet defaults. Seeds may be empty until browser nodes are deployed. */
+/** Rust-owned mainnet defaults from the bundled release configuration. */
 export interface NetworkDefaults extends NetworkProfile {
   readonly rpcUrl: string;
 }

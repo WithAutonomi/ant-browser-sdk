@@ -1,0 +1,27 @@
+{"kind":"defaults","seeds":7,"matches":true}
+{"kind":"seed","index":4,"peer":"dac90975f872f6401519f7b14bfd860792c9052964ffdbd40d190f35469e4ad1","status":"authenticated","seconds":0.6039000000953675}
+{"kind":"seed","index":5,"peer":"825916f9447f45d93554d3be742f9a76f7dede9190368dbdb15d34ff7211e9e1","status":"authenticated","seconds":2.3319000000953674}
+{"kind":"seed","index":2,"peer":"a1f073e0ffc1a1890e8d072015fa2437a1090997b47c0412c0bfabe7c7e16199","status":"authenticated","seconds":2.3324000000953675}
+{"kind":"seed","index":3,"peer":"3926125b8454101fd39739a09320ca0174be90d3423c1287926172bea69a0f5a","status":"authenticated","seconds":2.854800000190735}
+{"kind":"seed","index":6,"peer":"2ed6785d3aab00fc4ef048884c63b2a85fb587441413a94a7eb8f8e8b65bd582","status":"authenticated","seconds":4.987700000047684}
+{"kind":"seed","index":1,"peer":"bb72725f8f4383eb475ac9cb681505d9147e8b2c5a4c0197d4efdb328c54601f","status":"authenticated","seconds":5.568300000190735}
+{"kind":"seed","index":0,"peer":"57a89f84e1652d22fd6b791c29d83f187fbed3ba8e08e265fe3031b3a6f725da","status":"authenticated","seconds":15.1785}
+{"kind":"progress","seconds":0.00040000009536743164,"message":"Initializing the Autonomi browser core"}
+{"kind":"progress","seconds":0.00040000009536743164,"message":"Authenticating bootstrap node from /ip4/207.148.94.42/udp/10001/webrtc-direct/certhash/uEiAkAsFZc-iV5UToJHyETA8GLBIVdzB10Qv6VuNlwqTwkQ/p2p/57a89f84e1652d22fd6b791c29d83f187fbed3ba8e08e265fe3031b3a6f725da"}
+{"kind":"progress","seconds":12.204400000095367,"message":"Connected to authenticated peer 57a89f84e1652d22fd6b791c29d83f187fbed3ba8e08e265fe3031b3a6f725da"}
+{"kind":"progress","seconds":12.2045,"message":"Connected to authenticated peer 57a89f84e1652d22fd6b791c29d83f187fbed3ba8e08e265fe3031b3a6f725da"}
+{"kind":"default-connect","status":"authenticated","peer":"57a89f84e1652d22fd6b791c29d83f187fbed3ba8e08e265fe3031b3a6f725da"}
+{"kind":"progress","seconds":12.208100000143052,"message":"Choosing a download destination"}
+{"kind":"progress","seconds":12.209700000047684,"message":"Fetching public DataMap 134e4537ad1b2e29f0dc48f8e025a560989e91055ebf1c66bca2208ca8bba889"}
+{"kind":"progress","seconds":12.209700000047684,"message":"Fetching 134e4537ad1b2e29f0dc48f8e025a560989e91055ebf1c66bca2208ca8bba889"}
+{"kind":"progress","seconds":23.248200000047685,"message":"Verified public DataMap (320 bytes)"}
+{"kind":"progress","seconds":23.249900000095366,"message":"Resolving nested DataMap record 69443b7fecbc2d04895a5155d84965a6b6f131c059dac3e108f014f4d24d8e78"}
+{"kind":"progress","seconds":23.249900000095366,"message":"Fetching 69443b7fecbc2d04895a5155d84965a6b6f131c059dac3e108f014f4d24d8e78"}
+{"kind":"progress","seconds":23.250400000095368,"message":"Resolving nested DataMap record 187af5fe3f69c12b417e8ca51b6dea4963964e53042089b5536d9e7e8c1e7d84"}
+{"kind":"progress","seconds":23.2505,"message":"Fetching 187af5fe3f69c12b417e8ca51b6dea4963964e53042089b5536d9e7e8c1e7d84"}
+{"kind":"progress","seconds":23.250600000143052,"message":"Resolving nested DataMap record 7f4b3e83ed0b434668dedbcd98023474e968bcf0b589436b2fbb9c1515e2bf33"}
+{"kind":"progress","seconds":23.250600000143052,"message":"Fetching 7f4b3e83ed0b434668dedbcd98023474e968bcf0b589436b2fbb9c1515e2bf33"}
+{"kind":"progress","seconds":26.702200000047682,"message":"Downloaded chunk 0/147"}
+{"kind":"progress","seconds":29.737,"message":"Downloaded chunk 1/147"}
+{"kind":"progress","seconds":31.62990000009537,"message":"Downloaded chunk 2/147"}
+{"kind":"progress","seconds":31.939900000095367,"message":"Downloaded chunk 3/147"}
