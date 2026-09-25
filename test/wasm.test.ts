@@ -3,10 +3,18 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 import { corePublicFile, publicFileFromCore } from "../src/internal/protocol.js";
 import { encryptPublicFile, parseBrowserManifest } from "../src/wasm/ant_core.js";
+import * as wasmBindings from "../src/wasm/ant_core.js";
 import { AutonomiClient, getNetworkDefaults, initializeWasm, SDK_LIMITS } from "../src/index.js";
 import { getBindings } from "../src/internal/runtime.js";
 
 describe("packaged Rust/WASM boundary", () => {
+  it("ships the network client without standalone node clients or transport test seams", async () => {
+    expect(wasmBindings.BrowserNetworkClient.prototype.connect).toBeTypeOf("function");
+    const bytes = await readFile(new URL("../src/wasm/ant_core_bg.wasm", import.meta.url));
+    const module = await WebAssembly.compile(bytes);
+    const exports = [...Object.keys(wasmBindings), ...WebAssembly.Module.exports(module).map(value => value.name)];
+    expect(exports.filter(name => /browsernodeclient|browsernodesession|testnodesession|test_connect_node|^test_|^BrowserTest/i.test(name))).toEqual([]);
+  });
   it("exposes shared mainnet payment defaults with no QUIC seeds or network requests", async () => {
     await initializeWasm(await readFile(new URL("../src/wasm/ant_core_bg.wasm", import.meta.url)));
     const fetchSpy = vi.spyOn(globalThis, "fetch");

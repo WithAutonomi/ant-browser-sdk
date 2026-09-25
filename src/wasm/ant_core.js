@@ -427,147 +427,6 @@ export class BrowserNetworkClient {
 if (Symbol.dispose) BrowserNetworkClient.prototype[Symbol.dispose] = BrowserNetworkClient.prototype.free;
 
 /**
- * One authenticated browser-to-node WebRTC Direct client implemented in Rust.
- */
-export class BrowserNodeClient {
-    __destroy_into_raw() {
-        const ptr = this.__wbg_ptr;
-        this.__wbg_ptr = 0;
-        BrowserNodeClientFinalization.unregister(this);
-        return ptr;
-    }
-    free() {
-        const ptr = this.__destroy_into_raw();
-        wasm.__wbg_browsernodeclient_free(ptr, 0);
-    }
-    /**
-     * Complete PQ authentication and HELLO, returning a session for application RPCs.
-     * @returns {Promise<BrowserNodeSession>}
-     */
-    connect() {
-        const ret = wasm.browsernodeclient_connect(this.__wbg_ptr);
-        return ret;
-    }
-    /**
-     * Construct a client from a raw or structured WebRTC Direct endpoint.
-     * @param {any} endpoint
-     */
-    constructor(endpoint) {
-        const ret = wasm.browsernodeclient_new(endpoint);
-        if (ret[2]) {
-            throw takeFromExternrefTable0(ret[1]);
-        }
-        this.__wbg_ptr = ret[0];
-        BrowserNodeClientFinalization.register(this, this.__wbg_ptr, this);
-        return this;
-    }
-}
-if (Symbol.dispose) BrowserNodeClient.prototype[Symbol.dispose] = BrowserNodeClient.prototype.free;
-
-/**
- * Authenticated application session. Reconnect through `BrowserNodeClient` after closure.
- */
-export class BrowserNodeSession {
-    static __wrap(ptr) {
-        const obj = Object.create(BrowserNodeSession.prototype);
-        obj.__wbg_ptr = ptr;
-        BrowserNodeSessionFinalization.register(obj, obj.__wbg_ptr, obj);
-        return obj;
-    }
-    __destroy_into_raw() {
-        const ptr = this.__wbg_ptr;
-        this.__wbg_ptr = 0;
-        BrowserNodeSessionFinalization.unregister(this);
-        return ptr;
-    }
-    free() {
-        const ptr = this.__destroy_into_raw();
-        wasm.__wbg_browsernodesession_free(ptr, 0);
-    }
-    /**
-     * Close the DataChannel and peer connection.
-     */
-    close() {
-        wasm.browsernodesession_close(this.__wbg_ptr);
-    }
-    /**
-     * Request nodes closest to a 32-byte target.
-     * @param {string} target
-     * @param {number} count
-     * @returns {Promise<any>}
-     */
-    findNode(target, count) {
-        const ptr0 = passStringToWasm0(target, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.browsernodesession_findNode(this.__wbg_ptr, ptr0, len0, count);
-        return ret;
-    }
-    /**
-     * Retrieve and BLAKE3-verify one content-addressed record.
-     * @param {string} address
-     * @returns {Promise<any>}
-     */
-    getChunk(address) {
-        const ptr0 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.browsernodesession_getChunk(this.__wbg_ptr, ptr0, len0);
-        return ret;
-    }
-    /**
-     * Authenticate the connected node.
-     * @returns {Promise<any>}
-     */
-    hello() {
-        const ret = wasm.browsernodesession_hello(this.__wbg_ptr);
-        return ret;
-    }
-    /**
-     * Authenticated remote peer identity.
-     * @returns {string | undefined}
-     */
-    get peerId() {
-        const ret = wasm.browsernodesession_peerId(this.__wbg_ptr);
-        let v1;
-        if (ret[0] !== 0) {
-            v1 = getStringFromWasm0(ret[0], ret[1]).slice();
-            wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
-        }
-        return v1;
-    }
-    /**
-     * Store a paid content-addressed record.
-     * @param {string} address
-     * @param {Uint8Array} content
-     * @param {any} quote
-     * @param {string} transaction_hash
-     * @returns {Promise<any>}
-     */
-    putChunk(address, content, quote, transaction_hash) {
-        const ptr0 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passArray8ToWasm0(content, wasm.__wbindgen_malloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ptr2 = passStringToWasm0(transaction_hash, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len2 = WASM_VECTOR_LEN;
-        const ret = wasm.browsernodesession_putChunk(this.__wbg_ptr, ptr0, len0, ptr1, len1, quote, ptr2, len2);
-        return ret;
-    }
-    /**
-     * Request a signed storage quote.
-     * @param {string} address
-     * @param {number} size
-     * @returns {Promise<any>}
-     */
-    quoteChunk(address, size) {
-        const ptr0 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.browsernodesession_quoteChunk(this.__wbg_ptr, ptr0, len0, size);
-        return ret;
-    }
-}
-if (Symbol.dispose) BrowserNodeSession.prototype[Symbol.dispose] = BrowserNodeSession.prototype.free;
-
-/**
  * Native BLAKE3 content address.
  * @param {Uint8Array} content
  * @returns {string}
@@ -919,10 +778,6 @@ function __wbg_get_imports() {
         }, arguments); },
         __wbg_browserfilereader_new: function(arg0) {
             const ret = BrowserFileReader.__wrap(arg0);
-            return ret;
-        },
-        __wbg_browsernodesession_new: function(arg0) {
-            const ret = BrowserNodeSession.__wrap(arg0);
             return ret;
         },
         __wbg_bufferedAmount_f973d7c9cfe8766d: function(arg0) {
@@ -1298,27 +1153,27 @@ function __wbg_get_imports() {
             return ret;
         },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 1034, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 1007, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__h6c639ae6ac52cf17);
             return ret;
         },
         __wbindgen_cast_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 460, ret: NamedExternref("Promise<any>"), inner_ret: Some(NamedExternref("Promise<any>")) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 415, ret: NamedExternref("Promise<any>"), inner_ret: Some(NamedExternref("Promise<any>")) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__h0adb10753c7fca5a);
             return ret;
         },
         __wbindgen_cast_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("Event")], shim_idx: 462, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("Event")], shim_idx: 417, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__h5206e33babbdebc1);
             return ret;
         },
         __wbindgen_cast_0000000000000004: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 462, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 417, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__h5206e33babbdebc1_3);
             return ret;
         },
         __wbindgen_cast_0000000000000005: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 750, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 723, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen__convert__closures_____invoke__hc4b509476b4504c4);
             return ret;
         },
@@ -1411,12 +1266,6 @@ const BrowserIterativeLookupFinalization = (typeof FinalizationRegistry === 'und
 const BrowserNetworkClientFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_browsernetworkclient_free(ptr, 1));
-const BrowserNodeClientFinalization = (typeof FinalizationRegistry === 'undefined')
-    ? { register: () => {}, unregister: () => {} }
-    : new FinalizationRegistry(ptr => wasm.__wbg_browsernodeclient_free(ptr, 1));
-const BrowserNodeSessionFinalization = (typeof FinalizationRegistry === 'undefined')
-    ? { register: () => {}, unregister: () => {} }
-    : new FinalizationRegistry(ptr => wasm.__wbg_browsernodesession_free(ptr, 1));
 
 function addToExternrefTable0(obj) {
     const idx = wasm.__externref_table_alloc();

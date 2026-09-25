@@ -165,59 +165,6 @@ export class BrowserNetworkClient {
 }
 
 /**
- * One authenticated browser-to-node WebRTC Direct client implemented in Rust.
- */
-export class BrowserNodeClient {
-    free(): void;
-    [Symbol.dispose](): void;
-    /**
-     * Complete PQ authentication and HELLO, returning a session for application RPCs.
-     */
-    connect(): Promise<BrowserNodeSession>;
-    /**
-     * Construct a client from a raw or structured WebRTC Direct endpoint.
-     */
-    constructor(endpoint: any);
-}
-
-/**
- * Authenticated application session. Reconnect through `BrowserNodeClient` after closure.
- */
-export class BrowserNodeSession {
-    private constructor();
-    free(): void;
-    [Symbol.dispose](): void;
-    /**
-     * Close the DataChannel and peer connection.
-     */
-    close(): void;
-    /**
-     * Request nodes closest to a 32-byte target.
-     */
-    findNode(target: string, count: number): Promise<any>;
-    /**
-     * Retrieve and BLAKE3-verify one content-addressed record.
-     */
-    getChunk(address: string): Promise<any>;
-    /**
-     * Authenticate the connected node.
-     */
-    hello(): Promise<any>;
-    /**
-     * Store a paid content-addressed record.
-     */
-    putChunk(address: string, content: Uint8Array, quote: any, transaction_hash: string): Promise<any>;
-    /**
-     * Request a signed storage quote.
-     */
-    quoteChunk(address: string, size: number): Promise<any>;
-    /**
-     * Authenticated remote peer identity.
-     */
-    readonly peerId: string | undefined;
-}
-
-/**
  * Native BLAKE3 content address.
  */
 export function contentAddress(content: Uint8Array): string;
@@ -298,8 +245,6 @@ export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_browserfilereader_free: (a: number, b: number) => void;
     readonly __wbg_browsernetworkclient_free: (a: number, b: number) => void;
-    readonly __wbg_browsernodeclient_free: (a: number, b: number) => void;
-    readonly __wbg_browsernodesession_free: (a: number, b: number) => void;
     readonly browserfilereader_close: (a: number) => void;
     readonly browserfilereader_contentType: (a: number) => [number, number];
     readonly browserfilereader_name: (a: number) => [number, number];
@@ -316,16 +261,6 @@ export interface InitOutput {
     readonly browsernetworkclient_uploadPublicFile: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: any, j: number, k: number, l: number, m: number, n: number, o: number, p: number) => any;
     readonly browsernetworkclient_uploadRecords: (a: number, b: any, c: any, d: any, e: any, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => any;
     readonly browsernetworkclient_uploadStagedPublicFile: (a: number, b: any, c: any, d: any, e: any, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => any;
-    readonly browsernodeclient_connect: (a: number) => any;
-    readonly browsernodeclient_new: (a: any) => [number, number, number];
-    readonly browsernodesession_close: (a: number) => void;
-    readonly browsernodesession_findNode: (a: number, b: number, c: number, d: number) => any;
-    readonly browsernodesession_getChunk: (a: number, b: number, c: number) => any;
-    readonly browsernodesession_hello: (a: number) => any;
-    readonly browsernodesession_peerId: (a: number) => [number, number];
-    readonly browsernodesession_putChunk: (a: number, b: number, c: number, d: number, e: number, f: any, g: number, h: number) => any;
-    readonly browsernodesession_quoteChunk: (a: number, b: number, c: number, d: number) => any;
-    readonly browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
     readonly __wbg_browserfileencryptor_free: (a: number, b: number) => void;
     readonly __wbg_browseriterativelookup_free: (a: number, b: number) => void;
     readonly browserfileencryptor_finish: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
@@ -351,6 +286,7 @@ export interface InitOutput {
     readonly verifyRecord: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly verifyStorageQuote: (a: any, b: number, c: number, d: number, e: number) => [number, number, number];
     readonly webRtcDirectV2ServerCredential: (a: number, b: number) => [number, number, number, number];
+    readonly browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
     readonly BrotliDecoderCreateInstance: (a: number, b: number, c: number) => number;
     readonly BrotliDecoderDecompress: (a: number, b: number, c: number, d: number) => number;
     readonly BrotliDecoderDecompressPrealloc: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => void;

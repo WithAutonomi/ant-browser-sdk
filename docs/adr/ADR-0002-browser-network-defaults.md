@@ -114,6 +114,14 @@ startup no longer creates and discards a standalone `BrowserNodeClient` probe.
 Closing during startup closes all pooled attempts immediately and releases the
 WASM allocation after its pending async call settles.
 
+The bundled production WASM exposes `BrowserNetworkClient` as its only networking
+client. Remove the old `BrowserNodeClient` and `BrowserNodeSession` exports;
+per-node transport test helpers remain behind the core's `test-utils` feature.
+Single-node HELLO diagnostics can use a one-seed network client. There is no
+current SDK requirement for exact-replica RPCs or a separate connection owner.
+Direct users of the removed WASM exports must migrate; the high-level SDK
+connection overloads remain compatible.
+
 Named connections verify the authenticated HELLO against the profile's payment
 identity before use; a mismatch keeps the existing `NETWORK_MISMATCH` behavior.
 Peer discovery continues through the shared Rust network implementation.
@@ -152,8 +160,10 @@ can be considered separately once the deployment defaults are available.
 
 ### Neutral / Operational
 
-- No wire-protocol or persisted-storage change is proposed. Public APIs gain
+- No wire-protocol or persisted-storage change is proposed. SDK APIs gain
   additive defaults and helpers; existing explicit connection behavior remains.
+  Removing the standalone low-level WASM node exports is a breaking API change
+  for their direct consumers.
 - No new package is added. Existing Rust TOML parsing becomes portable so the
   same bundled resource is read on native and WASM targets.
 - Keep explicit connections available as a rollback path. Do not ship a working

@@ -1049,10 +1049,15 @@ from the verified map. Uploads return the `blake3` that native self-encryption
 computed while reading all plaintext, including for `File` and `Blob` inputs.
 Native Rust file APIs and stored record formats are unchanged.
 
-Low-level WASM consumers now call `BrowserNodeClient.connect()` and use its
-returned `BrowserNodeSession` for HELLO metadata and application requests. Close
-that session when finished. Closed sessions reject requests; connecting again
-creates a new authenticated session.
+Low-level WASM consumers construct `BrowserNetworkClient` with their seed array
+and call `connect(expectedPayment)` to authenticate and receive HELLO metadata.
+Use the same client for discovery and transfers, then call `close()` and `free()`
+after pending calls settle. To reconnect after closing it, construct a new client.
+The former `BrowserNodeClient` and `BrowserNodeSession` exports have been removed;
+direct callers must migrate to the network client. A single seed is sufficient
+for checking that node's authenticated HELLO, but network transfers discover
+holders normally rather than targeting only that seed. Per-node RPC test helpers
+are excluded from production WASM. The high-level `AutonomiClient` API is unchanged.
 
 `AutonomiClient.connectNetwork(profile, options)` accepts a profile bundled with
 the application, verifies its payment identity and tries its independent seeds.

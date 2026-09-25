@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const init = vi.hoisted(() => vi.fn());
 vi.mock("../src/wasm/ant_core.js", () => ({
-  default: init, BrowserNetworkClient: class {}, BrowserNodeClient: class {}, parseWebRtcDirectMultiaddr: vi.fn(),
+  default: init, BrowserNetworkClient: class {}, parseWebRtcDirectMultiaddr: vi.fn(),
 }));
 const bytes = () => Uint8Array.of(0, 97, 115, 109, 1, 0, 0, 0);
 beforeEach(() => { vi.resetModules(); init.mockReset().mockResolvedValue({}); });
