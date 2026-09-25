@@ -1,6 +1,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
+export const browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
 export const __wbg_browserfilereader_free: (a: number, b: number) => void;
 export const __wbg_browsernetworkclient_free: (a: number, b: number) => void;
 export const browserfilereader_close: (a: number) => void;
@@ -44,7 +45,6 @@ export const start: () => void;
 export const verifyRecord: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const verifyStorageQuote: (a: any, b: number, c: number, d: number, e: number) => [number, number, number];
 export const webRtcDirectV2ServerCredential: (a: number, b: number) => [number, number, number, number];
-export const browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
 export const BrotliDecoderCreateInstance: (a: number, b: number, c: number) => number;
 export const BrotliDecoderDecompress: (a: number, b: number, c: number, d: number) => number;
 export const BrotliDecoderDecompressPrealloc: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => void;

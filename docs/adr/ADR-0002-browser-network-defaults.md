@@ -114,6 +114,15 @@ startup no longer creates and discards a standalone `BrowserNodeClient` probe.
 Closing during startup closes all pooled attempts immediately and releases the
 WASM allocation after its pending async call settles.
 
+Later calls retain healthy sessions, reauthenticate closed or evicted seeds, and
+may retry an exhausted transient bootstrap batch under Rust's concurrency and
+one-second backoff bounds. Concurrent callers share the retry, and closure
+cancels its backoff. The originally selected payment policy remains immutable.
+Capability or payment-identity rejection persists for that pool: both lanes
+validate seed HELLOs, both are revoked on rejection, and already-issued leases
+must recheck policy before subsequent requests. These checks belong in Rust;
+the SDK does not duplicate them with a separate probe or retry scheduler.
+
 The bundled production WASM exposes `BrowserNetworkClient` as its only networking
 client. Remove the old `BrowserNodeClient` and `BrowserNodeSession` exports;
 per-node transport test helpers remain behind the core's `test-utils` feature.

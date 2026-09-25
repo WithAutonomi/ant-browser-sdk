@@ -1,0 +1,47 @@
+{
+  "regressions-before.log.gz": {
+    "uncompressedSha256": "0235fde47255b08ced944a5572d61f5555d1eb1d2792356cbb236bb600503fd5"
+  },
+  "fixes-wasm-build.log.gz": {
+    "uncompressedSha256": "43c576da8ac5582f1acc170bca00ba1733df44abc4437aab8646d6ebe6d3856e"
+  },
+  "fixes-wasm-tests.log.gz": {
+    "uncompressedSha256": "d9f0559e4dc078b1daa513e32bf3b4ff3df1e2ba144b0892a673965bde38ec74"
+  },
+  "fixes-native-tests.log.gz": {
+    "uncompressedSha256": "d3418fb314c991673d0914649c88eac7d1baf059de8b533de55a23d459097467"
+  },
+  "fixes-shared-tests.log.gz": {
+    "uncompressedSha256": "24fe85c802a8c13d16b70d1e4ab607751052de2b5147fea3d2312ff642d5a5e9"
+  },
+  "fixes-test-clippy.log.gz": {
+    "uncompressedSha256": "6aba8b400bac9cc833211d450c57de39965549dbebde45dff622afbe5543c5f5"
+  },
+  "fixes-clippy.log.gz": {
+    "uncompressedSha256": "a1f10c6a868fe483f3238f73319447f4e286e9107d2c51e37169733c46649c13"
+  },
+  "fixes-sdk-sync.log.gz": {
+    "uncompressedSha256": "20633f791c59e8112af99b7f7c4ffdec4d6ed0f8b928d708cfb1a0598902e7e5"
+  },
+  "fixes-sdk-check.log.gz": {
+    "uncompressedSha256": "29f7bb822f3b569b6dcf77814cecf4ebcd0ac73ce9d38fecbccc766ea44371e1"
+  },
+  "fixes-sdk-examples.log.gz": {
+    "uncompressedSha256": "3712fee6c2f42a605ac21061be17895bcc2c505fe4341c62c457ba72240fdc6c"
+  },
+  "fixes-sdk-pack.log.gz": {
+    "uncompressedSha256": "fb5c15ca9e9a346241254221feea040aff0cc77279675cabf1a7af5bc0cc6311"
+  },
+  "fixes-sdk-adr.log.gz": {
+    "uncompressedSha256": "33a5a770b31525815ada5577561626a3de5b1833fd6faaff852356cdf2500a34"
+  },
+  "fixes-browser-check.log.gz": {
+    "uncompressedSha256": "7fccc4f3b56338e0693fe09c1971b862690cd3487645488362f1fcec6250cbf5"
+  },
+  "browser-check.mjs.gz": {
+    "uncompressedSha256": "a90c8e2efa3a5dffd059cf33c8155540d41402a8b5baec9d9c7bf2ef7b110e90"
+  },
+  "public-startup.jsonl.gz": {
+    "uncompressedSha256": "cfc534cc98c45aabcf3ed2a1bfc72e20334fc003411c873125be218ea9c80f52"
+  }
+}

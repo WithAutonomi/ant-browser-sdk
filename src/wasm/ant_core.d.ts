@@ -243,6 +243,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
     readonly __wbg_browserfilereader_free: (a: number, b: number) => void;
     readonly __wbg_browsernetworkclient_free: (a: number, b: number) => void;
     readonly browserfilereader_close: (a: number) => void;
@@ -286,7 +287,6 @@ export interface InitOutput {
     readonly verifyRecord: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly verifyStorageQuote: (a: any, b: number, c: number, d: number, e: number) => [number, number, number];
     readonly webRtcDirectV2ServerCredential: (a: number, b: number) => [number, number, number, number];
-    readonly browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
     readonly BrotliDecoderCreateInstance: (a: number, b: number, c: number) => number;
     readonly BrotliDecoderDecompress: (a: number, b: number, c: number, d: number) => number;
     readonly BrotliDecoderDecompressPrealloc: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => void;
