@@ -16,15 +16,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../src/internal/runtime.js", () => ({
   initializeClientWasm: async () => undefined,
   getBindings: () => ({
-    BrowserNodeClient: class {
-      async connect() { return this; }
-      async hello() {
+    BrowserNetworkClient: class {
+      async connect() {
         return { type: "hello", protocol: "autonomi.web.poc.v5", peer_id: "ab".repeat(32), endpoint: { multiaddr: "/mock" },
           max_chunk_size: 4194304, capabilities: ["chunk_protocol"], payment: mocks.network };
       }
-      close() {} free() {}
-    },
-    BrowserNetworkClient: class {
       uploadRecords = mocks.upload;
       reconcileFailedUploadPayment = mocks.reconcile;
       close() {} free() {}

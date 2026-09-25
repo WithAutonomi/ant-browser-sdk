@@ -106,26 +106,7 @@ export class AutonomiClient {
   static async connectNetwork(profile: NetworkProfile, options: Omit<ClientOptions, "expectedPaymentNetwork"> = {}): Promise<AutonomiClient> {
     throwIfAborted(options.signal);
     const trusted = snapshotNetworkProfile(profile);
-    await abortable(initializeClientWasm(options.wasm), options.signal);
-    // Validate the entire selected set before attempting any seed.
-    const endpoints = trusted.seeds.map(parseBootstrapMultiaddr);
-    let lastError: unknown;
-    for (const seed of trusted.seeds) {
-      throwIfAborted(options.signal);
-      try {
-        const client = await this.connect(seed, { ...options, expectedPaymentNetwork: trusted.payment });
-        try {
-          const { BrowserNetworkClient } = getBindings();
-          const network = new BrowserNetworkClient(endpoints);
-          client.#network.close(); client.#network.free(); client.#network = network;
-          return client;
-        } catch (error) { client.close(); throw error; }
-      } catch (error) {
-        if (isAbort(error, options.signal)) throw error;
-        lastError = error;
-      }
-    }
-    throw lastError ?? new AutonomiError("CONNECTION_FAILED", "No trusted seed was reachable");
+    return this.#connectSeeds(trusted.seeds, { ...options, expectedPaymentNetwork: trusted.payment });
   }
 
   /**
@@ -149,10 +130,15 @@ export class AutonomiClient {
         ? await getNetworkDefaults(settings) : snapshotNetworkProfile(network);
       return this.connectNetwork(profile, settings);
     }
+    return this.#connectSeeds([bootstrapMultiaddr], options);
+  }
+
+  static async #connectSeeds(seeds: readonly string[], options: ClientOptions): Promise<AutonomiClient> {
     const report = progressReporter("connect", operationId(), "initializing", (event) => {
       if (options.onProgress) safelyNotify(options.onProgress, event);
     }, options.signal, options.parentOperationId);
     let network: RawNetworkClient | undefined;
+    let connecting: Promise<unknown> | undefined;
     try {
       throwIfAborted(options.signal);
       // Copy policy before asynchronous setup or application callbacks can mutate it.
@@ -160,24 +146,16 @@ export class AutonomiClient {
         ? undefined : normalizeExpectedNetwork(options.expectedPaymentNetwork);
       report("Initializing the Autonomi browser core");
       const workerWasm = await abortable(initializeClientWasm(options.wasm), options.signal);
-      const { BrowserNodeClient, BrowserNetworkClient } = getBindings();
-      const endpoint = parseBootstrapMultiaddr(bootstrapMultiaddr);
-      report(`Authenticating bootstrap node from ${endpoint.multiaddr}`, { phase: "connecting" });
-
-      const probe = new BrowserNodeClient(endpoint);
-      let hello: CoreHelloInfo;
-      // Dispose a session even if connection completed after caller cancellation.
-      const connecting = probe.connect();
-      let session: Awaited<typeof connecting> | undefined;
-      try {
-        session = await abortable(connecting, options.signal);
-        hello = await abortable(session.hello(), options.signal) as CoreHelloInfo;
-      } finally {
-        if (session) { session.close(); session.free(); probe.free(); }
-        else void connecting.then(
-          late => { late.close(); late.free(); probe.free(); },
-          () => probe.free(),
-        );
+      const { BrowserNetworkClient } = getBindings();
+      // Validate the complete selected profile before any seed is dialed.
+      const endpoints = seeds.map(parseBootstrapMultiaddr);
+      network = new BrowserNetworkClient(endpoints);
+      report(`Authenticating ${endpoints.length} bootstrap node${endpoints.length === 1 ? "" : "s"}`, { phase: "connecting" });
+      connecting = network.connect(expected === undefined ? undefined : corePaymentNetwork(expected));
+      const hello = await abortable(connecting, options.signal) as CoreHelloInfo;
+      const endpoint = parseBootstrapMultiaddr(hello.endpoint.multiaddr);
+      if (!endpoints.some(candidate => candidate.multiaddr === endpoint.multiaddr)) {
+        throw new AutonomiError("CONNECTION_FAILED", "Authenticated bootstrap is outside the selected seed profile");
       }
       if (!hello.capabilities.includes("chunk_protocol")) {
         throw new AutonomiError("CONNECTION_FAILED", "Bootstrap node does not support the shared storage protocol; upgrade ant-node to a version advertising chunk_protocol");
@@ -193,9 +171,7 @@ export class AutonomiClient {
           expected.paymentVaultAddress !== paymentNetwork.paymentVaultAddress)) {
         throw new AutonomiError("NETWORK_MISMATCH", "Authenticated payment network does not match expectedPaymentNetwork");
       }
-      const endpoints = [endpoint];
       throwIfAborted(options.signal);
-      network = new BrowserNetworkClient(endpoints);
       const connection: ConnectionInfo = {
         bootstrapMultiaddr: endpoint.multiaddr,
         paymentNetwork,
@@ -208,8 +184,18 @@ export class AutonomiClient {
       report.finish();
       return client;
     } catch (error) {
-      if (network) closeNetwork(network);
-      const failure = isAbort(error, options.signal) ? error : wrapError("CONNECTION_FAILED", "Could not connect to Autonomi", error);
+      if (network) {
+        const failed = network;
+        // Close immediately to wake bootstrap waiters, but release the WASM
+        // handle only after its borrowed async call has settled.
+        failed.close();
+        if (connecting) void connecting.then(() => closeNetwork(failed), () => closeNetwork(failed));
+        else closeNetwork(failed);
+      }
+      const failure = isAbort(error, options.signal) ? error
+        : String(error).includes("NETWORK_MISMATCH:")
+          ? new AutonomiError("NETWORK_MISMATCH", "Authenticated payment network does not match expectedPaymentNetwork", error)
+          : wrapError("CONNECTION_FAILED", "Could not connect to Autonomi", error);
       report.finish({ status: isAbort(failure, options.signal) ? "cancelled" : "failed", error: failure });
       throw failure;
     }

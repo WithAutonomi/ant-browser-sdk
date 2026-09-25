@@ -106,7 +106,13 @@ profile is authoritative and must supply its own seeds and payment identity.
 Applications overriding mainnet seeds can copy `getNetworkDefaults()` into a
 custom profile, retaining its expected payment identity. Invalid or unreachable custom configuration never falls back to
 mainnet. Failover stays within the selected profile, supports cancellation,
-and cleans up unsuccessful sessions.
+and cleans up unsuccessful sessions. Bootstrap authentication runs inside the
+Rust network client's pool with at most four concurrent seed attempts. The first
+seed passing authentication, capability and expected-payment checks establishes
+the SDK connection; other attempts continue within the same pool. Normal SDK
+startup no longer creates and discards a standalone `BrowserNodeClient` probe.
+Closing during startup closes all pooled attempts immediately and releases the
+WASM allocation after its pending async call settles.
 
 Named connections verify the authenticated HELLO against the profile's payment
 identity before use; a mismatch keeps the existing `NETWORK_MISMATCH` behavior.

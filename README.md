@@ -80,8 +80,11 @@ const client = await AutonomiClient.connect({
 
 Profiles require at least one distinct, complete WebRTC Direct multiaddress.
 `connectNetwork(profile, options)` also remains available. The SDK validates all
-seeds before dialing, tries them in order, and checks the authenticated payment
-identity against the profile. A custom profile never falls back to mainnet.
+seeds before dialing, authenticates up to four concurrently, and checks the
+authenticated payment identity against the profile. The first usable seed
+establishes the connection; successful sessions remain in the network client's
+pool for discovery and transfers. Other seeds continue connecting within the
+same bound. A custom profile never falls back to mainnet.
 Existing `connect(multiaddr, options)` behavior is unchanged.
 
 `getNetworkDefaults({ wasm, signal })` supports a custom WASM source and

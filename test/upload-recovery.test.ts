@@ -13,12 +13,14 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../src/internal/runtime.js", () => ({
   initializeClientWasm: async () => undefined,
   getBindings: () => ({
-    BrowserNodeClient: class {
-      async connect() { return this; }
-      async hello() { return { type: "hello", protocol: "autonomi.web.poc.v5", peer_id: "ab".repeat(32), endpoint: { multiaddr: "/mock" }, max_chunk_size: 4194304, capabilities: ["chunk_protocol"], payment: mocks.network }; }
+    BrowserNetworkClient: class {
+      async connect() {
+        return { type: "hello", protocol: "autonomi.web.poc.v5", peer_id: "ab".repeat(32), endpoint: { multiaddr: "/mock" },
+          max_chunk_size: 4194304, capabilities: ["chunk_protocol"], payment: mocks.network };
+      }
+      uploadRecords = mocks.upload;
       close() {} free() {}
     },
-    BrowserNetworkClient: class { uploadRecords = mocks.upload; close() {} free() {} },
     parseWebRtcDirectMultiaddr: (multiaddr: string) => ({ multiaddr }),
   }),
 }));

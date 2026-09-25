@@ -1,6 +1,5 @@
 import initAntCore, {
   BrowserNetworkClient,
-  BrowserNodeClient,
   parseWebRtcDirectMultiaddr,
   decodeMerklePaymentReceipt,
   encryptPublicFile,
@@ -19,6 +18,7 @@ export interface RawFileReader {
 }
 
 export interface RawNetworkClient {
+  connect(expectedPayment?: unknown): Promise<unknown>;
   reconcileFailedUploadPayment(
     checkpoint: string,
     verifyFailure: (attempt: unknown, scope: string) => unknown,
@@ -59,21 +59,9 @@ export interface RawNetworkClient {
   free(): void;
 }
 
-export interface RawNodeClient {
-  connect(): Promise<RawNodeSession>;
-  free(): void;
-}
-
-export interface RawNodeSession {
-  hello(): Promise<unknown>;
-  close(): void;
-  free(): void;
-}
-
 export interface WasmBindings {
   mainnetNetworkDefaults(): unknown;
   BrowserNetworkClient: new (endpoints: unknown) => RawNetworkClient;
-  BrowserNodeClient: new (endpoint: unknown) => RawNodeClient;
   parseWebRtcDirectMultiaddr(value: unknown): { multiaddr: string };
   decodeMerklePaymentReceipt?(request: unknown, vault: string, logs: unknown): unknown;
   encryptPublicFile(content: Uint8Array): unknown;
@@ -152,7 +140,6 @@ function sameSource(left: LoadedSource, right: LoadedSource): boolean {
 export function getBindings(): WasmBindings {
   return {
     BrowserNetworkClient,
-    BrowserNodeClient,
     parseWebRtcDirectMultiaddr,
     decodeMerklePaymentReceipt,
     encryptPublicFile,

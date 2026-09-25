@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   failedSeeds: [] as string[],
   attemptedSeeds: [] as string[],
   defaultSeeds: [] as string[],
+  connectWait: undefined as Promise<void> | undefined,
   hello: {
     type: "hello",
     protocol: "autonomi.web.poc.v5",
@@ -45,20 +46,6 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock("../src/internal/runtime.js", () => {
-  class NodeClient {
-    constructor(private endpoint: { multiaddr: string }) {}
-    async connect() {
-      state.attemptedSeeds.push(this.endpoint.multiaddr);
-      if (state.failedSeeds.includes(this.endpoint.multiaddr)) throw new Error("Seed unavailable");
-      return this;
-    }
-    async hello(): Promise<unknown> {
-      return state.hello;
-    }
-    close(): void {}
-    free(): void {}
-  }
-
   class NetworkClient {
     endpoints: unknown;
     closed = false;
@@ -76,6 +63,21 @@ vi.mock("../src/internal/runtime.js", () => {
       state.networks.push(this);
     }
 
+    async connect(expected?: { chain_id: number; payment_token_address: string; payment_vault_address: string }): Promise<unknown> {
+      await state.connectWait;
+      let last: unknown = new Error("Seed unavailable");
+      for (const endpoint of this.endpoints as Array<{multiaddr: string}>) {
+        state.attemptedSeeds.push(endpoint.multiaddr);
+        if (state.failedSeeds.includes(endpoint.multiaddr)) continue;
+        if (!state.hello.capabilities.includes("chunk_protocol")) { last = new Error("Bootstrap node does not support chunk_protocol"); continue; }
+        if (expected && Object.entries(expected).some(([key, value]) => String(value).toLowerCase() !== String(state.hello.payment[key as keyof typeof state.hello.payment]).toLowerCase())) {
+          last = new Error("NETWORK_MISMATCH: Authenticated payment network does not match expectedPaymentNetwork"); continue;
+        }
+        return { ...state.hello, endpoint };
+      }
+      throw last;
+    }
+
     close(): void {
       this.closed = true;
     }
@@ -88,7 +90,6 @@ vi.mock("../src/internal/runtime.js", () => {
     initializeClientWasm: vi.fn(async (source?: unknown) => source),
     getBindings: () => ({
       mainnetNetworkDefaults: () => ({ id: "mainnet", seeds: state.defaultSeeds, payment: state.hello.payment, rpc_url: "https://rpc.example" }),
-      BrowserNodeClient: NodeClient,
       BrowserNetworkClient: NetworkClient,
       encryptPublicFile: state.encrypt,
       parseWebRtcDirectMultiaddr: (endpoint: unknown) => {
@@ -137,6 +138,7 @@ beforeEach(() => {
   state.failedSeeds.length = 0;
   state.attemptedSeeds.length = 0;
   state.defaultSeeds.length = 0;
+  state.connectWait = undefined;
   state.hello.capabilities = ["get_chunk", "put_chunk", "chunk_protocol"];
   vi.stubGlobal("fetch", vi.fn(async () => Response.json({ jsonrpc: "2.0", id: 1, result: "0x7a69" })));
 });
@@ -146,6 +148,21 @@ afterEach(() => {
 });
 
 describe("AutonomiClient", () => {
+  it("closes a cancelled bootstrap immediately and frees it after the async call settles", async () => {
+    let release!: () => void;
+    state.connectWait = new Promise<void>(resolve => { release = resolve; });
+    const controller = new AbortController();
+    const connecting = AutonomiClient.connect(endpoint, { signal: controller.signal });
+    const rejected = expect(connecting).rejects.toBe("stop");
+    await vi.waitFor(() => expect(state.networks).toHaveLength(1));
+    controller.abort("stop");
+    await rejected;
+    expect(state.networks[0]!.closed).toBe(true);
+    expect(state.networks[0]!.freed).toBe(false);
+    release();
+    await vi.waitFor(() => expect(state.networks[0]!.freed).toBe(true));
+  });
+
   it("reports missing mainnet WebRTC seeds without dialing or accessing payment RPC", async () => {
     await expect(AutonomiClient.connect()).rejects.toMatchObject({
       code: "CONNECTION_FAILED", message: expect.stringContaining("No WebRTC bootstrap seeds configured for mainnet"),
@@ -212,12 +229,13 @@ describe("AutonomiClient", () => {
     await expect(client.findClosest()).rejects.toBeInstanceOf(AutonomiError);
   });
 
-  it("rejects nodes missing the shared storage protocol before creating a network client", async () => {
+  it("closes the pooled client when bootstrap lacks the shared storage protocol", async () => {
     state.hello.capabilities = ["get_chunk", "put_chunk"];
     await expect(AutonomiClient.connect(endpoint)).rejects.toMatchObject({
       code: "CONNECTION_FAILED", message: expect.stringContaining("chunk_protocol"),
     });
-    expect(state.networks).toHaveLength(0);
+    expect(state.networks).toHaveLength(1);
+    expect(state.networks[0]!.closed && state.networks[0]!.freed).toBe(true);
   });
 
   it("rejects bootstrap URLs instead of treating them as manifests", async () => {
@@ -662,7 +680,8 @@ describe("connection snapshots", () => {
     state.hello.payment.chain_id = -1;
     try {
       await expect(AutonomiClient.connect(endpoint)).rejects.toMatchObject({ code: "CONNECTION_FAILED" });
-      expect(state.networks).toEqual([]);
+      expect(state.networks).toHaveLength(1);
+      expect(state.networks[0]!.closed && state.networks[0]!.freed).toBe(true);
       expect(fetch).not.toHaveBeenCalled();
     } finally { state.hello.payment.chain_id = previous; }
   });
@@ -913,7 +932,8 @@ it.each([
     paymentTokenAddress: state.hello.payment.payment_token_address,
     paymentVaultAddress: state.hello.payment.payment_vault_address, ...changed };
   await expect(AutonomiClient.connect(endpoint, { expectedPaymentNetwork })).rejects.toMatchObject({ code: "NETWORK_MISMATCH" });
-  expect(state.networks).toHaveLength(0);
+  expect(state.networks).toHaveLength(1);
+  expect(state.networks[0]!.closed && state.networks[0]!.freed).toBe(true);
   expect(fetch).not.toHaveBeenCalled();
 });
 
@@ -1134,7 +1154,8 @@ it("fails over between trusted seeds and retains the complete profile for lookup
     expect(state.attemptedSeeds).toEqual([endpoint, second]);
     expect(client.connection.bootstrapMultiaddr).toBe(second);
     expect(state.networks.at(-1)!.endpoints).toEqual(profile.seeds.map(multiaddr => ({ multiaddr })));
-    expect(state.networks[0]!.freed).toBe(true);
+    expect(state.networks).toHaveLength(1);
+    expect(state.networks[0]!.freed).toBe(false);
   } finally { client.close(); }
 });
 
@@ -1144,7 +1165,8 @@ it("rejects every seed with a payment identity outside the bundled profile", asy
     paymentVaultAddress: state.hello.payment.payment_vault_address,
   } })).rejects.toThrow(/does not match/);
   expect(state.attemptedSeeds).toHaveLength(2);
-  expect(state.networks).toHaveLength(0);
+  expect(state.networks).toHaveLength(1);
+  expect(state.networks[0]!.closed && state.networks[0]!.freed).toBe(true);
 });
 
 it("delegates failed payment reconciliation to Rust and awaits durable persistence", async () => {

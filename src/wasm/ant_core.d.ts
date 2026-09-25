@@ -96,6 +96,11 @@ export class BrowserNetworkClient {
      */
     close(): void;
     /**
+     * Authenticate the first usable configured seed in this client's own pool.
+     * Remaining seeds connect in the background within the bootstrap bound.
+     */
+    connect(expected_payment?: any | null): Promise<any>;
+    /**
      * Download and reconstruct a private file from the DataMap its uploader kept.
      */
     downloadPrivateFile(file: any, concurrency?: number | null, on_progress?: Function | null): Promise<any>;
@@ -301,6 +306,7 @@ export interface InitOutput {
     readonly browserfilereader_readRange: (a: number, b: number, c: number) => any;
     readonly browserfilereader_size: (a: number) => number;
     readonly browsernetworkclient_close: (a: number) => void;
+    readonly browsernetworkclient_connect: (a: number, b: number) => any;
     readonly browsernetworkclient_downloadPrivateFile: (a: number, b: any, c: number, d: number) => any;
     readonly browsernetworkclient_downloadPublicFile: (a: number, b: any, c: number, d: number) => any;
     readonly browsernetworkclient_findClosest: (a: number, b: number, c: number, d: number) => any;
@@ -319,6 +325,7 @@ export interface InitOutput {
     readonly browsernodesession_peerId: (a: number) => [number, number];
     readonly browsernodesession_putChunk: (a: number, b: number, c: number, d: number, e: number, f: any, g: number, h: number) => any;
     readonly browsernodesession_quoteChunk: (a: number, b: number, c: number, d: number) => any;
+    readonly browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
     readonly __wbg_browserfileencryptor_free: (a: number, b: number) => void;
     readonly __wbg_browseriterativelookup_free: (a: number, b: number) => void;
     readonly browserfileencryptor_finish: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
@@ -329,7 +336,6 @@ export interface InitOutput {
     readonly browseriterativelookup_queriedPeers: (a: number) => [number, number, number];
     readonly browseriterativelookup_results: (a: number) => [number, number, number];
     readonly browseriterativelookup_run: (a: number, b: any) => any;
-    readonly browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
     readonly contentAddress: (a: number, b: number) => [number, number];
     readonly decodeMerklePaymentReceipt: (a: any, b: number, c: number, d: any) => [number, number, number];
     readonly decodePublicDataMap: (a: number, b: number) => [number, number, number];
