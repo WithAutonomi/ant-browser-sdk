@@ -1,5 +1,5 @@
-import type { PaymentProvider } from "@withautonomi/browser-sdk";
-import { createEthersPaymentProvider } from "@withautonomi/browser-sdk/ethers";
+import type { PaymentProvider } from "@withautonomi/ant-browser-sdk";
+import { createEthersPaymentProvider } from "@withautonomi/ant-browser-sdk/ethers";
 import {
   BrowserProvider,
   type Eip1193Provider,

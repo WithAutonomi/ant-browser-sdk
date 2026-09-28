@@ -3,7 +3,7 @@ import { expectTypeOf, it } from "vitest";
 import type {
   AutonomiClient, PublicFileReader, NetworkConnectionOptions, NetworkDefaults, getNetworkDefaults,
   PrivateDownloadResult, PrivateFile, PrivateFileReference, PublicFile, UploadResult, DownloadResult,
-} from "@withautonomi/browser-sdk";
+} from "@withautonomi/ant-browser-sdk";
 
 it("types private uploads and reads by the DataMap their holder keeps", () => {
   const uploadPublic = (client: AutonomiClient, bytes: Uint8Array) => client.upload(bytes);
@@ -34,15 +34,15 @@ it("exposes readers through openFile without a public constructor or factory", (
   expectTypeOf<Awaited<ReturnType<AutonomiClient["openFile"]>>>().toEqualTypeOf<PublicFileReader>();
   expectTypeOf<typeof PublicFileReader>().not.toMatchTypeOf<new (...args: never[]) => unknown>();
   expectTypeOf<keyof typeof PublicFileReader>().toEqualTypeOf<"prototype">();
-  expectTypeOf<"createPublicFileReader">().not.toMatchTypeOf<keyof typeof import("@withautonomi/browser-sdk")>();
+  expectTypeOf<"createPublicFileReader">().not.toMatchTypeOf<keyof typeof import("@withautonomi/ant-browser-sdk")>();
 });
 
 it("exports camelCase metadata across the published API", () => {
-  type PublicFile = import("@withautonomi/browser-sdk").PublicFile;
-  type PaymentNetwork = import("@withautonomi/browser-sdk").PaymentNetwork;
-  type HelloInfo = import("@withautonomi/browser-sdk").HelloInfo;
-  type NetworkNode = import("@withautonomi/browser-sdk").NetworkNode;
-  type ChunkInfo = import("@withautonomi/browser-sdk").ChunkInfo;
+  type PublicFile = import("@withautonomi/ant-browser-sdk").PublicFile;
+  type PaymentNetwork = import("@withautonomi/ant-browser-sdk").PaymentNetwork;
+  type HelloInfo = import("@withautonomi/ant-browser-sdk").HelloInfo;
+  type NetworkNode = import("@withautonomi/ant-browser-sdk").NetworkNode;
+  type ChunkInfo = import("@withautonomi/ant-browser-sdk").ChunkInfo;
   expectTypeOf<Extract<keyof PublicFile | keyof PaymentNetwork | keyof HelloInfo | keyof NetworkNode | keyof ChunkInfo, `${string}_${string}`>>().toBeNever();
   expectTypeOf<PublicFile["contentType"]>().toBeString();
   expectTypeOf<PaymentNetwork["paymentTokenAddress"]>().toBeString();

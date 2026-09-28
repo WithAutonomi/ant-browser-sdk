@@ -2,7 +2,7 @@
 
 ## Project overview
 
-`@withautonomi/browser-sdk` is an ESM TypeScript SDK for direct browser access to
+`@withautonomi/ant-browser-sdk` is an ESM TypeScript SDK for direct browser access to
 Autonomi nodes over WebRTC. It bundles the shared Rust `ant-core` WASM artifact.
 
 - `src/`: public client, types, wallet adapters, and browser lifecycle code.

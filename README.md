@@ -29,7 +29,7 @@ with them directly.
 Install the core package:
 
 ```bash
-npm install @withautonomi/browser-sdk
+npm install @withautonomi/ant-browser-sdk
 ```
 
 Install only the wallet integration your application uses:
@@ -50,7 +50,7 @@ The package is ESM-only. Installing or building it with npm requires Node.js
 The SDK reads mainnet configuration from the bundled Rust core:
 
 ```ts
-import { AutonomiClient, getNetworkDefaults } from "@withautonomi/browser-sdk";
+import { AutonomiClient, getNetworkDefaults } from "@withautonomi/ant-browser-sdk";
 
 const defaults = await getNetworkDefaults();
 // defaults: { id, seeds, payment, rpcUrl }
@@ -117,7 +117,7 @@ Connect with one complete WebRTC Direct multiaddress, then download a public fil
 by its DataMap address:
 
 ```ts
-import { AutonomiClient } from "@withautonomi/browser-sdk";
+import { AutonomiClient } from "@withautonomi/ant-browser-sdk";
 
 const bootstrapMultiaddr =
   "/ip4/203.0.113.10/udp/24000/webrtc-direct/certhash/.../p2p/...";
@@ -301,7 +301,7 @@ files as the same MessagePack bytes. Upload recoveries report their
 retry the retained input with `resumeUpload()`:
 
 ```ts
-import { UploadError } from "@withautonomi/browser-sdk";
+import { UploadError } from "@withautonomi/ant-browser-sdk";
 
 try {
   await client.upload(file);
@@ -397,7 +397,7 @@ import {
   BrowserProvider,
   type Eip1193Provider,
 } from "ethers";
-import { createEthersPaymentProvider } from "@withautonomi/browser-sdk/ethers";
+import { createEthersPaymentProvider } from "@withautonomi/ant-browser-sdk/ethers";
 
 const injected = (window as Window & { ethereum?: Eip1193Provider }).ethereum;
 if (!injected) throw new Error("No injected EVM wallet is available");
@@ -443,7 +443,7 @@ wallet's signer already has a provider and needs no `rpcUrl` option.
 Use the active connector from an existing Wagmi configuration:
 
 ```ts
-import { createWagmiPaymentProvider } from "@withautonomi/browser-sdk/wagmi";
+import { createWagmiPaymentProvider } from "@withautonomi/ant-browser-sdk/wagmi";
 import { config } from "./wagmi-config";
 
 const payment = createWagmiPaymentProvider({
@@ -469,7 +469,7 @@ Custom providers must verify that the wallet submits on `network.chainId`.
 This single-node example uses `paymentMode: "single"` when uploading.
 
 ```ts
-import { createPaymentSubmission, type PaymentProvider } from "@withautonomi/browser-sdk";
+import { createPaymentSubmission, type PaymentProvider } from "@withautonomi/ant-browser-sdk";
 
 const payment: PaymentProvider = {
   async pay(network, verifiedQuotes, context) {
@@ -533,7 +533,7 @@ Wrap a wallet provider with `createManualPaymentProvider()` when the user must
 review the verified storage price before paying:
 
 ```ts
-import { createManualPaymentProvider } from "@withautonomi/browser-sdk";
+import { createManualPaymentProvider } from "@withautonomi/ant-browser-sdk";
 
 const payment = createManualPaymentProvider({
   onRequest(request) {
@@ -663,7 +663,7 @@ Copy it to the application's public root so it is served as
 `/autonomi-stream-sw.js`:
 
 ```bash
-cp node_modules/@withautonomi/browser-sdk/dist/autonomi-stream-sw.js public/
+cp node_modules/@withautonomi/ant-browser-sdk/dist/autonomi-stream-sw.js public/
 ```
 
 Then create a media source:
@@ -730,7 +730,7 @@ Network and client operation failures use `AutonomiError` with a stable `code`
 and the original `cause`:
 
 ```ts
-import { AutonomiError } from "@withautonomi/browser-sdk";
+import { AutonomiError } from "@withautonomi/ant-browser-sdk";
 
 try {
   await client.download(address);
@@ -814,7 +814,7 @@ explicit resume or discard; closing the client does not discard them.
 Use `SDK_LIMITS` to configure file pickers, ranges, and concurrency controls:
 
 ```ts
-import { SDK_LIMITS, getBrowserCapabilities } from "@withautonomi/browser-sdk";
+import { SDK_LIMITS, getBrowserCapabilities } from "@withautonomi/ant-browser-sdk";
 
 const capabilities = getBrowserCapabilities();
 uploadButton.disabled = !capabilities.operations.uploadBlob.available;
@@ -894,9 +894,9 @@ and traffic policy remain deployment responsibilities.
 | `client.onProgress()` | Subscribe to progress and receive an unsubscribe function |
 | `client.close()` | Release client-owned network and media resources |
 
-Public types are exported from `@withautonomi/browser-sdk`. Adapter-specific
-factories and option types are exported from `@withautonomi/browser-sdk/ethers` and
-`@withautonomi/browser-sdk/wagmi`.
+Public types are exported from `@withautonomi/ant-browser-sdk`. Adapter-specific
+factories and option types are exported from `@withautonomi/ant-browser-sdk/ethers` and
+`@withautonomi/ant-browser-sdk/wagmi`.
 
 ## Run the examples
 
@@ -953,7 +953,7 @@ recorded hash and is a clean build of a commit on `ant-client` main.
 ### Releasing to npm
 
 The [release workflow](.github/workflows/release.yml) publishes
-`@withautonomi/browser-sdk` when a `v<version>` tag is pushed:
+`@withautonomi/ant-browser-sdk` when a `v<version>` tag is pushed:
 
 1. Merge a change that sets `version` in `package.json` (for example with
    `npm version 0.2.0 --no-git-tag-version`).

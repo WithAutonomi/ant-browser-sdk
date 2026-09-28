@@ -1,5 +1,5 @@
-import { AutonomiClient } from "@withautonomi/browser-sdk";
-import { createWagmiPaymentProvider } from "@withautonomi/browser-sdk/wagmi";
+import { AutonomiClient } from "@withautonomi/ant-browser-sdk";
+import { createWagmiPaymentProvider } from "@withautonomi/ant-browser-sdk/wagmi";
 import {
   connect,
   createConfig,

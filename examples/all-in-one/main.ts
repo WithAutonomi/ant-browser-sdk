@@ -1,7 +1,7 @@
 import {
   AutonomiClient, type ClientOptions, type MediaSource, type PrivateFileReference, type UploadOptions,
-} from "@withautonomi/browser-sdk";
-import { createEthersPaymentProvider } from "@withautonomi/browser-sdk/ethers";
+} from "@withautonomi/ant-browser-sdk";
+import { createEthersPaymentProvider } from "@withautonomi/ant-browser-sdk/ethers";
 import "../shared/style.css";
 
 const bootstrap = element<HTMLInputElement>("bootstrap");

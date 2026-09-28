@@ -1,5 +1,5 @@
-import { AutonomiClient } from "@withautonomi/browser-sdk";
-import { createEthersPaymentProvider } from "@withautonomi/browser-sdk/ethers";
+import { AutonomiClient } from "@withautonomi/ant-browser-sdk";
+import { createEthersPaymentProvider } from "@withautonomi/ant-browser-sdk/ethers";
 import "../shared/style.css";
 import { createLogger, element } from "../shared/ui.js";
 
