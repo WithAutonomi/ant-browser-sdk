@@ -6,3 +6,4 @@ dist-examples/
 *.log
 .idea/
 coverage/
+.cache/

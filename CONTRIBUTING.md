@@ -6,14 +6,19 @@ Use Node.js 20.19 or newer and run `npm run check` before submitting a change.
 Public APIs must remain typed, browser capabilities must be feature-detected, and
 untrusted protocol data must continue to be validated by the shared Rust/WASM core.
 
-When changing the Rust boundary, refresh the checked-in artifact with
-`ANT_CLIENT_DIR=/path/to/ant-client-web-support npm run sync:wasm` (the sibling
-web-support worktree is the default), update the TypeScript types,
-and test both the SDK and the real-browser demo against a browser-enabled devnet.
+When changing the Rust boundary, develop against a local `ant-client` checkout
+with `ANT_CLIENT_DIR=/path/to/ant-client npm run sync:wasm`, update the TypeScript
+types, and test both the SDK and the real-browser demo against a browser-enabled
+devnet. Once the Rust change is on `ant-client` main, run `npm run sync:wasm`
+to rebuild from a clean checkout of main; releases ship only such a build.
 
 Commit the generated `src/wasm` bindings, binary, and `source.json` together.
 The provenance file records the source revision and binary checksum. Run
-`npm run build:examples` and `npm pack --dry-run` to check the shipped assets.
+`npm run build:examples` and `npm pack --dry-run` to check the shipped assets, and
+`npm run verify:wasm` to check the WASM release requirements.
+
+Maintainers release by pushing a `v<version>` tag on main; see "Releasing to npm"
+in the [README](README.md#releasing-to-npm).
 
 ## Architecture decisions
 

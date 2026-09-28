@@ -49,15 +49,16 @@ the build recreates `dist/`. Do not hand-edit generated `dist/` output.
 
 ## Rust/WASM boundary
 
-Rebuild from the shared client checkout with
-`ANT_CLIENT_DIR=/path/to/ant-client-web-support npm run sync:wasm`; the sibling
-`../ant-client-web-support` worktree is the default. Follow that checkout's own
-instructions when editing Rust.
+`npm run sync:wasm` rebuilds the WASM from a clean checkout of `ant-client` main;
+set `ANT_CLIENT_REF` for another ref. To develop the Rust boundary, build a local
+checkout as-is with `ANT_CLIENT_DIR=/path/to/ant-client npm run sync:wasm`, and
+follow that checkout's own instructions when editing Rust.
 
 Commit the generated bindings, binary, and `src/wasm/source.json` together. Record
-the exact source revision and checksums; use a clean source checkout for release
-artifacts. Do not manually patch generated bindings or infer native/browser parity
-from helper tests alone.
+the exact source revision and checksums. Releases ship only a clean build of a
+commit on `ant-client` main; `npm run verify:wasm` checks this and the release
+workflow enforces it. Do not manually patch generated bindings or infer
+native/browser parity from helper tests alone.
 
 For Rust boundary changes, run the SDK checks and the real-browser demo against a
 compatible browser-enabled devnet. Record exact SDK, WASM, and node revisions,

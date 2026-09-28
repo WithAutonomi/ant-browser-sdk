@@ -1,0 +1,211 @@
+name: Release
+
+# Pushing a `v<package.json version>` tag on main publishes that version to npm.
+# Running the workflow manually performs every release check and packs the tarball
+# without publishing it.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Verify and pack
+    runs-on: ubuntu-latest
+    outputs:
+      name: ${{ steps.meta.outputs.name }}
+      version: ${{ steps.meta.outputs.version }}
+      dist_tag: ${{ steps.meta.outputs.dist_tag }}
+      tarball: ${{ steps.pack.outputs.tarball }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Determine version and dist-tag
+        id: meta
+        shell: bash
+        run: |
+          name="$(node -p 'require("./package.json").name')"
+          version="$(node -p 'require("./package.json").version')"
+
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            if [ "$GITHUB_REF_NAME" != "v${version}" ]; then
+              echo "::error title=Tag does not match package.json::Tag ${GITHUB_REF_NAME} does not match package.json version ${version}. Tag the release as v${version}."
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+              echo "::error title=Tag is not on main::${GITHUB_REF_NAME} points at ${GITHUB_SHA}, which is not on main."
+              exit 1
+            fi
+          fi
+
+          # Same dist-tag policy as @withautonomi/ant: the first dot-separated pre-release
+          # identifier decides, and an unrecognised one fails rather than moving `latest`.
+          pre=""
+          if [ "$version" != "${version%%-*}" ]; then
+            pre="${version#*-}"
+          fi
+          if [ -z "$pre" ]; then
+            dist_tag="latest"
+          else
+            case "${pre%%.*}" in
+              beta) dist_tag="beta" ;;
+              rc) dist_tag="rc" ;;
+              *)
+                echo "::error title=Unrecognised pre-release::Version ${version} has pre-release identifier '${pre%%.*}', which maps to no npm dist-tag."
+                exit 1
+                ;;
+            esac
+          fi
+
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "dist_tag=${dist_tag}" >> "$GITHUB_OUTPUT"
+          echo "Releasing ${name}@${version} to dist-tag ${dist_tag}"
+
+      - run: npm ci
+
+      # The published WASM must be a clean build of a commit on ant-client main.
+      - name: Verify WASM provenance
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: npm run verify:wasm
+
+      - run: npm run check
+      - run: npm run build:examples
+
+      - name: Pack
+        id: pack
+        shell: bash
+        run: |
+          npm pack --pack-destination "$RUNNER_TEMP/package"
+          tarball="$(basename "$RUNNER_TEMP"/package/*.tgz)"
+          echo "tarball=${tarball}" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Package"
+            echo
+            echo "\`${tarball}\`, SHA-256 \`$(sha256sum "$RUNNER_TEMP/package/${tarball}" | cut -d' ' -f1)\`"
+            echo
+            echo "WASM: ant-client \`$(node -p 'require("./src/wasm/source.json").revision')\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: ${{ runner.temp }}/package/${{ steps.pack.outputs.tarball }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish to npm
+    needs: package
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      # Create the GitHub release.
+      contents: write
+      # npm provenance and trusted publishing exchange this token with the registry.
+      id-token: write
+    env:
+      NAME: ${{ needs.package.outputs.name }}
+      VERSION: ${{ needs.package.outputs.version }}
+      DIST_TAG: ${{ needs.package.outputs.dist_tag }}
+      TARBALL_NAME: ${{ needs.package.outputs.tarball }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+          path: ${{ runner.temp }}/package
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm 11.5.1 or newer; Node 22 bundles npm 10.
+      - run: npm install --global npm@11
+
+      # Publishes the tarball tested by the package job. Authenticates through an npm
+      # trusted publisher for this workflow, or through the NPM_TOKEN secret.
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # A re-run after a successful publish must not fail on the existing version.
+          if npm view "${NAME}@${VERSION}" version >/dev/null 2>&1; then
+            echo "::notice title=Already published::${NAME}@${VERSION} is already in the registry; skipping."
+            exit 0
+          fi
+
+          # npm sets `latest` on a package's first publish whatever --tag says, so a
+          # pre-release must not be the first version published.
+          if [ "$DIST_TAG" != "latest" ]; then
+            status="$(curl -sS -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/${NAME/\//%2F}")"
+            case "$status" in
+              200) ;;
+              404)
+                echo "::error title=Pre-release before first stable release::${NAME} has never been published. npm would make ${VERSION} the 'latest' version. Publish a stable version first."
+                exit 1
+                ;;
+              *)
+                echo "::error title=Registry check failed::Unexpected HTTP ${status} from the npm registry while checking whether ${NAME} exists."
+                exit 1
+                ;;
+            esac
+          fi
+
+          npm publish "$RUNNER_TEMP/package/$TARBALL_NAME" --access public --provenance --tag "$DIST_TAG"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::notice title=Release exists::GitHub release ${GITHUB_REF_NAME} already exists; skipping."
+            exit 0
+          fi
+          prerelease=()
+          if [ "$DIST_TAG" != "latest" ]; then
+            prerelease=(--prerelease)
+          fi
+          gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/package/$TARBALL_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --generate-notes \
+            "${prerelease[@]}"
+
+      - name: Summary
+        shell: bash
+        run: |
+          {
+            echo "### npm"
+            echo
+            echo "Published \`${NAME}@${VERSION}\` to dist-tag \`${DIST_TAG}\`."
+            echo
+            echo '```sh'
+            if [ "$DIST_TAG" = "latest" ]; then
+              echo "npm install ${NAME}"
+            else
+              echo "npm install ${NAME}@${DIST_TAG}"
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

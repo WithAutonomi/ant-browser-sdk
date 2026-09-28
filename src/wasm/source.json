@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/WithAutonomi/ant-client",
-  "revision": "487f63f2b1d3e0b80e34d617eb5f8d7a1e3f6b57",
+  "revision": "a04b9fc7c4df8db52170b9db73ed18b0a2c6a825",
   "dirty": false,
   "target": "wasm32-unknown-unknown",
   "features": [

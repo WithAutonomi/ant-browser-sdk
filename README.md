@@ -101,9 +101,9 @@ WASM exposes only `webrtc`. To activate browser defaults:
 
 1. Add verified full `/ip4|ip6/.../udp/.../webrtc-direct/certhash/.../p2p/...`
    addresses to `webrtc`. Keep `quic` addresses in their own array.
-2. Commit the shared source and run
-   `ANT_CLIENT_DIR=/path/to/ant-client-web-support npm run sync:wasm` from a clean
-   checkout. Commit all generated WASM files and provenance together.
+2. Merge the shared source to `ant-client` main and run `npm run sync:wasm`, which
+   builds a clean checkout of main. Commit all generated WASM files and provenance
+   together.
 3. Run the SDK checks, example builds, package checks, and a compatible browser
    devnet test. Validate the real mainnet seeds before publishing the SDK.
 
@@ -926,20 +926,51 @@ file, and reads either a public address or a loaded `.datamap` file.
 ## Maintainer workflow
 
 The checked-in WASM artifact keeps npm installs independent of a Rust toolchain.
-To rebuild it from an `ant-client` checkout:
+It is the `ant-core` crate built with `--no-default-features --features browser-wasm`.
+To rebuild it from the latest `ant-client` main:
 
 ```bash
 rustup target add wasm32-unknown-unknown
 cargo install wasm-pack --version 0.15.0 --locked
-ANT_CLIENT_DIR=../ant-client-web-support npm run sync:wasm
+npm run sync:wasm
 npm run check
 npm pack --dry-run
 ```
 
-`ANT_CLIENT_DIR` defaults to the sibling `../ant-client-web-support` worktree, so the
-variable can be omitted for that layout. WASM protocol changes and matching SDK
-types must ship in the same SDK release. `src/wasm/source.json` records the
-source commit, build features, lockfile hash, and binary hash; it ships in `dist/wasm`.
+`npm run sync:wasm` fetches a clean checkout of
+[`ant-client`](https://github.com/WithAutonomi/ant-client) main into a temporary
+directory and builds it with the committed `Cargo.lock`. Set `ANT_CLIENT_REF` to
+build another branch, tag, or full commit SHA. Compiled dependencies are cached
+in `.cache/ant-core-wasm` (or `CARGO_TARGET_DIR`). To develop the Rust boundary,
+build a local checkout as-is with `ANT_CLIENT_DIR=../ant-client npm run sync:wasm`.
+
+WASM protocol changes and matching SDK types must ship in the same SDK release.
+`src/wasm/source.json` records the source commit, whether the checkout was dirty,
+build features, lockfile hash, and binary hash; it ships in `dist/wasm`.
+`npm run verify:wasm` checks the release requirements: the binary matches its
+recorded hash and is a clean build of a commit on `ant-client` main.
+
+### Releasing to npm
+
+The [release workflow](.github/workflows/release.yml) publishes
+`@withautonomi/browser-sdk` when a `v<version>` tag is pushed:
+
+1. Merge a change that sets `version` in `package.json` (for example with
+   `npm version 0.2.0 --no-git-tag-version`).
+2. Tag that commit on main and push the tag:
+   `git tag v0.2.0 && git push origin v0.2.0`.
+
+The workflow requires the tag to match `package.json` and to be on main, verifies
+the WASM provenance, runs `npm run check`, builds the examples, and packs the
+tarball. It publishes that tarball with npm provenance and attaches it to a GitHub
+release. Stable versions go to the `latest` dist-tag; `-beta.N` and `-rc.N`
+versions go to `beta` and `rc`, and cannot be the package's first publish.
+Re-running a release skips steps that already completed. Run the workflow
+manually to perform every check without publishing.
+
+The publish job runs in the `npm` GitHub environment. It authenticates through an
+npm trusted publisher for `release.yml`, or through an `NPM_TOKEN` repository or
+organization secret.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution requirements.
 Shared agent instructions are in [AGENTS.md](AGENTS.md); architecture decisions

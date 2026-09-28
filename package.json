@@ -6,11 +6,11 @@
   "license": "MIT OR Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/WithAutonomi/ant-client-browser-sdk.git"
+    "url": "git+https://github.com/WithAutonomi/ant-browser-sdk.git"
   },
-  "homepage": "https://github.com/WithAutonomi/ant-client-browser-sdk#readme",
+  "homepage": "https://github.com/WithAutonomi/ant-browser-sdk#readme",
   "bugs": {
-    "url": "https://github.com/WithAutonomi/ant-client-browser-sdk/issues"
+    "url": "https://github.com/WithAutonomi/ant-browser-sdk/issues"
   },
   "keywords": [
     "autonomi",
@@ -70,6 +70,7 @@
     "build:examples": "node ./scripts/build-examples.mjs",
     "build:example": "npm run build:examples",
     "sync:wasm": "node ./scripts/sync-wasm.mjs",
+    "verify:wasm": "node ./scripts/verify-wasm.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
