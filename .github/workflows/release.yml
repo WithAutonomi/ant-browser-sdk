@@ -91,6 +91,7 @@ jobs:
         id: pack
         shell: bash
         run: |
+          mkdir -p "$RUNNER_TEMP/package"
           npm pack --pack-destination "$RUNNER_TEMP/package"
           tarball="$(basename "$RUNNER_TEMP"/package/*.tgz)"
           echo "tarball=${tarball}" >> "$GITHUB_OUTPUT"
