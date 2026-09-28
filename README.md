@@ -681,6 +681,14 @@ page-owned authenticated reader; it does not connect to Autonomi nodes itself.
 The page and client must therefore remain open while the media URL is in use.
 Multiple clients can serve independent media sources on the same page.
 
+A media source's reader streams: from wherever playback starts or seeks to, the
+shared core fetches up to four records of the next 32 MiB in parallel. Playback
+therefore does not wait for each record's discovery. It also fetches the file's
+last record when playback starts, because MP4 and WebM usually keep their index
+there. It keeps at most about 24 of the file's records cached, releasing those
+behind playback. Readers from `openFile()` read ahead only after reads that
+start the file or continue a previous read.
+
 If the application already has a root-scoped service worker, merge the
 `autonomi-file-range` fetch and message-handling logic from the packaged worker
 into it and pass that worker's URL:

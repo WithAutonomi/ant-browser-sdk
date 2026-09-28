@@ -679,9 +679,18 @@ export class AutonomiClient {
   }
 
   /** Open a bounded random-access reader without reconstructing the whole file. */
-  async openFile(
+  openFile(
     file: string | PublicFile | PrivateFileReference,
     options: OperationOptions = {},
+  ): Promise<PublicFileReader> {
+    return this.#openReader(file, options, false);
+  }
+
+  /** A streaming reader treats every read as sequential and fetches ahead of it. */
+  async #openReader(
+    file: string | PublicFile | PrivateFileReference,
+    options: OperationOptions,
+    streaming: boolean,
   ): Promise<PublicFileReader> {
     const operation = this.#startOperation(options);
     const report = this.#reporter("open-file", options.onProgress, operation);
@@ -691,8 +700,8 @@ export class AutonomiClient {
       throwIfAborted(operation.signal);
       raw = await abortable(
         isPrivateFile(file)
-          ? this.#network.openPrivateFile(corePrivateFile(file), report)
-          : this.#network.openPublicFile(typeof file === "string" ? file : coreFileReference(file), report),
+          ? this.#network.openPrivateFile(corePrivateFile(file), report, streaming)
+          : this.#network.openPublicFile(typeof file === "string" ? file : coreFileReference(file), report, streaming),
         operation.signal,
         undefined,
         closeReader,
@@ -730,11 +739,12 @@ export class AutonomiClient {
     try {
       this.#assertOpen();
       report("Opening an Autonomi random-access media reader");
-      reader = await this.openFile(file, {
+      // Playback reads sequentially from wherever it starts or seeks to.
+      reader = await this.#openReader(file, {
         ...(options.onProgress ? { onProgress: options.onProgress } : {}),
         parentOperationId: operation.id,
         signal: operation.signal,
-      });
+      }, true);
       this.#media ??= new MediaBridge();
       source = await this.#media.attach(reader, {
         ...options,
