@@ -30,9 +30,11 @@ export interface RawNetworkClient {
     concurrency: number | undefined,
     onProgress?: (message: string) => void,
   ): Promise<unknown>;
+  /** A `streaming` reader treats every read as sequential and fetches ahead of it. */
   openPublicFile(
     file: unknown,
     onProgress?: (message: string) => void,
+    streaming?: boolean,
   ): Promise<RawFileReader>;
   downloadPrivateFile(
     file: unknown,
@@ -42,6 +44,7 @@ export interface RawNetworkClient {
   openPrivateFile(
     file: unknown,
     onProgress?: (message: string) => void,
+    streaming?: boolean,
   ): Promise<RawFileReader>;
   /** Quote, pay for, and store one batch; `loadRecord` receives the batch-local index. */
   uploadRecords(
