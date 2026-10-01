@@ -1,0 +1,62 @@
+{
+  "devnet-ab-large-upload.mjs.gz": {
+    "uncompressedSha256": "579d4a26fe6f862ebe8acfa4ab78384d1c8e82edfaa53e4f9b3acba60221eb8f"
+  },
+  "devnet-ab1.log.gz": {
+    "uncompressedSha256": "ddfbdb1cdd1ee47897b0164d8162d17d8e499c0ffe3e02cb4a2a7b3a7050269f"
+  },
+  "devnet-ab2warm.log.gz": {
+    "uncompressedSha256": "603f810924323955bf6b418b1878b86e683e9faffb53014c206ac844c5b9bbb5"
+  },
+  "devnet-ab3warm5s.log.gz": {
+    "uncompressedSha256": "0b4c6971ecd5b0f94ccfc799e0c40b9a4bcaca912c69f13aefd5293857346556"
+  },
+  "devnet-ant-node-build.log.gz": {
+    "uncompressedSha256": "6b22f9a5c00bff76113d2a86c243e7ff80ae063d1fa361b44132217296784534"
+  },
+  "devnet-browser-check.mjs.gz": {
+    "uncompressedSha256": "3ca2a7429a339d4b48a8dd59fa7e56ef330a793748df7d5782f498e1d98f6491"
+  },
+  "devnet-browser-check.run2-large-upload-insufficient-peers.log.gz": {
+    "uncompressedSha256": "45f9318ff5a4aef44927d33fffdf17000ac6965c89ac5e940ae7a01921efec50"
+  },
+  "devnet-browser-check.run3-passed.log.gz": {
+    "uncompressedSha256": "55719bc0b477d7e979a7ee0bcec108270e90c2abc6d1d520da9219268cbd1e9b"
+  },
+  "devnet-commands.txt.gz": {
+    "uncompressedSha256": "2454abdfc64ad6b4a070196442903e78cf866ad73cda41c6ab4f646ac7c2a928"
+  },
+  "devnet-revisions.txt.gz": {
+    "uncompressedSha256": "20b3cd034c6c466a90fabb2d0147ed218287193e3f04d417ebc256d97a929700"
+  },
+  "devnet-summary.run3.json.gz": {
+    "uncompressedSha256": "200b6c8f62b9f78ca86b539d9c870f0b05783ae6f02d915908b066843dbee86b"
+  },
+  "mainnet-media-baseline.jsonl.gz": {
+    "uncompressedSha256": "b27790247a35e1c8c878108c8e244451c8cece6b672bf00c268254729bbe94a8"
+  },
+  "mainnet-media-candidate.jsonl.gz": {
+    "uncompressedSha256": "d0eb490668b08ea9eaea6c7783232676229cfe74aa3a87edf70bc7212d5a97b1"
+  },
+  "mainnet-media-probe.mjs.gz": {
+    "uncompressedSha256": "50a0c58e1862074743141f24ecd364f5c1a2367a1d08b4f29bd43cf7d712b255"
+  },
+  "mainnet-startup.jsonl.gz": {
+    "uncompressedSha256": "c8abd4647ef6ca41a6f46ebe8e28fa6e25139565244d52afd1460d1b4b9a9531"
+  },
+  "sdk-adr.log.gz": {
+    "uncompressedSha256": "33a5a770b31525815ada5577561626a3de5b1833fd6faaff852356cdf2500a34"
+  },
+  "sdk-check.log.gz": {
+    "uncompressedSha256": "7b99838f9408501622df1687630bbcb90f00a1e1c3c76f54a1d03cb11c173b77"
+  },
+  "sdk-examples.log.gz": {
+    "uncompressedSha256": "e2cd663d71343d09074af47fad9f7381012926f17e0196ad28b523010b5332f8"
+  },
+  "sdk-pack.log.gz": {
+    "uncompressedSha256": "7c4ecd36d7e3f4d0256855757072b5cb679a84ad90debfeff19ad88979fb20fa"
+  },
+  "sdk-verify-wasm.log.gz": {
+    "uncompressedSha256": "428e81fbf6311ccf89714ce6fe742a2c48a5ece165d05968ebb0cc6a04fbde3f"
+  }
+}
