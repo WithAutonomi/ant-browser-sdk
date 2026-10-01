@@ -686,8 +686,8 @@ shared core fetches up to four records of the next 32 MiB in parallel. Playback
 therefore does not wait for each record's discovery. It also fetches the file's
 last record when playback starts, because MP4 and WebM usually keep their index
 there. It keeps at most about 24 of the file's records cached, releasing those
-behind playback. Readers from `openFile()` read ahead only after reads that
-start the file or continue a previous read.
+behind playback. Readers from `openFile()` read ahead only once a read
+continues a previous read, so a single header read does not fetch the window.
 
 If the application already has a root-scoped service worker, merge the
 `autonomi-file-range` fetch and message-handling logic from the packaged worker
