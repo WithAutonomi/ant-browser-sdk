@@ -17,6 +17,12 @@ export interface RawFileReader {
   free(): void;
 }
 
+/** The core's `BrowserFileReaderOptions`; omitted fields take the core's defaults. */
+export interface RawFileReaderOptions {
+  /** Treat every read as sequential and fetch ahead of it, as media playback needs. */
+  streaming?: boolean;
+}
+
 export interface RawNetworkClient {
   connect(expectedPayment?: unknown): Promise<unknown>;
   reconcileFailedUploadPayment(
@@ -30,11 +36,10 @@ export interface RawNetworkClient {
     concurrency: number | undefined,
     onProgress?: (message: string) => void,
   ): Promise<unknown>;
-  /** A `streaming` reader treats every read as sequential and fetches ahead of it. */
   openPublicFile(
     file: unknown,
     onProgress?: (message: string) => void,
-    streaming?: boolean,
+    options?: RawFileReaderOptions,
   ): Promise<RawFileReader>;
   downloadPrivateFile(
     file: unknown,
@@ -44,7 +49,7 @@ export interface RawNetworkClient {
   openPrivateFile(
     file: unknown,
     onProgress?: (message: string) => void,
-    streaming?: boolean,
+    options?: RawFileReaderOptions,
   ): Promise<RawFileReader>;
   /** Quote, pay for, and store one batch; `loadRecord` receives the batch-local index. */
   uploadRecords(

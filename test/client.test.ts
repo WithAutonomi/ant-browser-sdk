@@ -431,7 +431,7 @@ describe("AutonomiClient", () => {
     raw.openPrivateFile.mockResolvedValue({ size: 12, name: "secret.txt", contentType: "text/plain",
       readRange: vi.fn(), close: vi.fn(), free: vi.fn() });
     const reader = await client.openFile(privateFile);
-    expect(raw.openPrivateFile).toHaveBeenCalledWith({ data_map: dataMap, name: "secret.txt", content_type: "text/plain" }, expect.any(Function), false);
+    expect(raw.openPrivateFile).toHaveBeenCalledWith({ data_map: dataMap, name: "secret.txt", content_type: "text/plain" }, expect.any(Function), { streaming: false });
     expect(reader.address).toBe("");
     reader.close();
 
@@ -1022,7 +1022,7 @@ describe("terminal operation events", () => {
     events.length = 0;
     await expect(client.createMediaSource(file, { onProgress })).rejects.toMatchObject({ code: "OPEN_FILE_FAILED" });
     // Playback reads sequentially, so media opens a streaming reader that reads ahead.
-    expect(state.networks.at(-1)!.openPublicFile).toHaveBeenCalledWith(expect.anything(), expect.any(Function), true);
+    expect(state.networks.at(-1)!.openPublicFile).toHaveBeenCalledWith(expect.anything(), expect.any(Function), { streaming: true });
     const terminal = events.filter((event) => event.status !== "running");
     expect(terminal.map((event) => event.operation)).toEqual(["open-file", "media"]);
     expect(terminal[0]!.parentOperationId).toBe(terminal[1]!.operationId);
@@ -1071,7 +1071,7 @@ it("translates public file metadata into the existing wire format for downloads 
   raw.openPublicFile.mockResolvedValue({ size: file.size, name: file.name, contentType: file.contentType,
     readRange: vi.fn(), close: vi.fn(), free: vi.fn() });
   const reader = await client.openFile(file);
-  expect(raw.openPublicFile).toHaveBeenCalledWith({ address: file.address, name: file.name, content_type: file.contentType }, expect.any(Function), false);
+  expect(raw.openPublicFile).toHaveBeenCalledWith({ address: file.address, name: file.name, content_type: file.contentType }, expect.any(Function), { streaming: false });
   reader.close();
   raw.findClosest.mockResolvedValue({ nodes: [rawNode], queried: ["peer"], failures: [{ peerId: "failed-peer", message: "timeout" }] } as never);
   expect(await client.findClosest(file.address)).toEqual({ nodes: [downloaded.dataMapNode], queried: ["peer"], failures: [{ peerId: "failed-peer", message: "timeout" }] });
