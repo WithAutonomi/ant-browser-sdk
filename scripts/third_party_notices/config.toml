@@ -68,7 +68,7 @@ note = "declares a `links` key only to prevent two versions in one build; its bu
 [exception.self_encryption]
 version = "0.36.0"
 licence = "GPL-3.0"
-reason = "self_encryption 0.36.0 is GPL-3.0 with a linking exception, set out at the top of its LICENSE file, which is reproduced in full. The exception permits linking the unmodified library with independent modules into an executable distributed under other terms, provided each module's own licence terms are met; the library itself remains under GPL-3.0. Its exact source is the Source link above (crates.io keeps every published version), and the scripts that build it into this module are ant-client at the revision in source.json and this package's scripts/sync-wasm.mjs. Remove this entry when ant-core moves to a self_encryption release published under MIT OR Apache-2.0."
+reason = "GPL-3.0 with a linking exception, set out at the top of its LICENSE file, which is reproduced in full. The exception permits linking the unmodified library with independent modules into an executable distributed under other terms, provided each module's own licence terms are met; the library itself remains under GPL-3.0. Its exact source is the Source link above (crates.io keeps every published version), and the scripts that build it into this module are ant-client at the revision in source.json and this package's scripts/sync-wasm.mjs. Remove this entry when ant-core moves to a self_encryption release published under MIT OR Apache-2.0."
 
 # Crates whose published files and repository contain no text of any licence
 # they are offered under. Each entry is for one reviewed version; it supplies

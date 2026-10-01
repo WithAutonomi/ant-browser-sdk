@@ -11,8 +11,8 @@
   "wasmSha256": "8fa35e58927fd3f5190ec43b1989313de3cc8968cac1bfa373247d4b3842fcd1",
   "rustc": "rustc 1.96.1 (31fca3adb 2026-06-26)",
   "wasmPack": "wasm-pack 0.15.0",
-  "noticesSha256": "5f3414678ec0e622fb8b9e235c9316bbfd8629dcd094a879fa27eaefda5d8006",
+  "noticesSha256": "0bb4dc414b7910eae260151942bdd1ae1732ed734c5aae3f64415d29558f5045",
   "rustStdCopyrightSha256": "78c163fcec50e64bfd85fedb850c273595602fafa2b41f30f75d4e410b80ee83",
   "noticesGeneratorSha256": "fbae032f6ae379d81311ceeabb2d23cd9d40af1a69ca0b422a50b632d7b31bd7",
-  "noticesConfigSha256": "a6c7a0832f9d9ea907d40a3cedc56a42ce1da1abf8090738c16dadcf11892669"
+  "noticesConfigSha256": "1d5154cdb0705f6eed668288a0e31f31f273dace0a404f97c091c3d2bdd72cf3"
 }
