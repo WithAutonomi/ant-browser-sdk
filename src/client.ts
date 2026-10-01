@@ -700,8 +700,8 @@ export class AutonomiClient {
       throwIfAborted(operation.signal);
       raw = await abortable(
         isPrivateFile(file)
-          ? this.#network.openPrivateFile(corePrivateFile(file), report, streaming)
-          : this.#network.openPublicFile(typeof file === "string" ? file : coreFileReference(file), report, streaming),
+          ? this.#network.openPrivateFile(corePrivateFile(file), report, { streaming })
+          : this.#network.openPublicFile(typeof file === "string" ? file : coreFileReference(file), report, { streaming }),
         operation.signal,
         undefined,
         closeReader,
