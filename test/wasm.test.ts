@@ -100,6 +100,21 @@ it("ships provenance matching the bundled production WASM", async () => {
   expect(metadata.defaultFeatures).toBe(false);
 });
 
+it("accepts the reader options the SDK passes to the packaged core", async () => {
+  await initializeWasm(await readFile(new URL("../src/wasm/ant_core_bg.wasm", import.meta.url)));
+  const client = new (getBindings().BrowserNetworkClient)([{ multiaddr: endpoint("ab".repeat(32), 0xbb) }]);
+  try {
+    // The core parses options before any network request; a mismatched shape is a type error.
+    await expect(client.openPublicFile("cd".repeat(32), undefined, true as never)).rejects.toThrow(/invalid type/);
+    for (const options of [{ streaming: true }, { streaming: false }]) {
+      await expect(client.openPublicFile("cd".repeat(32), undefined, options)).rejects.not.toThrow(/invalid type/);
+    }
+  } finally {
+    client.close();
+    client.free();
+  }
+});
+
 it("uses the packaged native validator for failed payment reconciliation", async () => {
   await initializeWasm(await readFile(new URL("../src/wasm/ant_core_bg.wasm", import.meta.url)));
   const client = new (getBindings().BrowserNetworkClient)([{ multiaddr: endpoint("ab".repeat(32), 0xbb) }]);
