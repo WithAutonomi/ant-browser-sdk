@@ -11,9 +11,12 @@ with `ANT_CLIENT_DIR=/path/to/ant-client npm run sync:wasm`, update the TypeScri
 types, and test both the SDK and the real-browser demo against a browser-enabled
 devnet. Once the Rust change is on `ant-client` main, run `npm run sync:wasm`
 to rebuild from a clean checkout of main; releases ship only such a build.
+Syncing needs the Rust tools listed in the README and, for the licence notices,
+Python 3.11 or newer.
 
-Commit the generated `src/wasm` bindings, binary, and `source.json` together.
-The provenance file records the source revision and binary checksum. Run
+Commit the generated `src/wasm` bindings, binary, licence notices, and
+`source.json` together. The provenance file records the source revision and the
+binary and notices checksums. Run
 `npm run build:examples` and `npm pack --dry-run` to check the shipped assets, and
 `npm run verify:wasm` to check the WASM release requirements.
 

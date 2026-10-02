@@ -1,0 +1,91 @@
+# Settings for generate.py, which scripts/sync-wasm.mjs runs to produce
+# src/wasm/THIRD-PARTY-NOTICES.txt for the ant-core WASM bundled in this
+# package. The notices cover the exact ant-client revision, features and
+# target recorded in src/wasm/source.json.
+
+header = """
+@withautonomi/ant-browser-sdk is licensed under MIT OR Apache-2.0; see
+LICENSE-MIT and LICENSE-APACHE. This file covers the third-party software in
+its bundled WebAssembly module, built from ant-core, and the tools used to
+produce it. Each crate's Source link is its exact source, which is how source
+is made available where a licence requires it.
+"""
+
+# Licences the release may redistribute third-party code under, most preferred
+# first. A crate offering a choice is redistributed under the first allowed
+# option; a crate whose licence allows no option here fails generation.
+allowed = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "0BSD",
+    "MIT-0",
+    "CC0-1.0",
+    "Unlicense",
+    "BSL-1.0",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "CDLA-Permissive-2.0",
+    "MPL-2.0",
+]
+
+# Crates that may contain native code: they ship C, C++, Objective-C, CUDA or
+# assembly sources or prebuilt libraries, build with cc/cmake/nasm, declare
+# `links`, or are a `*-src` crate. Licence files anywhere in a crate are
+# reproduced automatically; each entry records what was found on review, and can add
+# licence files with other names through `files` (relative to the crate root,
+# globs allowed). An entry with a `version` applies to that release only. A
+# crate that needs an entry and has none fails generation.
+
+[native.blake3]
+note = "its C, assembly and WebAssembly SIMD implementations are part of BLAKE3 and share the crate's licence."
+
+[native.cc]
+note = "a build tool; its one C file is compiled on the build machine to detect the C compiler, and nothing from it is linked."
+
+[native.rayon-core]
+note = "declares a `links` key only to prevent two copies in one build; it builds no native code."
+
+[native.saorsa-transport]
+version = "0.37.0"
+note = "the published crate also contains a .minimax/ folder of AI-assistant files (Python tools and .NET DLLs) committed to its repository by mistake; nothing in it is compiled into the WebAssembly module."
+
+[native.syn-solidity]
+note = "a proc-macro dependency; src/ident/kw.c is a developer script that generated its keyword tables, and is not compiled."
+
+[native.wasm-bindgen-shared]
+note = "declares a `links` key only to prevent two versions in one build; its build script records version information and builds no native code."
+
+# Crates whose licence the policy above does not cover, kept only after review.
+# Each entry is for one reviewed version, names the licence it is
+# redistributed under (whose text must be among its files), and says why that
+# is acceptable.
+
+[exception.self_encryption]
+version = "0.36.0"
+licence = "GPL-3.0"
+reason = "GPL-3.0 with a linking exception, set out at the top of its LICENSE file, which is reproduced in full. The exception permits linking the unmodified library with independent modules into an executable distributed under other terms, provided each module's own licence terms are met; the library itself remains under GPL-3.0. Its exact source is the Source link above (crates.io keeps every published version), and the scripts that build it into this module are ant-client at the revision in source.json and this package's scripts/sync-wasm.mjs. Remove this entry when ant-core moves to a self_encryption release published under MIT OR Apache-2.0."
+
+# Crates whose published files and repository contain no text of any licence
+# they are offered under. Each entry is for one reviewed version; it supplies
+# the canonical text of one of those licences, pinned by checksum, and says
+# why it is needed. Remove an entry once the crate ships the text; generation
+# prints a note when one goes unused.
+
+[missing.saorsa-pqc]
+version = "0.5.2"
+text_url = "https://www.apache.org/licenses/LICENSE-2.0.txt"
+text_sha256 = "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+note = "declares MIT OR Apache-2.0 but its published crate and repository contain no licence text; it is redistributed under Apache-2.0, whose text is reproduced from apache.org."
+
+[[appendix]]
+title = "Rust standard library"
+intro = """
+The WebAssembly module links the Rust standard library. Its copyright and
+licence notices, copied from the toolchain that built the module, are in
+RUST-STD-COPYRIGHT.html next to this file.
+"""
