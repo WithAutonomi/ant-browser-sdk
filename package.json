@@ -1,6 +1,6 @@
 {
   "name": "@withautonomi/ant-browser-sdk",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Build browser applications that connect directly to the Autonomi Network over WebRTC.",
   "type": "module",
   "license": "MIT OR Apache-2.0",
