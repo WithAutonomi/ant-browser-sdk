@@ -446,6 +446,36 @@ describe("AutonomiClient", () => {
     client.close();
   });
 
+  it("reads a manifest entry through its embedded DataMap or its public address", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    const raw = state.networks[0]!;
+    const dataMap = Uint8Array.of(0x93, 1, 2);
+    const embedded = { name: "photos/a.jpg", path: "photos/a.jpg", kind: "embedded" as const, address: "ab".repeat(32), dataMap };
+    const publicEntry = { name: "b.pdf", kind: "public" as const, address: "cd".repeat(32) };
+
+    raw.downloadPrivateFile.mockResolvedValue({ content: Uint8Array.of(1), hash: file.blake3,
+      file: { ...wireFile, name: "a.jpg", address: "ab".repeat(32) } });
+    await client.download(embedded, { concurrency: 2 });
+    // The entry's last path component names the file; no DataMap fetch happens.
+    expect(raw.downloadPrivateFile).toHaveBeenCalledWith({ data_map: dataMap, name: "a.jpg", content_type: "" }, 2, expect.any(Function));
+    expect(raw.downloadPublicFile).not.toHaveBeenCalled();
+
+    raw.downloadPublicFile.mockResolvedValue({ content: Uint8Array.of(1), hash: file.blake3, file: wireFile,
+      dataMapNode: { peer_id: "77".repeat(32), native_addresses: [], reliability: 1 } });
+    await client.download(publicEntry);
+    expect(raw.downloadPublicFile).toHaveBeenCalledWith("cd".repeat(32), undefined, expect.any(Function));
+
+    raw.openPrivateFile.mockResolvedValue({ size: 12, name: "a.jpg", contentType: "image/jpeg",
+      readRange: vi.fn(), close: vi.fn(), free: vi.fn() });
+    const reader = await client.openFile(embedded);
+    expect(raw.openPrivateFile).toHaveBeenCalledWith({ data_map: dataMap, name: "a.jpg", content_type: "" }, expect.any(Function), { streaming: false });
+    reader.close();
+
+    const { dataMap: _withheld, ...withoutDataMap } = embedded;
+    await expect(client.download(withoutDataMap)).rejects.toMatchObject({ code: "INVALID_SOURCE" });
+    client.close();
+  });
+
   it("pauses at verified quotes and continues after explicit payment", async () => {
     const walletPayment: PaymentProvider = {
       pay: vi.fn(async (_network, quotes) => ({

@@ -630,6 +630,46 @@ await client.downloadAndSave(address, { fileHandle });
 await saveDownload(download, { fileHandle });
 ```
 
+## Manifests and `ant://` links
+
+A manifest (ant-client ADR-0006) describes a set of files the way a `.torrent`
+does: each entry has an optional path and either an embedded DataMap or the
+address of a public DataMap. Manifests live off the network, as `.ant` files or
+`ant://manifest/...` links that carry the same bytes. The ant CLI writes one for
+every upload (`ant manifest create`, `ant manifest link`, `ant manifest export`).
+
+The SDK decodes both forms without touching the network and reads any entry
+through the ordinary download, reader and media APIs:
+
+```ts
+import { decodeManifest, parseManifestLink } from "@withautonomi/ant-browser-sdk";
+
+const link = await parseManifestLink(text); // or decodeManifest(bytes) for a .ant file
+if (link.kind === "file") {
+  await client.download(link.address);
+} else {
+  for (const entry of link.manifest.entries) {
+    console.log(entry.name, entry.kind, entry.size ?? "size unknown");
+  }
+  const video = link.manifest.entries.find((entry) => entry.name.endsWith(".mp4"));
+  if (video) {
+    const source = await client.createMediaSource(video);  // streams it
+    const result = await client.download(video);           // or fetch it whole
+  }
+}
+```
+
+An `embedded` entry carries its DataMap, so reading it skips the DataMap fetch
+a public address needs: in a mainnet measurement on a 612 MB file, opening by
+address took a median 11.6 s, of which 4 to 5 s was that fetch, against 4.9 s
+from the embedded DataMap. A `public` entry carries only the address and reads
+exactly like one. `manifestEntrySource(entry)` returns what the client reads
+for an entry, `manifestFileName(entry)` its last path component, and
+`isManifestEntry(value)` tells entries apart from other sources. A file link
+(`ant://<address>`) carries nothing but the address; any query string on it
+is rejected. Entry `size` is a hint from the manifest's creator and decides
+nothing.
+
 ## Random-access reads
 
 `openFile()` avoids reconstructing the entire file. Each `read()` call can request
@@ -894,10 +934,12 @@ and traffic policy remain deployment responsibilities.
 | `client.pendingUploads` | Inspect retained input and payment history after failures |
 | `client.resumeUpload()` | Resume retained input with explicit authorization for new payments |
 | `recovery.discard()` | Release retained input after pending work settles |
-| `client.download()` | Fetch, reconstruct, and verify a complete public file |
+| `parseManifestLink()` | Decode an `ant://manifest/...` or `ant://<address>` link without network access |
+| `decodeManifest()` | Decode the bytes of a `.ant` manifest file |
+| `client.download()` | Fetch, reconstruct, and verify a complete public file, private file or manifest entry |
 | `client.downloadAndSave()` | Download and open a browser save flow |
-| `client.openFile()` | Create a bounded random-access reader |
-| `client.createMediaSource()` | Create a seekable media URL through a service worker |
+| `client.openFile()` | Create a bounded random-access reader for a file or manifest entry |
+| `client.createMediaSource()` | Create a seekable media URL through a service worker for a file or manifest entry |
 | `client.setPaymentProvider()` | Replace the default provider for future uploads |
 | `client.onProgress()` | Subscribe to progress and receive an unsubscribe function |
 | `client.close()` | Release client-owned network and media resources |

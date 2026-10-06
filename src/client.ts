@@ -25,6 +25,7 @@ import {
   corePaymentNetwork, paymentNetworkFromCore, assertPaymentChainId, type CorePaymentNetwork,
 } from "./internal/payment-network.js";
 import { requestSaveFileHandle, saveDownload } from "./save.js";
+import { isManifestEntry, manifestEntrySource, type ManifestEntry } from "./manifest.js";
 import type {
   MerklePaymentRequest, MerklePaymentReceipt,
   ClientOptions,
@@ -573,11 +574,13 @@ export class AutonomiClient {
   /** Download, reconstruct, and BLAKE3-verify a complete public or private file. */
   download(file: string | PublicFile, options?: DownloadOptions): Promise<DownloadResult>;
   download(file: PrivateFileReference, options?: DownloadOptions): Promise<PrivateDownloadResult>;
-  download(file: string | PublicFile | PrivateFileReference, options?: DownloadOptions): Promise<DownloadResult | PrivateDownloadResult>;
+  download(file: string | PublicFile | PrivateFileReference | ManifestEntry, options?: DownloadOptions): Promise<DownloadResult | PrivateDownloadResult>;
   async download(
-    file: string | PublicFile | PrivateFileReference,
+    source: string | PublicFile | PrivateFileReference | ManifestEntry,
     options: DownloadOptions = {},
   ): Promise<DownloadResult | PrivateDownloadResult> {
+    // A manifest entry reads as its embedded DataMap or its public address.
+    const file = isManifestEntry(source) ? manifestEntrySource(source) : source;
     const operation = this.#startOperation(options);
     const report = this.#reporter("download", options.onProgress, operation);
     try {
@@ -628,13 +631,14 @@ export class AutonomiClient {
   downloadAndSave(file: string | PublicFile, options?: DownloadOptions & SaveOptions): Promise<{ download: DownloadResult; save: SaveResult }>;
   downloadAndSave(file: PrivateFileReference, options?: DownloadOptions & SaveOptions): Promise<{ download: PrivateDownloadResult; save: SaveResult }>;
   downloadAndSave(
-    file: string | PublicFile | PrivateFileReference,
+    file: string | PublicFile | PrivateFileReference | ManifestEntry,
     options?: DownloadOptions & SaveOptions,
   ): Promise<{ download: DownloadResult | PrivateDownloadResult; save: SaveResult }>;
   async downloadAndSave(
-    file: string | PublicFile | PrivateFileReference,
+    source: string | PublicFile | PrivateFileReference | ManifestEntry,
     options: DownloadOptions & SaveOptions = {},
   ): Promise<{ download: DownloadResult | PrivateDownloadResult; save: SaveResult }> {
+    const file = isManifestEntry(source) ? manifestEntrySource(source) : source;
     const operation = this.#startOperation(options);
     const report = this.#reporter("download-and-save", options.onProgress, operation);
     try {
@@ -680,10 +684,10 @@ export class AutonomiClient {
 
   /** Open a bounded random-access reader without reconstructing the whole file. */
   openFile(
-    file: string | PublicFile | PrivateFileReference,
+    file: string | PublicFile | PrivateFileReference | ManifestEntry,
     options: OperationOptions = {},
   ): Promise<PublicFileReader> {
-    return this.#openReader(file, options, false);
+    return this.#openReader(isManifestEntry(file) ? manifestEntrySource(file) : file, options, false);
   }
 
   /** A streaming reader treats every read as sequential and fetches ahead of it. */
@@ -729,9 +733,10 @@ export class AutonomiClient {
    * your site's public root before using the default serviceWorkerUrl.
    */
   async createMediaSource(
-    file: string | PublicFile | PrivateFileReference,
+    target: string | PublicFile | PrivateFileReference | ManifestEntry,
     options: MediaOptions = {},
   ): Promise<MediaSource> {
+    const file = isManifestEntry(target) ? manifestEntrySource(target) : target;
     const operation = this.#startOperation(options);
     const report = this.#reporter("media", options.onProgress, operation);
     let reader: PublicFileReader | undefined;
