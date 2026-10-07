@@ -20,6 +20,7 @@ export {
   type ManifestEntry,
   type ManifestLink,
   type ManifestOptions,
+  type TorrentReference,
 } from "./manifest.js";
 export { createPaymentSubmission } from "./payment.js";
 export { initializeWasm } from "./internal/runtime.js";

@@ -14,6 +14,8 @@ import {
 const LINK =
   "ant://manifest/wUFOVAGCpG5hbWWtbWFpbm5ldC1iZW5jaKdlbnRyaWVzkYOkcGF0aKhmaWxlLmJpbqRzaXplwKZzb3VyY2WBqEVtYmVkZGVkgahkYXRhX21hcIOndmVyc2lvbgGxY2h1bmtfaWRlbnRpZmllcnOThKVpbmRleACoZHN0X2hhc2jcACBpRDt_zOzMvC0EzIlaUVXM2EllzKbMtszxMczAWczazMPM4QjM8BTM9MzSTcyOeKhzcmNfaGFzaNwAIAzMj8z1zM_M93RyzIwmzK3MwnB5zLnMmcy8Ycy7esyKzJM2zKTMi2XM1MymzKYzTQduqHNyY19zaXplzQ9ThKVpbmRleAGoZHN0X2hhc2jcACAYesz1zP4_aczBK0F-zIzMpRttzOpJY8yWTlMEIMyJzLVTbcyefsyMHn3MhKhzcmNfaGFzaNwAIHwGZg1nEsyAzMXMlVLMlcydZ8zyzPPM7QMaRsy-zNAvzMHM4C7Mx8yYAy7Ms8zpzKeoc3JjX3NpemXND1OEpWluZGV4Aqhkc3RfaGFzaNwAIH9LPsyDzO0LQ0ZozN7M28zNzJgCNHTM6WjMvMzwzLXMiUNrL8y7zJwVFczizL8zqHNyY19oYXNo3AAgHW1zNszAzOHMvQ_MiRk8WMylIcysXcyPYczaaczPLMzhSsy4D8y7zJkmzLgdDqhzcmNfc2l6Zc0PVKVjaGlsZAE";
 const ADDRESS = "134e4537ad1b2e29f0dc48f8e025a560989e91055ebf1c66bca2208ca8bba889";
+// A .ant file with a v1 and a v2 torrent info hash over one public entry.
+const TORRENT_MANIFEST_B64 = "wUFOVAGDpG5hbWWjdG9yp3RvcnJlbnSCrGluZm9faGFzaF92McQUzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc2saW5mb19oYXNoX3YyxCDv7-_v7-_v7-_v7-_v7-_v7-_v7-_v7-_v7-_v7-_v76dlbnRyaWVzkYOkcGF0aKFhpHNpemXApnNvdXJjZYGmUHVibGljgadhZGRyZXNzxCCrq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urqw";
 
 async function wasm() {
   await initializeWasm(await readFile(new URL("../src/wasm/ant_core_bg.wasm", import.meta.url)));
@@ -33,6 +35,17 @@ describe("manifests", () => {
     expect(entry.dataMap).toBeInstanceOf(Uint8Array);
     expect(entry.dataMap!.byteLength).toBe(320);
     expect(manifestEntrySource(entry)).toEqual({ dataMap: entry.dataMap, name: "file.bin" });
+  });
+
+  it("carries a torrent reference when the creator recorded one", async () => {
+    await wasm();
+    // `ant manifest create --name tor --public-file <addr>=a --torrent-hash cd…(v1) --torrent-hash ef…(v2)`
+    const bytes = Uint8Array.from(Buffer.from(TORRENT_MANIFEST_B64, "base64url"));
+    const manifest = await decodeManifest(bytes);
+    expect(manifest.torrent).toEqual({ infoHashV1: "cd".repeat(20), infoHashV2: "ef".repeat(32) });
+    expect(Object.isFrozen(manifest.torrent)).toBe(true);
+    const plain = await parseManifestLink(LINK);
+    expect(plain.kind === "manifest" && plain.manifest.torrent).toBeUndefined();
   });
 
   it("parses file links and bare addresses, and rejects decorated file links", async () => {

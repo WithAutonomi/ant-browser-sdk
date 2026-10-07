@@ -47,7 +47,9 @@ The SDK exports `parseManifestLink(link)` and `decodeManifest(bytes)`, both
 asynchronous because they initialise the WASM module, returning frozen
 `ManifestLink` and `Manifest` values whose entries carry `name`, optional
 `path` and `size`, `kind`, hex `address`, and for embedded entries the
-canonical DataMap bytes. Failures carry the `INVALID_SOURCE` code.
+canonical DataMap bytes; a manifest also exposes the torrent info hashes its
+creator recorded, as hex, which the SDK only surfaces. Failures carry the
+`INVALID_SOURCE` code.
 
 `client.download`, `client.downloadAndSave`, `client.openFile` and
 `client.createMediaSource` accept a `ManifestEntry`. An embedded entry is read

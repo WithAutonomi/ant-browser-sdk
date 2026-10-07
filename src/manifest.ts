@@ -24,10 +24,20 @@ export interface ManifestEntry {
   readonly dataMap?: Uint8Array;
 }
 
+/** The BitTorrent identity of the same files, when the manifest's creator recorded one. */
+export interface TorrentReference {
+  /** Hex SHA-1 info hash of a v1 torrent (BEP 3). */
+  readonly infoHashV1?: string;
+  /** Hex SHA-256 info hash of a v2 or hybrid torrent (BEP 52). */
+  readonly infoHashV2?: string;
+}
+
 /** A decoded manifest: a named set of files and how to fetch each one. */
 export interface Manifest {
   /** Suggested root directory name. */
   readonly name?: string;
+  /** Torrent identity of the same files. Informational; the SDK does nothing with it yet. */
+  readonly torrent?: TorrentReference;
   readonly entries: readonly ManifestEntry[];
 }
 
@@ -44,7 +54,8 @@ export interface ManifestOptions extends OperationOptions {
 interface CoreManifestEntry {
   name: string; path?: string | null; size?: number | null; kind: "embedded" | "public"; address: string; dataMap?: Uint8Array;
 }
-interface CoreManifest { name?: string | null; entries: CoreManifestEntry[] }
+interface CoreTorrent { infoHashV1?: string | null; infoHashV2?: string | null }
+interface CoreManifest { name?: string | null; torrent?: CoreTorrent | null; entries: CoreManifestEntry[] }
 type CoreLink = { kind: "file"; address: string } | { kind: "manifest"; manifest: CoreManifest };
 
 /**
@@ -110,8 +121,15 @@ export function fileName(entry: Pick<ManifestEntry, "name">): string {
 }
 
 function manifestFromCore(raw: CoreManifest): Manifest {
+  const torrent = raw.torrent
+    ? Object.freeze({
+      ...(raw.torrent.infoHashV1 ? { infoHashV1: raw.torrent.infoHashV1 } : {}),
+      ...(raw.torrent.infoHashV2 ? { infoHashV2: raw.torrent.infoHashV2 } : {}),
+    })
+    : undefined;
   return Object.freeze({
     ...(raw.name ? { name: raw.name } : {}),
+    ...(torrent ? { torrent } : {}),
     entries: Object.freeze(raw.entries.map((entry) => Object.freeze({
       name: entry.name,
       ...(entry.path ? { path: entry.path } : {}),

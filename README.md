@@ -663,8 +663,10 @@ An `embedded` entry carries its DataMap, so reading it skips the DataMap fetch
 a public address needs: in a mainnet measurement on a 612 MB file, opening by
 address took a median 11.6 s, of which 4 to 5 s was that fetch, against 4.9 s
 from the embedded DataMap. A `public` entry carries only the address and reads
-exactly like one. `manifestEntrySource(entry)` returns what the client reads
-for an entry, `manifestFileName(entry)` its last path component, and
+exactly like one. A manifest may also carry
+`torrent`, the BitTorrent info hashes of the same files as hex, which the SDK
+surfaces but does not act on. `manifestEntrySource(entry)` returns what the
+client reads for an entry, `manifestFileName(entry)` its last path component, and
 `isManifestEntry(value)` tells entries apart from other sources. A file link
 (`ant://<address>`) carries nothing but the address; any query string on it
 is rejected. Entry `size` is a hint from the manifest's creator and decides
