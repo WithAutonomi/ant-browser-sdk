@@ -1,0 +1,89 @@
+{
+  "cmp-chromium.jsonl.gz": {
+    "uncompressedSha256": "effae6874719c50cb11482f2d238e96cbd9e38cb9cdddb2a0f9e848510c4873c"
+  },
+  "cmp-stream-chromium.jsonl.gz": {
+    "uncompressedSha256": "914bfb9326464ef0f53e647a5393d4565465f1d2e233124da98d5236033592ca"
+  },
+  "cmp-stream-webkit.jsonl.gz": {
+    "uncompressedSha256": "e33fe967417426905c4f713deda6ae940175e8901681c41ddd99ae35d02aba36"
+  },
+  "cmp-webkit-networkrtc.log.gz": {
+    "uncompressedSha256": "026fd03939f99b75134840b26100ac56b003fb59dab209ffe6995e8697f3fb97"
+  },
+  "cmp-webkit-sockets.txt.gz": {
+    "uncompressedSha256": "671150683080cbbd40c11d1e9dc1fb80c801eb8019a4101d753e5a34f735f425"
+  },
+  "cmp-webkit.jsonl.gz": {
+    "uncompressedSha256": "fe666cf5693e6b45a87456543661a0c421526569f160f6758e7a871107b75e01"
+  },
+  "cmp.out.gz": {
+    "uncompressedSha256": "d6474d91c05d5b0734a8d6bc0d923140066f23f6af27e6e67eee9b228c1cee61"
+  },
+  "deadconn.py.gz": {
+    "uncompressedSha256": "66df4d0ba14c0bcd9119a3185caaff8d4f56830330d9ce1f5a2c7346a9e997a2"
+  },
+  "harness.mjs.gz": {
+    "uncompressedSha256": "b684b47dac55c97df8ce1947370358ff44c6dc79776000e21be04135edfc18af"
+  },
+  "sdk-adr.log.gz": {
+    "uncompressedSha256": "aa1ca959b7896c44e1f7100dc3d1c1d17439d7f58022a37c3a6d9ef67c66a868"
+  },
+  "sdk-check.log.gz": {
+    "uncompressedSha256": "08d784e6b8eb9a40dddb4a186fabd856178fa1b2a79b25dc1fdf6a7819b5211b"
+  },
+  "sdk-examples.log.gz": {
+    "uncompressedSha256": "19485d6535e78a8130e87b4f6017f6d0d529d698e74d12b56948bd44277f2251"
+  },
+  "sdk-pack.log.gz": {
+    "uncompressedSha256": "f2d0682e642a978397e8735d3b8fa80a7ea2818386043f4a0377e2c5ebfbb2cb"
+  },
+  "sdk-sync.log.gz": {
+    "uncompressedSha256": "6361e727b83cf85f8e0bcb26aa5cbb8ebb9a9285689ece238186c053993a193d"
+  },
+  "sdk-verify.log.gz": {
+    "uncompressedSha256": "d045270b096bc3bdc6a19cb56019f4a5aa5e9b59520d1fc5a4ddb38ddcff807d"
+  },
+  "sockets-per-run.py.gz": {
+    "uncompressedSha256": "ae8f118d294bdbe845ea30bc9d0ca083ce4052ce8dd9ba8d4b69377750a8f34c"
+  },
+  "stream-probe.mjs.gz": {
+    "uncompressedSha256": "ef6089277b668dad0a61dd2b9aef121d19868ac0fadc7b792641c71808d43f1b"
+  },
+  "webkit-gate-strategies.mjs.gz": {
+    "uncompressedSha256": "d823ba9524a657d2c888bb5b1fc5e983e69e01e1dc01b2cbdfbad3b273d6832c"
+  },
+  "webkit-gates-1.json.gz": {
+    "uncompressedSha256": "7ade58934938673f2b9e11dcfbef39764a0e7579a3b54bc337b700f9f2a35ea5"
+  },
+  "webkit-gates-1.log.gz": {
+    "uncompressedSha256": "cfb0705e53629e8385d5618a7b2a4d3cee0c4986d6eb0541a8ee5b4caacda1d8"
+  },
+  "webkit-gates-2.json.gz": {
+    "uncompressedSha256": "12d3e0499b757f8de3f61fb89fcc9e63fe31e370b3a30ca8591a8e22d0ec3d61"
+  },
+  "webkit-gates-2.log.gz": {
+    "uncompressedSha256": "96f73c2cf0f1a15df796cdb72f7ea4ebebbe7a91f622bae962d41187e47d7c84"
+  },
+  "webkit-gates-chromium.json.gz": {
+    "uncompressedSha256": "9447057e9e986b4b108a961a3bbfbf3edc5cc28e184ec570de6133f0c078076d"
+  },
+  "webkit-socket-cap-chromium-14.json.gz": {
+    "uncompressedSha256": "cedcd64745728540df197c99d820ec948e2bacdb1cefea1221e0c823f89a5495"
+  },
+  "webkit-socket-cap-repro.mjs.gz": {
+    "uncompressedSha256": "fe868ad05449f2551053d765916deb0b132acfcb49c32e7b8a8a939b5382779c"
+  },
+  "webkit-socket-cap-webkit-14.json.gz": {
+    "uncompressedSha256": "62a18ad5932397dcee7531e1151bcfa3848c8799ee06f801b74a7182698dae2e"
+  },
+  "webkit-sockets-vs-candidates.mjs.gz": {
+    "uncompressedSha256": "70482664621ac696f9f27f65fab7655e81c07458b069003e5d5f4483440e967b"
+  },
+  "webkit-svc.json.gz": {
+    "uncompressedSha256": "1e80bb498e4e7947640b83d68c9784cbad0443a0d1b8dcac4de21fc7f9a807bc"
+  },
+  "webkit-svc.log.gz": {
+    "uncompressedSha256": "4ea0aecca4492d86a981d645913c38a74b5b95aeba1d3b59a9ca4f0af430cc15"
+  }
+}
