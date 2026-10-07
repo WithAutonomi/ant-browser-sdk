@@ -73,3 +73,44 @@ Warm-up starts: address 20 120 total, manifest 7 505 total.
 The page, static server and Playwright driver used are the
 `stream-bench.html`, `server.mjs` and `run-stream.mjs` scripts kept with the
 ant-client#219 review notes; `RUNS=4` produced the figures above.
+
+## Rerun on 2026-10-07 with root-map embedding and playback priming
+
+Same harness, same file, four runs each. SDK `feat/manifests` at 5b971e7
+plus the priming commit; WASM synced from ant-client 61d0a24, whose
+`--embed-public` now embeds the 147-entry root DataMap (manifest 21 KB)
+and records the file's published address beside it. The address path is
+unchanged in code and serves as the control for network variance.
+
+### Cold start, medians (individual runs in brackets), milliseconds
+
+| Path | Media ready | Head 1 MiB | Tail 64 KiB | Total |
+|---|---|---|---|---|
+| Public address | 7 666 [6 985, 7 794, 7 537, 7 923] | 10 402 | 420 | 18 435 [15 527, 17 627, 24 290, 19 243] |
+| Manifest, root embedded | 22 [25, 20, 25, 18] | 14 034 [11 955, 22 430, 15 954, 12 114] | 2 | 14 058 [11 982, 22 453, 15 982, 12 135] |
+
+### Warm start, medians, milliseconds
+
+| Path | Media ready | Head 1 MiB | Tail 64 KiB | Total |
+|---|---|---|---|---|
+| Public address | 5 630 | 4 232 | 42 | 10 943 |
+| Manifest, root embedded | 2 | 4 394 | 3 | 4 399 |
+
+### Observations
+
+- Media ready on the manifest path fell from 3.2 s to 22 ms cold: with the
+  root map embedded there is no DataMap fetch and no wrapper-record fetch
+  before the reader is ready ("Using private DataMap (16016 bytes)", then
+  "Ready to stream").
+- The tail read fell from 1.5 s to 2 ms: priming had already fetched the
+  last record alongside the first.
+- Time to playable is now the first-chunk fetch alone: 12 to 22 s cold.
+  Its median rose from 11.5 to 14.0 s; the control path moved by a similar
+  margin, and priming now downloads the last record concurrently with the
+  first over freshly dialed connections, so the head shares bandwidth it
+  had alone before. Overall cold start improved from 16.3 to 14.1 s and
+  warm from 6.8 to 4.4 s. Reducing the first-chunk fetch (racing holders,
+  and measuring lookup against dial against transfer) is the next lever.
+- The first attempt of this rerun exposed a bug: embedding the root map
+  changed the entry's content address away from the file's public address.
+  Fixed in ant-client 61d0a24 before these figures were taken.
