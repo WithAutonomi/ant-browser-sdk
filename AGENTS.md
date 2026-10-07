@@ -54,8 +54,9 @@ set `ANT_CLIENT_REF` for another ref. To develop the Rust boundary, build a loca
 checkout as-is with `ANT_CLIENT_DIR=/path/to/ant-client npm run sync:wasm`, and
 follow that checkout's own instructions when editing Rust.
 
-Commit the generated bindings, binary, and `src/wasm/source.json` together. Record
-the exact source revision and checksums. Releases ship only a clean build of a
+Commit the generated bindings, binary, licence notices, and `src/wasm/source.json`
+together. Record the exact source revision and checksums. Releases ship only a
+clean build of a
 commit on `ant-client` main; `npm run verify:wasm` checks this and the release
 workflow enforces it. Do not manually patch generated bindings or infer
 native/browser parity from helper tests alone.

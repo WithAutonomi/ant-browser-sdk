@@ -115,6 +115,16 @@ it("accepts the reader options the SDK passes to the packaged core", async () =>
   }
 });
 
+it("records the licence notices produced with the bundled production WASM", async () => {
+  const metadata = JSON.parse(await readFile(new URL("../src/wasm/source.json", import.meta.url), "utf8"));
+  const sha256 = async (path: string) =>
+    createHash("sha256").update(await readFile(new URL(`../${path}`, import.meta.url))).digest("hex");
+  expect(await sha256("src/wasm/THIRD-PARTY-NOTICES.txt")).toBe(metadata.noticesSha256);
+  expect(await sha256("src/wasm/RUST-STD-COPYRIGHT.html")).toBe(metadata.rustStdCopyrightSha256);
+  expect(await sha256("scripts/third_party_notices/generate.py")).toBe(metadata.noticesGeneratorSha256);
+  expect(await sha256("scripts/third_party_notices/config.toml")).toBe(metadata.noticesConfigSha256);
+});
+
 it("uses the packaged native validator for failed payment reconciliation", async () => {
   await initializeWasm(await readFile(new URL("../src/wasm/ant_core_bg.wasm", import.meta.url)));
   const client = new (getBindings().BrowserNetworkClient)([{ multiaddr: endpoint("ab".repeat(32), 0xbb) }]);
