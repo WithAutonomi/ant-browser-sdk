@@ -716,6 +716,16 @@ video.src = source.url;
 source.close();
 ```
 
+For audio and video content types, and common media extensions, creating the
+source also reads the first `SDK_LIMITS.mediaPrimeHeadBytes` (1 MiB) and the
+last `SDK_LIMITS.mediaPrimeTailBytes` (64 KiB) at once, in the background. A
+player reads the header, then seeks to the index MP4 files keep at the end,
+and only then plays; with both already in the reader's cache, playback starts
+as soon as the element is attached instead of after two sequential network
+reads. Pass `primePlayback: false` to skip this, or `true` to force it for a
+file the SDK does not recognise as media. Priming failures surface through
+the player, not through `createMediaSource()`.
+
 The service worker translates HTTP byte-range requests into messages to the
 page-owned authenticated reader; it does not connect to Autonomi nodes itself.
 The page and client must therefore remain open while the media URL is in use.

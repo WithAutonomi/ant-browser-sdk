@@ -9,7 +9,7 @@ import { AutonomiError, UploadError, wrapError } from "./errors.js";
 import { createPublicFileReader, type PublicFileReader } from "./file-reader.js";
 import { abortable, isAbort, throwIfAborted } from "./internal/abort.js";
 import { getBindings, initializeClientWasm, type RawNetworkClient } from "./internal/runtime.js";
-import { MediaBridge } from "./internal/media.js";
+import { isPlayableMedia, MediaBridge, primePlayback } from "./internal/media.js";
 import { assertStagingSupported, type WorkerWasmSource } from "./internal/staging.js";
 import {
   restoreCheckpoint, uploadBytes, uploadFileInWindows, type RecordBatchUploader,
@@ -755,6 +755,11 @@ export class AutonomiClient {
         ...options,
         signal: operation.signal,
       });
+      if (options.primePlayback ?? isPlayableMedia(reader)) {
+        report(`Priming playback of ${source.file.name}`, { phase: "media" });
+        // Not awaited: the source is usable now and the reads only warm its cache.
+        void primePlayback(reader);
+      }
       report(`Media source ready for ${source.file.name}`, { phase: "complete" });
       return source;
     } catch (error) {

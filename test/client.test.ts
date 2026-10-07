@@ -1045,6 +1045,47 @@ describe("terminal operation events", () => {
     client.close();
   });
 
+  it("primes playback for media when a media source is created, unless told not to", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    const raw = state.networks.at(-1)!;
+    const readRange = vi.fn(async () => new Uint8Array());
+    raw.openPublicFile.mockResolvedValue({ size: 50_000_000, name: "movie.mp4", contentType: "video/mp4", readRange, close: vi.fn(), free: vi.fn() });
+    const worker = { scriptURL: "https://app.example/autonomi-stream-sw.js" } as ServiceWorker;
+    const registration = { scope: "https://app.example/", active: worker, installing: null, waiting: null, update: vi.fn(), unregister: vi.fn() } as unknown as ServiceWorkerRegistration;
+    vi.stubGlobal("isSecureContext", true);
+    vi.stubGlobal("location", { href: "https://app.example/player", origin: "https://app.example" });
+    vi.stubGlobal("navigator", { serviceWorker: {
+      getRegistrations: vi.fn(async () => [registration]), getRegistration: vi.fn(async () => registration),
+      register: vi.fn(async () => registration), ready: Promise.resolve(registration), controller: worker,
+      addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    } });
+    try {
+      const source = await client.createMediaSource(file.address);
+      await Promise.resolve();
+      expect(readRange.mock.calls).toEqual([
+        [0, SDK_LIMITS.mediaPrimeHeadBytes],
+        [50_000_000 - SDK_LIMITS.mediaPrimeTailBytes, SDK_LIMITS.mediaPrimeTailBytes],
+      ]);
+      source.close();
+
+      readRange.mockClear();
+      const silent = await client.createMediaSource(file.address, { primePlayback: false });
+      await Promise.resolve();
+      expect(readRange).not.toHaveBeenCalled();
+      silent.close();
+
+      readRange.mockClear();
+      raw.openPublicFile.mockResolvedValue({ size: 50_000_000, name: "report.pdf", contentType: "application/pdf", readRange, close: vi.fn(), free: vi.fn() });
+      const document = await client.createMediaSource(file.address);
+      await Promise.resolve();
+      expect(readRange).not.toHaveBeenCalled();
+      document.close();
+    } finally {
+      vi.unstubAllGlobals();
+      client.close();
+    }
+  });
+
   it("ends both media setup and its open-file child when opening fails", async () => {
     const events: import("../src/types.js").ProgressEvent[] = [];
     const onProgress = (event: import("../src/types.js").ProgressEvent) => events.push(event);

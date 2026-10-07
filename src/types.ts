@@ -415,6 +415,12 @@ export interface MediaOptions extends OperationOptions {
   serviceWorkerUrl?: string | URL;
   /** Defaults to `/`; change only when both the page and stream URL share a narrower scope. */
   scope?: string;
+  /**
+   * Read the start and the end of the file as soon as the media source exists,
+   * so a player's first requests are served from the reader's cache. Defaults
+   * to true for audio and video content types and common media extensions.
+   */
+  primePlayback?: boolean;
 }
 
 export interface MediaSource {
