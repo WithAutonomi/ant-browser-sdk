@@ -1,0 +1,43 @@
+{
+  "browser": "151.0.7922.34",
+  "sdkBase": "98e0933",
+  "wasm": "9a2b6353a88207dd4d6ed99a5158c370531a7e09",
+  "wasmSha256": "9e0792faf9fcecf18dba8e40f66c9b4c257109143f2bb60efddfe4de2bf5bbad",
+  "node": "26129a2611cac08f9f53a557f91fb8806b40a1cc",
+  "phases": [
+    {
+      "visibility": "public",
+      "address": "eccac1618853ecee64ab24d56de20a149b1702838f77c5a5cdf4c630e07df55e",
+      "knownSize": 13056,
+      "creatorSize": 1,
+      "downloadBytes": 13056,
+      "rangeReads": 3,
+      "mediaRanges": 2,
+      "sha256": "f4d99b7cad3937caccb331974609f53b4eabb2fa944f6f39d768be4f2e26d91b",
+      "wasmHashes": [
+        "9e0792faf9fcecf18dba8e40f66c9b4c257109143f2bb60efddfe4de2bf5bbad",
+        "9e0792faf9fcecf18dba8e40f66c9b4c257109143f2bb60efddfe4de2bf5bbad"
+      ],
+      "pageErrors": [],
+      "consoleErrors": []
+    },
+    {
+      "visibility": "private",
+      "address": "f2853ce4176147f432464dd9059bf6c74901ef0aeaf5f032985d268f152e39dd",
+      "knownSize": 13056,
+      "creatorSize": 1,
+      "downloadBytes": 13056,
+      "rangeReads": 3,
+      "mediaRanges": 2,
+      "sha256": "ea713b9f6096ac909d6166c705b4d9e139547b972bd471467e31f2445b12fffa",
+      "wasmHashes": [
+        "9e0792faf9fcecf18dba8e40f66c9b4c257109143f2bb60efddfe4de2bf5bbad",
+        "9e0792faf9fcecf18dba8e40f66c9b4c257109143f2bb60efddfe4de2bf5bbad"
+      ],
+      "pageErrors": [],
+      "consoleErrors": []
+    }
+  ],
+  "sdkRevision": "6b93f2a7a947c59b3b5f29f640ed0a73c1459ee6",
+  "sdkBaseNote": "The browser probe ran before the source commit; its SDK files are exactly those committed as sdkRevision."
+}

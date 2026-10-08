@@ -630,6 +630,61 @@ await client.downloadAndSave(address, { fileHandle });
 await saveDownload(download, { fileHandle });
 ```
 
+## Manifests and `ant://` links
+
+A manifest (ant-client ADR-0006) describes a set of files the way a `.torrent`
+does: each entry has an optional path and either an embedded DataMap or the
+address of a public DataMap. Manifests live off the network, as `.ant` files or
+`ant://manifest/...` links. A file can embed a root DataMap; a link carries its
+published, shrunk form to keep the link short. Both forms identify the same
+content address, which the core derives from the DataMap. The ant CLI writes one for
+every upload (`ant manifest create`, `ant manifest link`, `ant manifest export`).
+
+The SDK decodes both forms without touching the network and reads any entry
+through the ordinary download, reader and media APIs:
+
+```ts
+import { decodeManifest, parseManifestLink } from "@withautonomi/ant-browser-sdk";
+
+const link = await parseManifestLink(text); // or decodeManifest(bytes) for a .ant file
+if (link.kind === "file") {
+  await client.download(link.address);
+} else {
+  for (const entry of link.manifest.entries) {
+    console.log(entry.name, entry.kind, entry.size ?? "size unknown");
+  }
+  const video = link.manifest.entries.find((entry) => entry.name.endsWith(".mp4"));
+  if (video) {
+    const source = await client.createMediaSource(video);  // streams it
+    const result = await client.download(video);           // or fetch it whole
+  }
+}
+```
+
+An `embedded` entry carries its DataMap, so reading it skips the DataMap fetch
+a public address needs: in a mainnet measurement on a 612 MB file, opening by
+address took a median 11.6 s, of which 4 to 5 s was that fetch, against 4.9 s
+from the embedded DataMap. A `public` entry carries only the address and reads
+exactly like one. A manifest may also carry
+`torrent`, the BitTorrent info hashes of the same files as hex, which the SDK
+surfaces but does not act on. `manifestEntrySource(entry)` returns what the
+client reads for an entry, `manifestFileName(entry)` its last path component, and
+`isManifestEntry(value)` tells entries apart from other sources. A file link
+(`ant://<address>`) carries nothing but the address; any query string on it
+is rejected. Entry `size` is a hint from the manifest's creator and decides
+nothing. `knownSize`, when present, is the plaintext size the core derives from
+an embedded root DataMap; public entries and shrunk maps omit it. Downloads and
+readers verify the actual content through the core.
+
+The bundled core reads the finalized ADR-0006 v1 encoding from `ant-client`
+main. Links and files created by the earlier draft builds using the
+self-encryption serde layout must be regenerated with the current CLI; they
+are rejected with `INVALID_SOURCE`.
+
+See the [main sync validation](docs/audits/2026-10-08-ant-client-main-sync.md)
+for production WASM and real-browser devnet evidence. The earlier streaming
+timings above were measured with a draft build.
+
 ## Random-access reads
 
 `openFile()` avoids reconstructing the entire file. Each `read()` call can request
@@ -675,6 +730,16 @@ video.src = source.url;
 // Release the reader and range cache when playback is finished.
 source.close();
 ```
+
+For audio and video content types, and common media extensions, creating the
+source also reads the first `SDK_LIMITS.mediaPrimeHeadBytes` (1 MiB) and the
+last `SDK_LIMITS.mediaPrimeTailBytes` (64 KiB) at once, in the background. A
+player reads the header, then seeks to the index MP4 files keep at the end,
+and only then plays; with both already in the reader's cache, playback starts
+as soon as the element is attached instead of after two sequential network
+reads. Pass `primePlayback: false` to skip this, or `true` to force it for a
+file the SDK does not recognise as media. Priming failures surface through
+the player, not through `createMediaSource()`.
 
 The service worker translates HTTP byte-range requests into messages to the
 page-owned authenticated reader; it does not connect to Autonomi nodes itself.
@@ -894,10 +959,12 @@ and traffic policy remain deployment responsibilities.
 | `client.pendingUploads` | Inspect retained input and payment history after failures |
 | `client.resumeUpload()` | Resume retained input with explicit authorization for new payments |
 | `recovery.discard()` | Release retained input after pending work settles |
-| `client.download()` | Fetch, reconstruct, and verify a complete public file |
+| `parseManifestLink()` | Decode an `ant://manifest/...` or `ant://<address>` link without network access |
+| `decodeManifest()` | Decode the bytes of a `.ant` manifest file |
+| `client.download()` | Fetch, reconstruct, and verify a complete public file, private file or manifest entry |
 | `client.downloadAndSave()` | Download and open a browser save flow |
-| `client.openFile()` | Create a bounded random-access reader |
-| `client.createMediaSource()` | Create a seekable media URL through a service worker |
+| `client.openFile()` | Create a bounded random-access reader for a file or manifest entry |
+| `client.createMediaSource()` | Create a seekable media URL through a service worker for a file or manifest entry |
 | `client.setPaymentProvider()` | Replace the default provider for future uploads |
 | `client.onProgress()` | Subscribe to progress and receive an unsubscribe function |
 | `client.close()` | Release client-owned network and media resources |

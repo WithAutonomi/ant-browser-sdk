@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPublicFileReader, type PublicFileReader } from "../src/file-reader.js";
-import { MediaBridge } from "../src/internal/media.js";
+import { isPlayableMedia, MediaBridge, primePlayback } from "../src/internal/media.js";
+import { SDK_LIMITS } from "../src/limits.js";
 import type { RawFileReader } from "../src/internal/runtime.js";
 
 const origin = "https://app.example";
@@ -159,4 +160,46 @@ it("rejects unsupported media sizes before registering a service worker", async 
   await expect(new MediaBridge().attach(reader, {})).rejects.toMatchObject({ code: "MEDIA_FAILED" });
   expect(container.register).not.toHaveBeenCalled();
   reader.close();
+});
+
+describe("playback priming", () => {
+  function readerOf(size: number, readRange = vi.fn(async () => new Uint8Array())): { reader: PublicFileReader; readRange: typeof readRange } {
+    const raw: RawFileReader = { name: "movie.mp4", size, contentType: "video/mp4", readRange, close: vi.fn(), free: vi.fn() };
+    return { reader: createPublicFileReader(raw, "ab".repeat(32)), readRange };
+  }
+
+  it("reads the head and the tail at once for a large file", async () => {
+    const size = 100 * 1024 * 1024;
+    const { reader, readRange } = readerOf(size);
+    await primePlayback(reader);
+    expect(readRange.mock.calls).toEqual([
+      [0, SDK_LIMITS.mediaPrimeHeadBytes],
+      [size - SDK_LIMITS.mediaPrimeTailBytes, SDK_LIMITS.mediaPrimeTailBytes],
+    ]);
+  });
+
+  it("reads a small file once and never overlaps head and tail", async () => {
+    const { reader, readRange } = readerOf(4_000);
+    await primePlayback(reader);
+    expect(readRange.mock.calls).toEqual([[0, 4_000]]);
+    const middle = readerOf(SDK_LIMITS.mediaPrimeHeadBytes + 10);
+    await primePlayback(middle.reader);
+    expect(middle.readRange.mock.calls).toEqual([
+      [0, SDK_LIMITS.mediaPrimeHeadBytes],
+      [SDK_LIMITS.mediaPrimeHeadBytes, 10],
+    ]);
+  });
+
+  it("never throws: a failed read is left for the player to report", async () => {
+    const { reader } = readerOf(10_000_000, vi.fn(async () => { throw new Error("offline"); }));
+    await expect(primePlayback(reader)).resolves.toBeUndefined();
+  });
+
+  it("recognises media by content type or extension", () => {
+    expect(isPlayableMedia({ name: "x.bin", contentType: "video/mp4" })).toBe(true);
+    expect(isPlayableMedia({ name: "song.mp3", contentType: "" })).toBe(true);
+    expect(isPlayableMedia({ name: "clip.MOV", contentType: "application/octet-stream" })).toBe(true);
+    expect(isPlayableMedia({ name: "report.pdf", contentType: "application/pdf" })).toBe(false);
+    expect(isPlayableMedia({ name: "file.bin", contentType: "" })).toBe(false);
+  });
 });

@@ -1,0 +1,19 @@
+# Worktree created from PR #6 head 282808191d2ddd5a54e8da82a6ef863049495e44.
+git merge --no-edit origin/main
+# Resolved source.json by taking main's metadata; the sync below replaces it.
+npm ci
+RUSTUP_TOOLCHAIN=1.99.0 PYTHON=/Users/mick/.local/bin/python3.11 npm run sync:wasm
+# GitHub token supplied privately through the environment for notice downloads
+# and verify:wasm; no credential is included in these artifacts.
+npm run check
+npm run verify:wasm
+npm run build:examples
+npm pack --dry-run --json
+python3 scripts/adr-governance.py
+python3 .github/scripts/test_check_pr.py
+# ant-node: clean checkout at the ant-client browser integration pin.
+RUSTUP_TOOLCHAIN=1.99.0 cargo build --locked --bin ant-devnet
+target/debug/ant-devnet --nodes 7 --bootstrap-count 3 --base-port 0 --webrtc-direct --webrtc-direct-base-port 0 --serve-port 39770 --enable-evm --data-dir /private/tmp/pr6-main-devnet-data --manifest /private/tmp/pr6-main-devnet-manifest.json
+node node_modules/vite/bin/vite.js --config examples/all-in-one/vite.config.ts --port 39771 --strictPort
+node /private/tmp/pr6-main-browser-check.mjs
+# Stopped the two task-owned servers through their PTY sessions with SIGINT.

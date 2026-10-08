@@ -10,6 +10,18 @@ export {
   type ManualPaymentStatus,
 } from "./manual-payment.js";
 export { saveDownload } from "./save.js";
+export {
+  decodeManifest,
+  fileName as manifestFileName,
+  isManifestEntry,
+  manifestEntrySource,
+  parseManifestLink,
+  type Manifest,
+  type ManifestEntry,
+  type ManifestLink,
+  type ManifestOptions,
+  type TorrentReference,
+} from "./manifest.js";
 export { createPaymentSubmission } from "./payment.js";
 export { initializeWasm } from "./internal/runtime.js";
 export type {

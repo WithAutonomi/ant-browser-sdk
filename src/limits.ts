@@ -10,6 +10,10 @@ export const SDK_LIMITS = Object.freeze({
   defaultStreamChunkBytes: 1024 * 1024,
   downloadConcurrency: Object.freeze({ min: 1, max: 256, default: "auto" as const }),
   mediaMaxFileBytes: MAX_FILE_BYTES,
+  /** Bytes read from the start of a media file when a media source is created. */
+  mediaPrimeHeadBytes: 1024 * 1024,
+  /** Bytes read from the end of a media file when a media source is created. */
+  mediaPrimeTailBytes: 64 * 1024,
 });
 
 /** @internal Validate before copying bytes, staging, or starting network work. */
