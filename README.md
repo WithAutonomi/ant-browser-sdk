@@ -994,7 +994,7 @@ To rebuild it from the latest `ant-client` main:
 ```bash
 rustup target add wasm32-unknown-unknown
 cargo install wasm-pack --version 0.15.0 --locked
-npm run sync:wasm
+npm run sync:wasm      # also needs Python 3.11+ (set PYTHON if `python3` is older)
 npm run check
 npm pack --dry-run
 ```
@@ -1008,9 +1008,15 @@ build a local checkout as-is with `ANT_CLIENT_DIR=../ant-client npm run sync:was
 
 WASM protocol changes and matching SDK types must ship in the same SDK release.
 `src/wasm/source.json` records the source commit, whether the checkout was dirty,
-build features, lockfile hash, and binary hash; it ships in `dist/wasm`.
-`npm run verify:wasm` checks the release requirements: the binary matches its
-recorded hash and is a clean build of a commit on `ant-client` main.
+build features, lockfile hash, binary hash, the `rustc` and `wasm-pack` versions,
+and the hashes of its licence notices and of the generator and config that
+produced them; it ships in `dist/wasm`. The sync also writes
+`src/wasm/THIRD-PARTY-NOTICES.txt` (the licence, copyright and notice files of
+every crate in the WASM, produced by `scripts/third_party_notices`) and
+`src/wasm/RUST-STD-COPYRIGHT.html` (the Rust standard library's notices from that
+toolchain), which ship next to the binary. `npm run verify:wasm` checks the
+release requirements: the binary, notices, generator and config match their
+recorded hashes and the binary is a clean build of a commit on `ant-client` main.
 
 ### Releasing to npm
 
@@ -1160,3 +1166,7 @@ manifest. Runtime manifests remain local-devnet tooling.
 ## License
 
 Licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
+
+The bundled WebAssembly module contains third-party Rust crates under their own
+licences; see [`dist/wasm/THIRD-PARTY-NOTICES.txt`](src/wasm/THIRD-PARTY-NOTICES.txt)
+and `dist/wasm/RUST-STD-COPYRIGHT.html` in the published package.

@@ -21,6 +21,8 @@ for (const file of [
   "ant_core_bg.wasm",
   "ant_core_bg.wasm.d.ts",
   "source.json",
+  "THIRD-PARTY-NOTICES.txt",
+  "RUST-STD-COPYRIGHT.html",
 ]) {
   await cp(resolve(root, "src/wasm", file), resolve(dist, "wasm", file));
 }
