@@ -635,7 +635,9 @@ await saveDownload(download, { fileHandle });
 A manifest (ant-client ADR-0006) describes a set of files the way a `.torrent`
 does: each entry has an optional path and either an embedded DataMap or the
 address of a public DataMap. Manifests live off the network, as `.ant` files or
-`ant://manifest/...` links that carry the same bytes. The ant CLI writes one for
+`ant://manifest/...` links. A file can embed a root DataMap; a link carries its
+published, shrunk form to keep the link short. Both forms identify the same
+content address, which the core derives from the DataMap. The ant CLI writes one for
 every upload (`ant manifest create`, `ant manifest link`, `ant manifest export`).
 
 The SDK decodes both forms without touching the network and reads any entry
@@ -670,7 +672,14 @@ client reads for an entry, `manifestFileName(entry)` its last path component, an
 `isManifestEntry(value)` tells entries apart from other sources. A file link
 (`ant://<address>`) carries nothing but the address; any query string on it
 is rejected. Entry `size` is a hint from the manifest's creator and decides
-nothing.
+nothing. `knownSize`, when present, is the plaintext size the core derives from
+an embedded root DataMap; public entries and shrunk maps omit it. Downloads and
+readers verify the actual content through the core.
+
+The bundled core reads the finalized ADR-0006 v1 encoding from `ant-client`
+main. Links and files created by the earlier draft builds using the
+self-encryption serde layout must be regenerated with the current CLI; they
+are rejected with `INVALID_SOURCE`.
 
 ## Random-access reads
 

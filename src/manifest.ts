@@ -17,6 +17,8 @@ export interface ManifestEntry {
   readonly path?: string;
   /** Size hint recorded by the creator. Display only; nothing is decided by it. */
   readonly size?: number;
+  /** Plaintext size derived by the core when the entry embeds a root DataMap. */
+  readonly knownSize?: number;
   readonly kind: "embedded" | "public";
   /** Hex content address: the public DataMap address of the file. */
   readonly address: string;
@@ -52,7 +54,7 @@ export interface ManifestOptions extends OperationOptions {
 }
 
 interface CoreManifestEntry {
-  name: string; path?: string | null; size?: number | null; kind: "embedded" | "public"; address: string; dataMap?: Uint8Array;
+  name: string; path?: string | null; size?: number | null; knownSize?: number | null; kind: "embedded" | "public"; address: string; dataMap?: Uint8Array;
 }
 interface CoreTorrent { infoHashV1?: string | null; infoHashV2?: string | null }
 interface CoreManifest { name?: string | null; torrent?: CoreTorrent | null; entries: CoreManifestEntry[] }
@@ -134,6 +136,7 @@ function manifestFromCore(raw: CoreManifest): Manifest {
       name: entry.name,
       ...(entry.path ? { path: entry.path } : {}),
       ...(typeof entry.size === "number" ? { size: entry.size } : {}),
+      ...(typeof entry.knownSize === "number" ? { knownSize: entry.knownSize } : {}),
       kind: entry.kind,
       address: entry.address,
       ...(entry.dataMap ? { dataMap: entry.dataMap } : {}),

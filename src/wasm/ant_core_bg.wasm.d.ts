@@ -1,13 +1,6 @@
 /* tslint:disable */
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
-export const browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
-export const browsernetworkclient_createPointer: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: any, j: number) => any;
-export const browsernetworkclient_getPointer: (a: number, b: number, c: number) => any;
-export const browsernetworkclient_resolvePointer: (a: number, b: number, c: number) => any;
-export const browsernetworkclient_storePaidPointer: (a: number, b: number, c: number, d: number, e: number, f: any) => any;
-export const browsernetworkclient_updatePointer: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: any, j: number) => any;
-export const pointerAddress: (a: number, b: number) => [number, number, number, number];
 export const __wbg_browserfilereader_free: (a: number, b: number) => void;
 export const __wbg_browsernetworkclient_free: (a: number, b: number) => void;
 export const browserfilereader_close: (a: number) => void;
@@ -36,6 +29,12 @@ export const browseriterativelookup_new: (a: number, b: number, c: number, d: nu
 export const browseriterativelookup_queriedPeers: (a: number) => [number, number, number];
 export const browseriterativelookup_results: (a: number) => [number, number, number];
 export const browseriterativelookup_run: (a: number, b: any) => any;
+export const browsernetworkclient_createPointer: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: any, j: number) => any;
+export const browsernetworkclient_getPointer: (a: number, b: number, c: number) => any;
+export const browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
+export const browsernetworkclient_resolvePointer: (a: number, b: number, c: number) => any;
+export const browsernetworkclient_storePaidPointer: (a: number, b: number, c: number, d: number, e: number, f: any) => any;
+export const browsernetworkclient_updatePointer: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: any, j: number) => any;
 export const contentAddress: (a: number, b: number) => [number, number];
 export const decodeManifest: (a: number, b: number) => [number, number, number];
 export const decodeMerklePaymentReceipt: (a: any, b: number, c: number, d: any) => [number, number, number];
@@ -48,6 +47,7 @@ export const parseManifestLink: (a: number, b: number) => [number, number, numbe
 export const parseResponseFrame: (a: number, b: number) => [number, number, number];
 export const parseWebRtcDirectMultiaddr: (a: any) => [number, number, number];
 export const paymentQuoteHash: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
+export const pointerAddress: (a: number, b: number) => [number, number, number, number];
 export const serverAnswerFromEndpoint: (a: any, b: number, c: number) => [number, number, number];
 export const start: () => void;
 export const verifyRecord: (a: number, b: number, c: number, d: number) => [number, number, number, number];
@@ -73,12 +73,12 @@ export const BrotliDecoderMallocUsize: (a: number, b: number) => number;
 export const BrotliDecoderSetParameter: (a: number, b: number, c: number) => void;
 export const BrotliDecoderTakeOutput: (a: number, b: number) => number;
 export const BrotliDecoderVersion: () => number;
-export const wasm_bindgen__convert__closures_____invoke__h6c639ae6ac52cf17: (a: number, b: number, c: any) => [number, number];
-export const wasm_bindgen__convert__closures_____invoke__h1a72669c4838b5a0: (a: number, b: number, c: any, d: any) => void;
-export const wasm_bindgen__convert__closures_____invoke__hcd7391e71cbe7eca: (a: number, b: number, c: any) => any;
-export const wasm_bindgen__convert__closures_____invoke__h52637bfcf62b5ac8: (a: number, b: number, c: any) => void;
-export const wasm_bindgen__convert__closures_____invoke__h52637bfcf62b5ac8_3: (a: number, b: number, c: any) => void;
-export const wasm_bindgen__convert__closures_____invoke__hc4b509476b4504c4: (a: number, b: number) => void;
+export const wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___wasm_bindgen_75c5b43bb1a48c51___JsValue__core_608f92abc48d28da___result__Result_____wasm_bindgen_75c5b43bb1a48c51___JsError___true_: (a: number, b: number, c: any) => [number, number];
+export const wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___js_sys_2246999dfd1b0ec1___Function_fn_wasm_bindgen_75c5b43bb1a48c51___JsValue_____wasm_bindgen_75c5b43bb1a48c51___sys__Undefined___js_sys_2246999dfd1b0ec1___Function_fn_wasm_bindgen_75c5b43bb1a48c51___JsValue_____wasm_bindgen_75c5b43bb1a48c51___sys__Undefined_______true_: (a: number, b: number, c: any, d: any) => void;
+export const wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___wasm_bindgen_75c5b43bb1a48c51___JsValue__js_sys_2246999dfd1b0ec1___Promise__true_: (a: number, b: number, c: any) => any;
+export const wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___web_sys_e5edc227c6570697___features__gen_MessageEvent__MessageEvent______true_: (a: number, b: number, c: any) => void;
+export const wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___web_sys_e5edc227c6570697___features__gen_MessageEvent__MessageEvent______true__3: (a: number, b: number, c: any) => void;
+export const wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke_______true_: (a: number, b: number) => void;
 export const __wbindgen_malloc: (a: number, b: number) => number;
 export const __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
 export const __wbindgen_exn_store: (a: number) => void;

@@ -46,10 +46,17 @@ exactly the latter, and a public entry exactly the former.
 The SDK exports `parseManifestLink(link)` and `decodeManifest(bytes)`, both
 asynchronous because they initialise the WASM module, returning frozen
 `ManifestLink` and `Manifest` values whose entries carry `name`, optional
-`path` and `size`, `kind`, hex `address`, and for embedded entries the
+`path` and `size`, optional `knownSize`, `kind`, hex `address`, and for embedded entries the
 canonical DataMap bytes; a manifest also exposes the torrent info hashes its
 creator recorded, as hex, which the SDK only surfaces. Failures carry the
 `INVALID_SOURCE` code.
+
+The core derives an embedded entry's address by hashing its published DataMap
+form, so a root map and its shrunk map identify the same file. `knownSize` is
+derived from a root map's chunk lengths; it is absent for public references and
+shrunk maps. It is separate from the creator's unverified `size` hint, and is
+not used to bypass verification by downloads or readers. `.ant` files may embed
+roots while links carry the published form to bound their length.
 
 `client.download`, `client.downloadAndSave`, `client.openFile` and
 `client.createMediaSource` accept a `ManifestEntry`. An embedded entry is read
@@ -72,6 +79,9 @@ none, and applications own how files are saved.
 
 - The SDK's WASM must be synced from an ant-client revision that exports the
   manifest functions; older builds lack them.
+- The finalized v1 layout uses packed chunk records owned by the manifest
+  format. Draft links and files using self-encryption's serde layout must be
+  regenerated with the current CLI; the core rejects them.
 - Manifest links are long; the SDK does not shorten or publish them.
 
 ### Neutral / Operational
@@ -84,6 +94,10 @@ none, and applications own how files are saved.
   with 320 DataMap bytes, file links and bare addresses parse, decorated file
   links and malformed payloads are rejected with `INVALID_SOURCE`, bytes
   missing the header are rejected.
+- The ant-client golden v1 fixture decodes with the root map's derived size
+  exposed as `knownSize`, distinct from the creator's `size` on a public entry.
+  Draft DataMap layouts and unsupported format versions reject with
+  `INVALID_SOURCE`.
 - Client tests: an embedded entry routes to the private download and reader
   with the entry's file name and no public DataMap fetch; a public entry
   routes to the public download; an embedded entry without DataMap bytes is
