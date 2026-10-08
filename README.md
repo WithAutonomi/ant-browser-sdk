@@ -681,6 +681,10 @@ main. Links and files created by the earlier draft builds using the
 self-encryption serde layout must be regenerated with the current CLI; they
 are rejected with `INVALID_SOURCE`.
 
+See the [main sync validation](docs/audits/2026-10-08-ant-client-main-sync.md)
+for production WASM and real-browser devnet evidence. The earlier streaming
+timings above were measured with a draft build.
+
 ## Random-access reads
 
 `openFile()` avoids reconstructing the entire file. Each `read()` call can request

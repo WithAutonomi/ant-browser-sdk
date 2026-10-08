@@ -103,3 +103,5 @@ none, and applications own how files are saved.
   routes to the public download; an embedded entry without DataMap bytes is
   rejected.
 - Acceptance requires human engineering review.
+- [Main sync audit](../audits/2026-10-08-ant-client-main-sync.md): production
+  WASM, SDK checks and real Chromium demo against the pinned browser devnet.
