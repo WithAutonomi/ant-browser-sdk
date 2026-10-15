@@ -34,6 +34,8 @@ it("distinguishes optional upload/media/save APIs from basic connections", () =>
   expect(first.operations.connect.available).toBe(true);
   expect(first.operations.uploadBytes.available).toBe(true);
   expect(first.operations.pipeTo.available).toBe(true);
+  // Without a supplied destination, streamAndSave needs the save picker in a secure context.
+  expect(first.operations.streamAndSave.missing).toEqual(["secureContext"]);
   vi.stubGlobal("WritableStream", undefined);
   expect(getBrowserCapabilities().operations.pipeTo.missing).toEqual(["writableStream"]);
   expect(first.operations.uploadBlob.available).toBe(false);

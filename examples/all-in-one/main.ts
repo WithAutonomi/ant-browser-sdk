@@ -1,5 +1,5 @@
 import {
-  AutonomiClient, createManifest, type ClientOptions, type MediaSource, type PrivateFileReference, type UploadOptions,
+  AutonomiClient, createManifest, getBrowserCapabilities, type ClientOptions, type MediaSource, type PrivateFileReference, type UploadOptions,
 } from "@withautonomi/ant-browser-sdk";
 import { createEthersPaymentProvider } from "@withautonomi/ant-browser-sdk/ethers";
 import "../shared/style.css";
@@ -28,10 +28,8 @@ let mediaSource: MediaSource | undefined;
 // A private file is read through its DataMap; the page keeps it only in memory.
 let privateFile: PrivateFileReference | undefined;
 let diskDownload: AbortController | undefined;
-const pickerWindow = window as Window & {
-  showSaveFilePicker?: (options?: { suggestedName?: string }) => Promise<FileSystemFileHandle>;
-};
-if (!pickerWindow.showSaveFilePicker) diskDownloadButton.title = "Direct disk downloads require the File System Access API";
+const canStreamToDisk = getBrowserCapabilities().operations.streamAndSave.available;
+if (!canStreamToDisk) diskDownloadButton.title = "Direct disk downloads require the File System Access API";
 
 connectButton.addEventListener("click", async () => {
   setBusy(connectButton, true);
@@ -46,7 +44,7 @@ connectButton.addEventListener("click", async () => {
     connection.value = `Connected to ${client.connection.bootstrap.peerId.slice(0, 16)}…`;
     uploadButton.disabled = false;
     downloadButton.disabled = false;
-    diskDownloadButton.disabled = !pickerWindow.showSaveFilePicker;
+    diskDownloadButton.disabled = !canStreamToDisk;
     streamButton.disabled = false;
   } catch (error) {
     connection.value = "Connection failed";
@@ -132,7 +130,7 @@ function readTarget(): string | PrivateFileReference {
 }
 
 diskDownloadButton.addEventListener("click", async () => {
-  if (!client || !pickerWindow.showSaveFilePicker) return;
+  if (!client || !canStreamToDisk) return;
   const downloadingClient = client;
   const target = readTarget();
   const controller = new AbortController();
@@ -149,9 +147,12 @@ diskDownloadButton.addEventListener("click", async () => {
   } catch (error) {
     writeError(error);
   } finally {
-    diskDownload = undefined;
-    diskDownloadButton.disabled = !client || !pickerWindow.showSaveFilePicker;
-    cancelDownloadButton.disabled = true;
+    // Reconnecting aborts this download, and a newer one may own the controls by now.
+    if (diskDownload === controller) {
+      diskDownload = undefined;
+      diskDownloadButton.disabled = !client || !canStreamToDisk;
+      cancelDownloadButton.disabled = true;
+    }
   }
 });
 cancelDownloadButton.addEventListener("click", () => diskDownload?.abort());

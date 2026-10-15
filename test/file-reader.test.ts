@@ -83,7 +83,7 @@ describe("PublicFileReader", () => {
     const progress = vi.fn();
     await expect(reader.pipeTo(writable, { start, end: start + 16, onProgress: progress }))
       .resolves.toEqual({ bytesWritten: 16, hash: "ab".repeat(32) });
-    expect(raw.pipeTo).toHaveBeenCalledWith(writable, expect.objectContaining({ start, end: start + 16 }));
+    expect(raw.pipeTo).toHaveBeenCalledWith(expect.any(WritableStream), expect.objectContaining({ start, end: start + 16 }));
     expect(progress).toHaveBeenCalledWith(16, 16);
     reader.close();
   });
@@ -128,6 +128,42 @@ describe("PublicFileReader", () => {
     expect(raw.pipeTo).not.toHaveBeenCalled();
     await expect(reader.pipeTo(new WritableStream())).rejects.toMatchObject({ code: "OPEN_FILE_FAILED", cause: failure });
     expect(reader.closed).toBe(false);
+    reader.close();
+  });
+
+  it("tells destination failures apart from read failures and forwards to the caller's stream", async () => {
+    const full = new DOMException("The disk is full", "QuotaExceededError");
+    const written: Uint8Array[] = [];
+    const raw = {
+      name: "file", size: 3, contentType: "application/octet-stream", readRange: vi.fn(),
+      pipeTo: vi.fn(async (destination: WritableStream<Uint8Array>) => {
+        const writer = destination.getWriter();
+        try {
+          await writer.write(Uint8Array.of(1, 2, 3));
+          await writer.close();
+        } catch (error) {
+          void writer.abort(error).catch(() => undefined);
+          throw error;
+        } finally { writer.releaseLock(); }
+        return { bytesWritten: 3, hash: "ab".repeat(32) };
+      }),
+      close: vi.fn(), free: vi.fn(),
+    };
+    const reader = createPublicFileReader(raw, "ab".repeat(32));
+    const close = vi.fn();
+    const destination = new WritableStream<Uint8Array>({ write: (chunk) => { written.push(chunk); }, close });
+    await expect(reader.pipeTo(destination)).resolves.toEqual({ bytesWritten: 3, hash: "ab".repeat(32) });
+    expect(written).toEqual([Uint8Array.of(1, 2, 3)]);
+    expect(close).toHaveBeenCalledOnce();
+    expect(destination.locked).toBe(false);
+    const failing = new WritableStream<Uint8Array>({ write: () => { throw full; } });
+    await expect(reader.pipeTo(failing)).rejects.toMatchObject({ code: "SAVE_FAILED", cause: full });
+    expect(failing.locked).toBe(false);
+    const locked = new WritableStream<Uint8Array>();
+    const owner = locked.getWriter();
+    await expect(reader.pipeTo(locked)).rejects.toMatchObject({ code: "OPEN_FILE_FAILED" });
+    owner.releaseLock();
+    expect(raw.pipeTo).toHaveBeenCalledTimes(2);
     reader.close();
   });
 

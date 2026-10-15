@@ -57,7 +57,8 @@ export function getBrowserCapabilities(): BrowserCapabilities {
       read: support(...connection),
       stream: support(...connection, "readableStream"),
       pipeTo: support(...connection, "writableStream"),
-      streamAndSave: support(...connection, "writableStream"),
+      // Without a supplied destination, streamAndSave needs the save picker; pipeTo covers supplied ones.
+      streamAndSave: support(...connection, "writableStream", "secureContext", "filePicker"),
       media: support(...connection, "secureContext", "serviceWorker", "messageChannel", "readableStream"),
       saveWithPicker: support("window", "secureContext", "filePicker"),
       saveWithDownload: support("document", "objectUrls"),

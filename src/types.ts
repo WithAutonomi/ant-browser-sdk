@@ -353,8 +353,9 @@ export interface DownloadOptions extends OperationOptions {
   concurrency?: number | "auto";
   /**
    * Maximum bytes in the core's output Uint8Array; checked before content transfer.
-   * This is not a total memory budget: the result's Blob and core caches also use
-   * memory. Use openFile() and reader.pipeTo() for bounded disk streaming.
+   * Defaults to `SDK_LIMITS.defaultDownloadMemoryBytes` (1,000,000,000). This is not
+   * a total memory budget: the result's Blob and core caches also use memory. Use
+   * streamAndSave() or reader.pipeTo() for bounded disk streaming.
    */
   maxMemoryBytes?: number;
 }
@@ -461,7 +462,7 @@ export interface StreamSaveFileHandle {
 }
 export interface StreamSaveOptions extends OperationOptions {
   suggestedName?: string;
-  /** Supply exactly one destination or fileHandle; otherwise opens the browser save picker. */
+  /** Supply at most one of destination and fileHandle; with neither, opens the browser save picker. */
   destination?: WritableStream<Uint8Array>;
   fileHandle?: StreamSaveFileHandle;
 }

@@ -47,9 +47,20 @@ reader until raw calls settle, including cancelled range calls.
 
 `download({ maxMemoryBytes, signal })` forwards both options to Rust. The budget
 limits the output Uint8Array, not total process memory; the Blob snapshot and
-core resources remain additional allocations. downloadAndSave keeps its existing
-buffered return value. Applications use pipeTo for large disk downloads; the
-all-in-one example demonstrates this with an explicit picker and cancel button.
+core resources remain additional allocations. It defaults to
+`SDK_LIMITS.defaultDownloadMemoryBytes`, the former 1,000,000,000-byte cap, so a
+caller that never chose a budget still gets a typed rejection instead of a
+file-sized allocation; larger buffers are an explicit choice. downloadAndSave
+keeps its existing buffered return value. Applications use streamAndSave or pipeTo
+for large disk downloads; the all-in-one example demonstrates this with a cancel
+button.
+
+The SDK hands the core a forwarding stream rather than the caller's destination,
+so a failure raised by the destination's own write or close rejects with
+SAVE_FAILED while read and verification failures keep OPEN_FILE_FAILED. The
+forwarding stream takes the destination's writer only on first use, preserving
+"invalid calls leave it untouched", and adds no buffering: each write still
+awaits the destination.
 
 Media and service-worker positions accept safe JavaScript integers through
 Number.MAX_SAFE_INTEGER. Uploads remain limited by upstream to 1,000,000,000
@@ -61,7 +72,12 @@ maxUploadBytes names it explicitly. No network, DataMap or payment format change
 and `pipeTo` orchestration. It accepts a supplied WritableStream, a file handle or
 a picker invoked before network awaits, returns byte count/hash, closes readers,
 and aborts acquired destinations on failure. It never falls back to full-file
-buffering. `downloadAndSave` keeps its existing buffered contract.
+buffering. `downloadAndSave` keeps its existing buffered contract. A browser save
+picker creates or truncates its file before any network work; when a save that
+opened the picker fails before the core could close (and so commit) the
+destination, the SDK removes that file if it is still empty, once the destination
+is released. Capability reports describe streamAndSave's default picker path;
+applications supplying their own destination check pipeTo.
 
 ## Consequences
 
@@ -76,7 +92,8 @@ buffering. `downloadAndSave` keeps its existing buffered contract.
 - The destination must be a WritableStream; browser file-picker support varies.
 - The resolved map/index still grows with chunk count. Large JS allocations,
   destination quota and browser limits can fail below the safe-integer ceiling.
-- Buffered downloads still need memory proportional to file size.
+- Buffered downloads still need memory proportional to file size, and files over
+  the default budget need an explicit maxMemoryBytes or a streaming save.
 
 ### Neutral / Operational
 

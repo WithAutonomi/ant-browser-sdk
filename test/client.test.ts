@@ -96,6 +96,7 @@ vi.mock("../src/internal/runtime.js", () => {
       mainnetNetworkDefaults: () => ({ id: "mainnet", seeds: state.defaultSeeds, payment: state.hello.payment, rpc_url: "https://rpc.example" }),
       BrowserNetworkClient: NetworkClient,
       encryptPublicFile: state.encrypt,
+      recoverPointerPayment: () => ({ record: Uint8Array.of(1), proof: Uint8Array.of(2) }),
       parseWebRtcDirectMultiaddr: (endpoint: unknown) => {
         if (typeof endpoint !== "string" || !endpoint.includes("/webrtc-direct/")) {
           throw new Error("invalid WebRTC Direct multiaddress");
@@ -285,14 +286,18 @@ describe("AutonomiClient", () => {
 
   it("aborts active operations when the client closes", async () => {
     const client = await AutonomiClient.connect(endpoint);
-    state.networks[0]!.findClosest.mockReturnValue(new Promise(() => undefined));
+    let settle!: (error: Error) => void;
+    state.networks[0]!.findClosest.mockReturnValue(new Promise((_resolve, reject) => { settle = reject; }));
 
     const lookup = client.findClosest();
     client.close();
 
     await expect(lookup).rejects.toMatchObject({ name: "AbortError" });
     expect(state.networks[0]?.closed).toBe(true);
-    expect(state.networks[0]?.freed).toBe(true);
+    // The lookup's Rust future still borrows the handle until the closed transport fails it.
+    expect(state.networks[0]?.freed).toBe(false);
+    settle(new Error("transport closed"));
+    await vi.waitFor(() => expect(state.networks[0]?.freed).toBe(true));
   });
 
   it("forwards custom WASM to staging and terminates its worker on close", async () => {
@@ -1394,6 +1399,105 @@ describe("streamAndSave", () => {
     expect(reader.pipeTo).not.toHaveBeenCalled();
     client.close();
   });
+
+  it("names saves from normalized addresses and never from an empty name", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    const raw = state.networks[0]!;
+    raw.downloadPublicFile.mockResolvedValue({ content: Uint8Array.of(1), hash: file.blake3, file: wireFile,
+      dataMapNode: { peer_id: "aa".repeat(32), native_addresses: [], reliability: 1 } });
+    await client.download(file);
+    raw.openPublicFile.mockImplementation(async () => rawReader());
+    raw.openPrivateFile.mockImplementation(async () => rawReader());
+    const known = await client.streamAndSave(`0X${file.address.toUpperCase()}`, { destination: new WritableStream() });
+    expect(known.name).toBe(file.name);
+    const unnamed = await client.streamAndSave({ dataMap: Uint8Array.of(1), name: "" }, { destination: new WritableStream() });
+    expect(unnamed.name).toBe("autonomi-file");
+    client.close();
+  });
+
+  it("reports a destination write failure as a save failure", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    state.networks[0]!.openPublicFile.mockResolvedValue(rawReader());
+    const full = new DOMException("The disk is full", "QuotaExceededError");
+    const saving = client.streamAndSave(file, { destination: new WritableStream({ write: () => { throw full; } }) });
+    await expect(saving).rejects.toMatchObject({ code: "SAVE_FAILED", cause: full });
+    client.close();
+  });
+
+  it("removes the empty file its own picker created when the save fails before writing", async () => {
+    for (const size of [0, 5]) {
+      const client = await AutonomiClient.connect(endpoint);
+      state.networks.at(-1)!.openPublicFile.mockRejectedValue(new Error("no route to the DataMap"));
+      const remove = vi.fn(async () => undefined);
+      vi.stubGlobal("window", { showSaveFilePicker: async () => ({ name: "movie.mp4", getFile: async () => ({ size }), remove,
+        createWritable: async () => new WritableStream() }) });
+      await expect(client.streamAndSave(file)).rejects.toMatchObject({ code: "OPEN_FILE_FAILED" });
+      if (size === 0) await vi.waitFor(() => expect(remove).toHaveBeenCalledOnce());
+      else {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(remove).not.toHaveBeenCalled();
+      }
+      client.close();
+    }
+  });
+
+  it("removes an empty picked file after a transfer failure once the destination is released", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    const reader = rawReader();
+    reader.pipeTo.mockImplementation(async (destination: WritableStream<Uint8Array>) => {
+      const writer = destination.getWriter();
+      await writer.write(Uint8Array.of(1));
+      void writer.abort(new Error("record unavailable"));
+      writer.releaseLock();
+      throw new Error("record unavailable");
+    });
+    state.networks[0]!.openPublicFile.mockResolvedValue(reader);
+    const remove = vi.fn(async () => undefined);
+    const abort = vi.fn();
+    vi.stubGlobal("window", { showSaveFilePicker: async () => ({ name: "movie.mp4", getFile: async () => ({ size: 0 }), remove,
+      createWritable: async () => new WritableStream({ abort }) }) });
+    await expect(client.streamAndSave(file)).rejects.toMatchObject({ code: "OPEN_FILE_FAILED" });
+    await vi.waitFor(() => expect(remove).toHaveBeenCalledOnce());
+    expect(abort).toHaveBeenCalledOnce();
+    client.close();
+  });
+});
+
+it("removes an empty picked file when a buffered download fails", async () => {
+  const remove = vi.fn(async () => undefined);
+  vi.stubGlobal("window", { showSaveFilePicker: async () => ({ name: "archive.bin", getFile: async () => ({ size: 0 }), remove,
+    createWritable: vi.fn() }) });
+  const client = await AutonomiClient.connect(endpoint);
+  state.networks[0]!.downloadPublicFile.mockRejectedValue(new Error("record unavailable"));
+  await expect(client.downloadAndSave(file)).rejects.toMatchObject({ code: "DOWNLOAD_FAILED" });
+  await vi.waitFor(() => expect(remove).toHaveBeenCalledOnce());
+  client.close();
+});
+
+it("applies the default buffered-download budget", async () => {
+  const client = await AutonomiClient.connect(endpoint);
+  const download = state.networks[0]!.downloadPublicFile;
+  download.mockRejectedValue(new Error("file exceeds the memory budget"));
+  await expect(client.download(file)).rejects.toMatchObject({ code: "DOWNLOAD_FAILED" });
+  expect(download.mock.calls[0]![3]).toMatchObject({ maxMemoryBytes: SDK_LIMITS.defaultDownloadMemoryBytes });
+  expect(SDK_LIMITS.defaultDownloadMemoryBytes).toBe(1_000_000_000);
+  client.close();
+});
+
+it("shuts the transport on close and frees the handle once an in-flight download settles", async () => {
+  const client = await AutonomiClient.connect(endpoint);
+  const raw = state.networks[0]!;
+  let finish!: (error: Error) => void;
+  raw.downloadPublicFile.mockReturnValue(new Promise((_resolve, reject) => { finish = reject; }));
+  const pending = client.download(file);
+  await vi.waitFor(() => expect(raw.downloadPublicFile).toHaveBeenCalledOnce());
+  client.close();
+  await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  expect(raw.closed).toBe(true);
+  expect(raw.freed).toBe(false);
+  finish(new Error("transport closed"));
+  await vi.waitFor(() => expect(raw.freed).toBe(true));
+  await expect(client.findClosest()).rejects.toMatchObject({ code: "CLIENT_CLOSED" });
 });
 
 
@@ -1407,10 +1511,31 @@ it("retains the network until an in-flight pointer read settles after cancellati
   controller.abort();
   await expect(pending).rejects.toMatchObject({ name: "AbortError" });
   client.close();
+  // A read needs no transport after close; only the borrowed handle waits.
+  expect(raw.closed).toBe(true);
   expect(raw.freed).toBe(false);
   release(null);
   await vi.waitFor(() => expect(raw.freed).toBe(true));
+});
+
+it("closing before the wallet is invoked stops a pointer write without payment", async () => {
+  const payment: PaymentProvider = { pay: vi.fn() };
+  const client = await AutonomiClient.connect(endpoint, { payment });
+  const raw = state.networks[0]!;
+  let release!: () => void;
+  const checkpoint = vi.fn(() => new Promise<void>(resolve => { release = resolve; }));
+  raw.createPointer.mockImplementation(async (_seed, _target, _kind, network, pay, _paid, prepared) => {
+    await prepared("signed plan");
+    return pay(network, [{ quote: {}, quoteHash: "aa", rewardsAddress: "bb", amount: "1" }]);
+  });
+  const pending = client.createPointer({ ownerSeed: new Uint8Array(32), kind: "chunk", target: file.address, onCheckpoint: checkpoint });
+  await vi.waitFor(() => expect(checkpoint).toHaveBeenCalledOnce());
+  client.close();
   expect(raw.closed).toBe(true);
+  await expect(pending).rejects.toMatchObject({ name: "AbortError", checkpoint: undefined });
+  release();
+  expect(payment.pay).not.toHaveBeenCalled();
+  await vi.waitFor(() => expect(raw.freed).toBe(true));
 });
 
 it("settles and persists a submitted pointer payment when the client closes", async () => {
@@ -1438,5 +1563,5 @@ it("settles and persists a submitted pointer payment when the client closes", as
   await expect(pending).resolves.toMatchObject({ pointer: { counter: "0" } });
   expect(raw.closed).toBe(true);
   expect(raw.freed).toBe(true);
-  expect(checkpoint.mock.calls.at(-1)![0]).toContain('"proof":[2]');
+  expect(JSON.parse(checkpoint.mock.calls.at(-1)![0])).toMatchObject({ paid: { record: "AQ==", proof: "Ag==" } });
 });

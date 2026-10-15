@@ -586,10 +586,13 @@ admission when eight-response windows show sustained GET CPU load above half the
 event loop and repeated processing or scheduling stalls above 50 ms. Isolated
 slow responses and background timer clamping do not trigger that reduction. These
 bounds include speculative GETs and can keep actual concurrency below your ceiling.
-Downloads and media reads no longer have a fixed 1 GB cap; byte positions are
-safe JavaScript integers, including positions beyond 4 GiB. Complete downloads
-remain memory-bound. Pass `maxMemoryBytes` to reject a file larger than your
-output-buffer budget before content transfer:
+Streaming downloads and media reads no longer have a fixed 1 GB cap; byte
+positions are safe JavaScript integers, including positions beyond 4 GiB.
+Complete downloads remain memory-bound, so `download()` and `downloadAndSave()`
+reject a file larger than `maxMemoryBytes` before content transfer. It defaults
+to `SDK_LIMITS.defaultDownloadMemoryBytes` (1,000,000,000 bytes, the former cap).
+Pass a smaller budget to suit your application, a larger one to buffer bigger
+files deliberately, or use `streamAndSave()` to write them to disk:
 
 ```ts
 const result = await client.download(address, {
@@ -675,6 +678,8 @@ try {
 
 Options are passed as the second argument to `pipeTo`. Optional `start` and
 `end` select a half-open range; the returned BLAKE3 covers exactly those bytes.
+A failed read or verification rejects with `OPEN_FILE_FAILED`; an error raised by
+the destination's own write or close rejects with `SAVE_FAILED`, its cause intact.
 The core fetches concurrently and writes in order, awaiting each write and holding
 up to 32 MiB of pipeline plaintext, with at most 4 MiB per write. The resident
 DataMap/index, shared cache and transport reservations are additional memory.
@@ -805,17 +810,32 @@ const target = await client.resolvePointer(address);
 
 Each write requires `onCheckpoint`; resolve it only after durable storage. Keep
 pending checkpoints across reloads and serialize writes for each owner in your
-application. The SDK checkpoints the original signed state and verified plan
-before calling the wallet, then retains broadcast evidence, the receipt and paid
-proof. A rejected callback after payment does not stop Rust from storing the paid
-state; `PointerError.checkpoint` retains the latest evidence if persistence failed.
-Retain that checkpoint even if the original operation was cancelled or failed.
-Unresponsive persistence callbacks time out after 30 seconds; queued writes keep
-their order, and the error retains the full checkpoint.
+application. Every checkpoint is the complete current state, so store each one
+over the previous one for that write. The SDK first persists the original signed
+state, verified plan and quotes immediately before calling the wallet, then
+retains broadcast evidence and, once Rust has accepted the receipt for that plan,
+the receipt with the paid record and proof. Calls never overlap: a state produced
+while a write is in progress is coalesced into the next call.
 
-`resumePointer()` uses the client's payment provider, or an explicit `payment`
+`PointerError.checkpoint` is set once the wallet may have been asked to pay. It
+holds the latest evidence even if persisting it failed; retain it even if the
+operation was cancelled. When it is `undefined`, no payment was requested: delete
+any checkpoint you persisted for that attempt and write again. After payment, a
+rejected or unresponsive callback (timed out after 30 seconds) does not stop Rust
+from storing the paid state, and a write the network stored resolves normally;
+delete its checkpoint then. A write settles only after its last checkpoint call
+has finished or timed out.
+
+If the wallet reported a broadcast but its own receipt poll failed, the write
+observes that transaction again through the submission's `wait()`. Receipts are
+checked by Rust against the plan before they are journaled; a rejected receipt's
+transaction hashes are kept as evidence so recovery can observe them again.
+
+`resumePointer()` first re-observes broadcasts reported on this page through their
+`wait()`, then uses the client's payment provider, or an explicit `payment`
 override, only through its observation-only `recover()` method. Ethers and Wagmi
-adapters support this. A paid proof needs no wallet. Recovery never signs a new
+adapters support this. A paid proof needs no wallet; it is stored even if
+persisting the recovered proof fails. Recovery never signs a new
 state, refreshes quotes or calls `pay()`. If a crash hid the transaction hash,
 reconcile the original wallet externally; an empty journal is not proof that no
 transaction was submitted. Do not retry a fresh write while payment is unresolved.
@@ -840,9 +860,11 @@ their numeric `kindTag`.
 
 Pointer operations accept `signal` and `onProgress`. Cancellation before payment
 prevents submission. After submission, the write continues observing settlement,
-persisting evidence and storing the paid state; client closure waits for that work
-before freeing the underlying network. This cannot outlive page termination;
-resume from the durable checkpoint on the next page load.
+persisting evidence and storing the paid state. `client.close()` shuts the
+transport immediately unless such a write is still storing its paid state, in
+which case it waits for that write; reads and other operations are cancelled. This
+cannot outlive page termination; resume from the durable checkpoint on the next
+page load.
 
 ## Streaming saves
 
@@ -865,8 +887,12 @@ uses the core's bounded pipeline, closes its reader and destination on success,
 and aborts acquired destinations on failure/cancellation. Cancellation during close
 may arrive after the file has committed. It returns byte count and BLAKE3 without
 a whole-file Blob. Without a supplied destination or browser save picker, it
-rejects with `SAVE_FAILED`. `downloadAndSave()` retains its buffered return value
-and ordinary browser-download fallback.
+rejects with `SAVE_FAILED`. Read and verification failures reject with
+`OPEN_FILE_FAILED`; destination write failures, such as a full disk, with
+`SAVE_FAILED`. If a save that opened the picker fails before the file is written,
+the empty file the picker created is removed where the browser supports
+`FileSystemHandle.remove()`; `downloadAndSave()` does the same. `downloadAndSave()`
+retains its buffered return value and ordinary browser-download fallback.
 
 ## Random-access reads
 
@@ -1087,21 +1113,24 @@ console.log(SDK_LIMITS.maxFileBytes, SDK_LIMITS.maxRangeBytes);
 | `maxRangeBytes` | 4 MiB per read or stream chunk |
 | `defaultStreamChunkBytes` | 1 MiB |
 | `downloadConcurrency.min` / `.max` / `.default` | 1 / 256 / `"auto"` |
+| `defaultDownloadMemoryBytes` | 1,000,000,000 bytes, the default buffered-download `maxMemoryBytes` |
 | `mediaMaxFileBytes` | `Number.MAX_SAFE_INTEGER` (9,007,199,254,740,991) |
 
 The limits and capability reports are immutable. Unsupported input sizes are
 rejected before copying upload byte arrays or staging Blobs. Reads learn the
 verified size from the core; media setup checks it before registering a worker
 or creating a URL. Uploads retain the upstream 1 GB cap. Buffered downloads need
-sufficient memory; disk streams need destination capacity, and upload staging
-needs quota for at least one encrypted record.
+sufficient memory and default to a 1 GB output budget; disk streams need
+destination capacity, and upload staging needs quota for at least one encrypted
+record.
 
 `getBrowserCapabilities()` safely runs outside a browser and makes no network
 requests, allocations of workers, or permission prompts. `features` reports each
 API's presence. `operations` reports requirements for `connect`, `uploadBytes`,
 `uploadBlob`, `download`, `read`, `stream`, `pipeTo`, `streamAndSave`, `media`, `saveWithPicker`, and
-`saveWithDownload`, including missing features for each. Call it again to get a
-fresh snapshot.
+`saveWithDownload`, including missing features for each. `streamAndSave` reports
+its default path, which opens the save picker; with your own `destination` or
+`fileHandle`, check `pipeTo` instead. Call it again to get a fresh snapshot.
 
 `available` means required APIs are present. It does not probe permissions,
 storage quota, CSP, media codecs, network access, or wallet availability. In

@@ -6,7 +6,8 @@ import { corePublicFile, publicFileFromCore } from "../src/internal/protocol.js"
 import { encryptPublicFile, parseBrowserManifest } from "../src/wasm/ant_core.js";
 import * as wasmBindings from "../src/wasm/ant_core.js";
 import { AutonomiClient, getNetworkDefaults, initializeWasm, SDK_LIMITS } from "../src/index.js";
-import { getBindings } from "../src/internal/runtime.js";
+import { getBindings, type RawNetworkClient } from "../src/internal/runtime.js";
+import { resumePointer } from "../src/pointers.js";
 
 describe("packaged Rust/WASM boundary", () => {
   it("ships the network client without standalone node clients or transport test seams", async () => {
@@ -168,6 +169,26 @@ it("rebuilds the exact paid pointer proof from a real devnet checkpoint without 
     expect(Array.from(recovered.proof)).toEqual(fixture.paid.proof);
     expect(fetch).not.toHaveBeenCalled();
   } finally { fetch.mockRestore(); }
+});
+
+it("resumes a real devnet checkpoint through the packaged core and stores the exact paid proof", async () => {
+  await initializeWasm(await readFile(new URL("../src/wasm/ant_core_bg.wasm", import.meta.url)));
+  const fixture = JSON.parse(gunzipSync(await readFile(new URL("./fixtures/pointer-payment-devnet.json.gz", import.meta.url))).toString());
+  const network = { chainId: 31337, paymentTokenAddress: `0x${"11".repeat(20)}`, paymentVaultAddress: `0x${"22".repeat(20)}` };
+  const [[quoteHash, transactionHash]] = Object.entries(fixture.receipt.transactionHashes as Record<string, string>) as [[string, string]];
+  const quotes = [{ quote: {}, quoteHash, rewardsAddress: `0x${"33".repeat(20)}`, amount: fixture.receipt.totalAmount }];
+  const checkpoint = JSON.stringify({ version: 1, network, prepared: fixture.prepared, quotes, submissions: [{ transactionHash, totalAmount: fixture.receipt.totalAmount }] });
+  const storePaidPointer = vi.fn(async () => ({ address: "ab".repeat(32), counter: "0", kind: "chunk", kindTag: 0, target: "cd".repeat(32), stateId: "ef".repeat(32) }));
+  const persisted: string[] = [];
+  await resumePointer({ storePaidPointer } as unknown as RawNetworkClient, network, checkpoint, {
+    payment: { pay: vi.fn(), recover: vi.fn(async () => fixture.receipt) },
+    onCheckpoint: (value) => { persisted.push(value); },
+  }, vi.fn());
+  const [record, proof] = storePaidPointer.mock.calls[0] as unknown as [Uint8Array, Uint8Array];
+  expect(Array.from(record)).toEqual(fixture.paid.record);
+  expect(Array.from(proof)).toEqual(fixture.paid.proof);
+  // Base64 keeps the paid proof far smaller than a JSON byte array.
+  expect(persisted.at(-1)!.length).toBeLessThan(checkpoint.length + JSON.stringify(fixture.paid).length / 2);
 });
 
 it("rejects altered pointer signatures, mismatched payment plans and missing transactions", async () => {
