@@ -1,11 +1,11 @@
 export type BrowserFeature =
   | "window" | "secureContext" | "webAssembly" | "webRtc" | "crypto"
-  | "worker" | "indexedDb" | "readableStream" | "blob" | "serviceWorker"
+  | "worker" | "indexedDb" | "readableStream" | "writableStream" | "blob" | "serviceWorker"
   | "messageChannel" | "filePicker" | "document" | "objectUrls";
 
 export type BrowserOperation =
   | "connect" | "uploadBytes" | "uploadBlob" | "download" | "read" | "stream"
-  | "media" | "saveWithPicker" | "saveWithDownload";
+  | "pipeTo" | "media" | "saveWithPicker" | "saveWithDownload";
 
 export interface CapabilitySupport {
   /** Required APIs are present. Permissions, quota, CSP, codecs, and network reachability are not probed. */
@@ -29,6 +29,7 @@ export function getBrowserCapabilities(): BrowserCapabilities {
     worker: () => typeof Worker === "function",
     indexedDb: () => typeof indexedDB === "object" && indexedDB !== null && typeof indexedDB.open === "function",
     readableStream: () => typeof ReadableStream === "function",
+    writableStream: () => typeof WritableStream === "function",
     blob: () => typeof Blob === "function",
     serviceWorker: () => typeof navigator === "object" && navigator !== null && !!navigator.serviceWorker,
     messageChannel: () => typeof MessageChannel === "function",
@@ -55,6 +56,7 @@ export function getBrowserCapabilities(): BrowserCapabilities {
       download: support(...connection, "blob"),
       read: support(...connection),
       stream: support(...connection, "readableStream"),
+      pipeTo: support(...connection, "writableStream"),
       media: support(...connection, "secureContext", "serviceWorker", "messageChannel", "readableStream"),
       saveWithPicker: support("window", "secureContext", "filePicker"),
       saveWithDownload: support("document", "objectUrls"),

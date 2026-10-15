@@ -417,7 +417,7 @@ describe("AutonomiClient", () => {
     raw.downloadPrivateFile.mockResolvedValue({ content: Uint8Array.of(1), hash: file.blake3,
       file: { ...wireFile, name: "secret.txt", address: "ab".repeat(32) } });
     const downloaded = await client.download(privateFile, { concurrency: 3 });
-    expect(raw.downloadPrivateFile).toHaveBeenCalledWith({ data_map: dataMap, name: "secret.txt", content_type: "text/plain" }, 3, expect.any(Function));
+    expect(raw.downloadPrivateFile).toHaveBeenCalledWith({ data_map: dataMap, name: "secret.txt", content_type: "text/plain" }, 3, expect.any(Function), expect.objectContaining({ signal: expect.any(AbortSignal) }));
     expect(raw.downloadPublicFile).not.toHaveBeenCalled();
     expect(downloaded.file).toMatchObject({ name: "secret.txt", size: file.size, blake3: file.blake3, dataMap });
     expect(downloaded.file).not.toHaveProperty("address");
@@ -439,7 +439,7 @@ describe("AutonomiClient", () => {
     raw.downloadPrivateFile.mockResolvedValueOnce({ content: Uint8Array.of(1), hash: file.blake3,
       file: { ...wireFile, name: "private-file-0123456789abcdef.bin" } });
     const bare = await client.download({ dataMap });
-    expect(raw.downloadPrivateFile).toHaveBeenLastCalledWith({ data_map: dataMap, name: "", content_type: "" }, undefined, expect.any(Function));
+    expect(raw.downloadPrivateFile).toHaveBeenLastCalledWith({ data_map: dataMap, name: "", content_type: "" }, undefined, expect.any(Function), expect.objectContaining({ signal: expect.any(AbortSignal) }));
     expect(bare.file).toMatchObject({ name: "private-file-0123456789abcdef.bin", dataMap });
 
     await expect(client.download({ ...privateFile, dataMap: new Uint8Array() })).rejects.toMatchObject({ code: "INVALID_SOURCE" });
@@ -457,13 +457,13 @@ describe("AutonomiClient", () => {
       file: { ...wireFile, name: "a.jpg", address: "ab".repeat(32) } });
     await client.download(embedded, { concurrency: 2 });
     // The entry's last path component names the file; no DataMap fetch happens.
-    expect(raw.downloadPrivateFile).toHaveBeenCalledWith({ data_map: dataMap, name: "a.jpg", content_type: "" }, 2, expect.any(Function));
+    expect(raw.downloadPrivateFile).toHaveBeenCalledWith({ data_map: dataMap, name: "a.jpg", content_type: "" }, 2, expect.any(Function), expect.objectContaining({ signal: expect.any(AbortSignal) }));
     expect(raw.downloadPublicFile).not.toHaveBeenCalled();
 
     raw.downloadPublicFile.mockResolvedValue({ content: Uint8Array.of(1), hash: file.blake3, file: wireFile,
       dataMapNode: { peer_id: "77".repeat(32), native_addresses: [], reliability: 1 } });
     await client.download(publicEntry);
-    expect(raw.downloadPublicFile).toHaveBeenCalledWith("cd".repeat(32), undefined, expect.any(Function));
+    expect(raw.downloadPublicFile).toHaveBeenCalledWith("cd".repeat(32), undefined, expect.any(Function), expect.objectContaining({ signal: expect.any(AbortSignal) }));
 
     raw.openPrivateFile.mockResolvedValue({ size: 12, name: "a.jpg", contentType: "image/jpeg",
       readRange: vi.fn(), close: vi.fn(), free: vi.fn() });
@@ -1133,7 +1133,7 @@ it("translates public file metadata into the existing wire format for downloads 
   const rawNode = { peer_id: "77".repeat(32), native_addresses: ["/native"], reliability: 1, webrtc_direct: { multiaddr: endpoint } };
   raw.downloadPublicFile.mockResolvedValue({ content: Uint8Array.of(1), hash: file.blake3, file: wireFile, dataMapNode: rawNode });
   const downloaded = await client.download(file);
-  expect(raw.downloadPublicFile).toHaveBeenCalledWith({ address: file.address, name: file.name, content_type: file.contentType }, undefined, expect.any(Function));
+  expect(raw.downloadPublicFile).toHaveBeenCalledWith({ address: file.address, name: file.name, content_type: file.contentType }, undefined, expect.any(Function), expect.objectContaining({ signal: expect.any(AbortSignal) }));
   expect(downloaded.file).toEqual(file);
   expect(downloaded.dataMapNode).toEqual({ peerId: rawNode.peer_id, nativeAddresses: ["/native"], reliability: 1, webrtcDirect: { multiaddr: endpoint } });
   expect(downloaded.file).not.toHaveProperty("content_type");
@@ -1172,7 +1172,7 @@ it("accepts the advertised concurrency bounds and rejects values outside them", 
     dataMapNode: { peer_id: "aa".repeat(32), native_addresses: [], reliability: 1 } });
   for (const concurrency of [SDK_LIMITS.downloadConcurrency.min, SDK_LIMITS.downloadConcurrency.max]) {
     await client.download(file, { concurrency });
-    expect(download).toHaveBeenLastCalledWith({ address: file.address, name: file.name, content_type: file.contentType }, concurrency, expect.any(Function));
+    expect(download).toHaveBeenLastCalledWith({ address: file.address, name: file.name, content_type: file.contentType }, concurrency, expect.any(Function), expect.objectContaining({ signal: expect.any(AbortSignal) }));
   }
   for (const concurrency of [SDK_LIMITS.downloadConcurrency.min - 1, SDK_LIMITS.downloadConcurrency.max + 1, 1.5, NaN, Infinity]) {
     await expect(client.download(file, { concurrency })).rejects.toMatchObject({ code: "DOWNLOAD_FAILED" });
@@ -1180,7 +1180,7 @@ it("accepts the advertised concurrency bounds and rejects values outside them", 
   expect(download).toHaveBeenCalledTimes(2);
   for (const options of [{}, { concurrency: "auto" as const }]) {
     await client.download(file, options);
-    expect(download).toHaveBeenLastCalledWith({ address: file.address, name: file.name, content_type: file.contentType }, undefined, expect.any(Function));
+    expect(download).toHaveBeenLastCalledWith({ address: file.address, name: file.name, content_type: file.contentType }, undefined, expect.any(Function), expect.objectContaining({ signal: expect.any(AbortSignal) }));
   }
   client.close();
 });
@@ -1191,7 +1191,43 @@ it("derives read size from the DataMap rather than a supplied descriptor", async
   download.mockResolvedValue({ content: Uint8Array.of(1), hash: file.blake3, file: wireFile,
     dataMapNode: { peer_id: "aa".repeat(32), native_addresses: [], reliability: 1 } });
   await client.download({ ...file, size: Number.MAX_SAFE_INTEGER, chunks: [], blake3: "invalid hint" });
-  expect(download).toHaveBeenCalledWith({ address: file.address, name: file.name, content_type: file.contentType }, undefined, expect.any(Function));
+  expect(download).toHaveBeenCalledWith({ address: file.address, name: file.name, content_type: file.contentType }, undefined, expect.any(Function), expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  client.close();
+});
+
+it("forwards memory budgets and cancellation to both core download paths", async () => {
+  const client = await AutonomiClient.connect(endpoint);
+  const raw = state.networks[0]!;
+  for (const [source, download] of [[file, raw.downloadPublicFile], [{ dataMap: Uint8Array.of(1) }, raw.downloadPrivateFile]] as const) {
+    let coreSignal!: AbortSignal;
+    download.mockImplementation((_file, _cap, _progress, options) => {
+      expect(options.maxMemoryBytes).toBe(64 * 1024 * 1024);
+      coreSignal = options.signal;
+      return new Promise((_resolve, reject) => coreSignal.addEventListener("abort", () => reject(coreSignal.reason), { once: true }));
+    });
+    const controller = new AbortController();
+    const pending = client.download(source, { maxMemoryBytes: 64 * 1024 * 1024, signal: controller.signal });
+    controller.abort("cancel core transfer");
+    await expect(pending).rejects.toBe("cancel core transfer");
+    expect(coreSignal.aborted).toBe(true);
+    expect(client.closed).toBe(false);
+  }
+  raw.downloadPublicFile.mockClear();
+  for (const maxMemoryBytes of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    await expect(client.download(file, { maxMemoryBytes })).rejects.toMatchObject({ code: "DOWNLOAD_FAILED" });
+  }
+  expect(raw.downloadPublicFile).not.toHaveBeenCalled();
+  client.close();
+});
+
+it("snapshots only the downloaded byte view in its Blob", async () => {
+  const client = await AutonomiClient.connect(endpoint);
+  const bytes = Uint8Array.of(9, 1, 2, 3, 8).subarray(1, 4);
+  state.networks[0]!.downloadPublicFile.mockResolvedValue({ content: bytes, hash: file.blake3, file: wireFile,
+    dataMapNode: { peer_id: "aa".repeat(32), native_addresses: [], reliability: 1 } });
+  const result = await client.download(file);
+  bytes.fill(0);
+  expect(new Uint8Array(await result.blob.arrayBuffer())).toEqual(Uint8Array.of(1, 2, 3));
   client.close();
 });
 

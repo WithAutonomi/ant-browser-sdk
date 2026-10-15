@@ -8,13 +8,14 @@ import initAntCore, {
   parseManifestLink,
 } from "../wasm/ant_core.js";
 import { AutonomiError } from "../errors.js";
-import type { WasmSource } from "../types.js";
+import type { PipeOptions, PipeResult, WasmSource } from "../types.js";
 
 export interface RawFileReader {
   readonly size: number;
   readonly contentType: string;
   readonly name: string;
   readRange(start: number, length: number): Promise<Uint8Array>;
+  pipeTo(destination: WritableStream<Uint8Array>, options?: PipeOptions): Promise<PipeResult>;
   close(): void;
   free(): void;
 }
@@ -23,6 +24,11 @@ export interface RawFileReader {
 export interface RawFileReaderOptions {
   /** Treat every read as sequential and fetch ahead of it, as media playback needs. */
   streaming?: boolean;
+}
+
+export interface RawDownloadOptions {
+  maxMemoryBytes?: number;
+  signal?: AbortSignal;
 }
 
 export interface RawNetworkClient {
@@ -37,6 +43,7 @@ export interface RawNetworkClient {
     file: unknown,
     concurrency: number | undefined,
     onProgress?: (message: string) => void,
+    options?: RawDownloadOptions,
   ): Promise<unknown>;
   openPublicFile(
     file: unknown,
@@ -47,6 +54,7 @@ export interface RawNetworkClient {
     file: unknown,
     concurrency: number | undefined,
     onProgress?: (message: string) => void,
+    options?: RawDownloadOptions,
   ): Promise<unknown>;
   openPrivateFile(
     file: unknown,

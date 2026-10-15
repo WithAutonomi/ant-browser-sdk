@@ -33,6 +33,9 @@ it("distinguishes optional upload/media/save APIs from basic connections", () =>
   const first = getBrowserCapabilities();
   expect(first.operations.connect.available).toBe(true);
   expect(first.operations.uploadBytes.available).toBe(true);
+  expect(first.operations.pipeTo.available).toBe(true);
+  vi.stubGlobal("WritableStream", undefined);
+  expect(getBrowserCapabilities().operations.pipeTo.missing).toEqual(["writableStream"]);
   expect(first.operations.uploadBlob.available).toBe(false);
   expect(first.operations.saveWithPicker.missing).toEqual(["secureContext"]);
   vi.stubGlobal("Worker", worker);

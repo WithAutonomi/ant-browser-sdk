@@ -18,6 +18,8 @@ const connectButton = element<HTMLButtonElement>("connect");
 const uploadButton = element<HTMLButtonElement>("upload");
 const saveDataMapButton = element<HTMLButtonElement>("save-datamap");
 const downloadButton = element<HTMLButtonElement>("download");
+const diskDownloadButton = element<HTMLButtonElement>("download-to-disk");
+const cancelDownloadButton = element<HTMLButtonElement>("cancel-download");
 const streamButton = element<HTMLButtonElement>("stream");
 const media = element<HTMLVideoElement>("media");
 
@@ -25,10 +27,16 @@ let client: AutonomiClient | undefined;
 let mediaSource: MediaSource | undefined;
 // A private file is read through its DataMap; the page keeps it only in memory.
 let privateFile: PrivateFileReference | undefined;
+let diskDownload: AbortController | undefined;
+const pickerWindow = window as Window & {
+  showSaveFilePicker?: (options?: { suggestedName?: string }) => Promise<FileSystemFileHandle>;
+};
+if (!pickerWindow.showSaveFilePicker) diskDownloadButton.title = "Direct disk downloads require the File System Access API";
 
 connectButton.addEventListener("click", async () => {
   setBusy(connectButton, true);
   try {
+    diskDownload?.abort();
     client?.close();
     const options: ClientOptions = {
       onProgress: ({ operation, message }) => write(`[${operation}] ${message}`),
@@ -38,6 +46,7 @@ connectButton.addEventListener("click", async () => {
     connection.value = `Connected to ${client.connection.bootstrap.peerId.slice(0, 16)}…`;
     uploadButton.disabled = false;
     downloadButton.disabled = false;
+    diskDownloadButton.disabled = !pickerWindow.showSaveFilePicker;
     streamButton.disabled = false;
   } catch (error) {
     connection.value = "Connection failed";
@@ -105,6 +114,41 @@ address.addEventListener("input", () => {
 function readTarget(): string | PrivateFileReference {
   return privateFile ?? address.value.trim();
 }
+
+diskDownloadButton.addEventListener("click", async () => {
+  if (!client || !pickerWindow.showSaveFilePicker) return;
+  const downloadingClient = client;
+  const target = readTarget();
+  const controller = new AbortController();
+  diskDownload = controller;
+  diskDownloadButton.disabled = true;
+  cancelDownloadButton.disabled = false;
+  let reader;
+  try {
+    // Open the picker during the click's activation, before any network await.
+    const handle = await pickerWindow.showSaveFilePicker({ suggestedName: privateFile?.name ?? "autonomi-file" });
+    reader = await downloadingClient.openFile(target, { signal: controller.signal });
+    const writable = await handle.createWritable();
+    if (controller.signal.aborted) {
+      await writable.abort(controller.signal.reason);
+      throw controller.signal.reason;
+    }
+    const result = await reader.pipeTo(writable, {
+      signal: controller.signal,
+      onProgress: (written, total) => write(`Saved ${written}/${total} bytes`),
+    });
+    write(`Verified and saved ${result.bytesWritten} bytes to ${handle.name}; BLAKE3 ${result.hash}`);
+  } catch (error) {
+    writeError(error);
+  } finally {
+    reader?.close();
+    diskDownload = undefined;
+    diskDownloadButton.disabled = !client || !pickerWindow.showSaveFilePicker;
+    cancelDownloadButton.disabled = true;
+  }
+});
+cancelDownloadButton.addEventListener("click", () => diskDownload?.abort());
+window.addEventListener("beforeunload", () => diskDownload?.abort());
 
 downloadButton.addEventListener("click", async () => {
   if (!client) return;

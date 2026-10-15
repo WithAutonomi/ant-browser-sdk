@@ -3,6 +3,7 @@ import { expectTypeOf, it } from "vitest";
 import type {
   AutonomiClient, PublicFileReader, NetworkConnectionOptions, NetworkDefaults, getNetworkDefaults,
   PrivateDownloadResult, PrivateFile, PrivateFileReference, PublicFile, UploadResult, DownloadResult,
+  PipeOptions, PipeResult,
 } from "@withautonomi/ant-browser-sdk";
 
 it("types private uploads and reads by the DataMap their holder keeps", () => {
@@ -35,6 +36,13 @@ it("exposes readers through openFile without a public constructor or factory", (
   expectTypeOf<typeof PublicFileReader>().not.toMatchTypeOf<new (...args: never[]) => unknown>();
   expectTypeOf<keyof typeof PublicFileReader>().toEqualTypeOf<"prototype">();
   expectTypeOf<"createPublicFileReader">().not.toMatchTypeOf<keyof typeof import("@withautonomi/ant-browser-sdk")>();
+});
+
+it("types writable streaming and output-memory budgets in the published declarations", () => {
+  const pipe = (reader: PublicFileReader, destination: WritableStream<Uint8Array>, options: PipeOptions) => reader.pipeTo(destination, options);
+  expectTypeOf<Awaited<ReturnType<typeof pipe>>>().toEqualTypeOf<PipeResult>();
+  const download = (client: AutonomiClient, address: string) => client.download(address, { maxMemoryBytes: 1024 });
+  expectTypeOf<Awaited<ReturnType<typeof download>>>().toEqualTypeOf<DownloadResult>();
 });
 
 it("exports camelCase metadata across the published API", () => {

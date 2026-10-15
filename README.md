@@ -586,8 +586,23 @@ admission when eight-response windows show sustained GET CPU load above half the
 event loop and repeated processing or scheduling stalls above 50 ms. Isolated
 slow responses and background timer clamping do not trigger that reduction. These
 bounds include speculative GETs and can keep actual concurrency below your ceiling.
-Complete downloads are memory-bound. Use a random-access reader for large media
-or range-oriented formats.
+Downloads and media reads no longer have a fixed 1 GB cap; byte positions are
+safe JavaScript integers, including positions beyond 4 GiB. Complete downloads
+remain memory-bound. Pass `maxMemoryBytes` to reject a file larger than your
+output-buffer budget before content transfer:
+
+```ts
+const result = await client.download(address, {
+  maxMemoryBytes: 256 * 1024 * 1024,
+  signal: controller.signal,
+});
+```
+
+This budget covers the returned Uint8Array only. The Blob snapshot, resolved
+DataMap, caches and transport buffers need additional memory. Allocation can
+still fail below the budget. Cancellation stops the core download as well as the
+SDK caller; admitted transport responses may still drain to preserve the session.
+Concurrent reads on one client share in-flight fetches of the same chunk.
 
 For each record, the Rust client can try known or newly discovered candidates
 while discovery continues, accepting only verified content. Early misses do not
@@ -629,6 +644,49 @@ fetched:
 await client.downloadAndSave(address, { fileHandle });
 await saveDownload(download, { fileHandle });
 ```
+
+### Stream directly to disk
+
+`downloadAndSave()` retains its buffered bytes/Blob result. For large files, open
+a reader and use `pipeTo()` with a browser `WritableStream`, including a
+`FileSystemWritableFileStream`. Obtain a destination from a user action before
+awaiting network work; feature-detect `showSaveFilePicker` in your application:
+
+```ts
+// Inside a click handler in a browser supporting the File System Access API:
+const handle = await window.showSaveFilePicker({ suggestedName: "archive.bin" });
+const reader = await client.openFile(address, { signal: controller.signal });
+try {
+  const writable = await handle.createWritable();
+  if (controller.signal.aborted) {
+    await writable.abort(controller.signal.reason);
+    throw controller.signal.reason;
+  }
+  // pipeTo owns the destination once called; it closes or aborts it.
+  const result = await reader.pipeTo(writable, {
+    signal: controller.signal,
+    onProgress: (bytesWritten, totalBytes) => console.log(bytesWritten, totalBytes),
+  });
+  console.log(result.bytesWritten, result.hash);
+} finally {
+  reader.close();
+}
+```
+
+Options are passed as the second argument to `pipeTo`. Optional `start` and
+`end` select a half-open range; the returned BLAKE3 covers exactly those bytes.
+The core fetches concurrently and writes in order, awaiting each write and holding
+up to 32 MiB of pipeline plaintext, with at most 4 MiB per write. The resident
+DataMap/index, shared cache and transport reservations are additional memory.
+The destination's own buffering and disk quota also apply.
+
+The destination closes on success and aborts on transfer failure; its writer lock
+is released in both cases. Invalid arguments leave it untouched. An already
+aborted signal rejects before acquiring the destination, so the caller must
+abort a writable it has just created in that case. Cancellation during the final
+close can reject after the destination has committed. Closing the reader cancels
+active pipes; otherwise it remains reusable after a completed or failed pipe.
+The [all-in-one example](examples/all-in-one) includes a disk-download cancel button.
 
 ## Manifests and `ant://` links
 
@@ -767,7 +825,9 @@ const source = await client.createMediaSource(address, {
 A site can have only one controlling service worker per scope. Media sources
 refuse to replace a different worker already registered for their exact scope.
 They also require a secure context (HTTPS or localhost), and the packaged bridge
-accepts files up to 1,000,000,000 bytes (1 GB).
+accepts sizes and offsets through `Number.MAX_SAFE_INTEGER`. Deploy the updated
+service worker with the SDK to remove the previous 1 GB media limit. Browser
+media support, storage and resident DataMap memory remain practical constraints.
 
 ## Public metadata names
 
@@ -897,23 +957,24 @@ console.log(SDK_LIMITS.maxFileBytes, SDK_LIMITS.maxRangeBytes);
 
 | Limit | Value |
 | --- | --- |
-| `minFileBytes` / `maxFileBytes` | 3 / 1,000,000,000 bytes |
+| `minFileBytes` / `maxUploadBytes` | 3 / 1,000,000,000 bytes for uploads |
+| `maxFileBytes` | Alias of the upload limit, retained for compatibility |
 | `maxRangeBytes` | 4 MiB per read or stream chunk |
 | `defaultStreamChunkBytes` | 1 MiB |
 | `downloadConcurrency.min` / `.max` / `.default` | 1 / 256 / `"auto"` |
-| `mediaMaxFileBytes` | 1,000,000,000 bytes |
+| `mediaMaxFileBytes` | `Number.MAX_SAFE_INTEGER` (9,007,199,254,740,991) |
 
 The limits and capability reports are immutable. Unsupported input sizes are
-rejected before copying byte arrays, staging Blobs, or opening files from supplied
-metadata. Address-only reads learn the size from the core; media setup checks it
-before registering a worker or creating a URL. These are protocol ceilings;
-whole-file transfers still need sufficient memory, and staging needs quota for at
-least one encrypted record.
+rejected before copying upload byte arrays or staging Blobs. Reads learn the
+verified size from the core; media setup checks it before registering a worker
+or creating a URL. Uploads retain the upstream 1 GB cap. Buffered downloads need
+sufficient memory; disk streams need destination capacity, and upload staging
+needs quota for at least one encrypted record.
 
 `getBrowserCapabilities()` safely runs outside a browser and makes no network
 requests, allocations of workers, or permission prompts. `features` reports each
 API's presence. `operations` reports requirements for `connect`, `uploadBytes`,
-`uploadBlob`, `download`, `read`, `stream`, `media`, `saveWithPicker`, and
+`uploadBlob`, `download`, `read`, `stream`, `pipeTo`, `media`, `saveWithPicker`, and
 `saveWithDownload`, including missing features for each. Call it again to get a
 fresh snapshot.
 

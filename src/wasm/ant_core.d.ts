@@ -29,30 +29,45 @@ export class BrowserFileEncryptor {
 }
 
 /**
- * Random-access public-file reader for media playback and bounded downloads.
+ * Random-access file reader. Content memory is bounded independently of file
+ * size. The resolved chunk map and seek index remain resident in memory.
  */
 export class BrowserFileReader {
     private constructor();
     free(): void;
     [Symbol.dispose](): void;
     /**
-     * Release cached encrypted records held for playback read-ahead and seeks.
+     * Close the reader and release the records its read-ahead holds. Later
+     * calls fail; use an AbortSignal to cancel a pipeTo in progress. Records
+     * in the client's shared cache stay; that cache is bounded and may serve
+     * other readers.
      */
     close(): void;
     /**
-     * Fetch and decrypt one plaintext byte range without reconstructing the file.
+     * Write the file to a WritableStream (including a file-system writable).
+     * `options` is `{ start?, end?, signal?, onProgress? }`: an optional
+     * half-open byte range, an AbortSignal that cancels the operation, and a
+     * `(bytesWritten, totalBytes)` callback run after each write.
+     *
+     * Chunks are fetched concurrently and written in order, at most 4 MiB per
+     * write, each awaited before the next; fetching continues during writes
+     * until 32 MiB of plaintext is held. Invalid calls reject without touching
+     * the destination. Otherwise the destination is closed on success and
+     * aborted on failure, and the writer lock is always released. An abort
+     * while the destination is closing still rejects, but the destination may
+     * already be committed. Returns the BLAKE3 and byte count of the written
+     * range.
+     */
+    pipeTo(writable: any, options?: any | null): Promise<any>;
+    /**
+     * Read up to 4 MiB. Positions above 4 GiB are supported without truncation.
+     * Fractions, negatives, and integers not exactly representable in JS fail.
      */
     readRange(start: number, length: number): Promise<Uint8Array>;
-    /**
-     * Browser MIME type advertised by the file descriptor.
-     */
     readonly contentType: string;
-    /**
-     * Display filename advertised by the file descriptor.
-     */
     readonly name: string;
     /**
-     * Plaintext file size in bytes.
+     * Exact plaintext byte count as a JavaScript safe integer.
      */
     readonly size: number;
 }
@@ -114,13 +129,18 @@ export class BrowserNetworkClient {
      */
     createPointer(owner_seed: Uint8Array, target: string, kind: string, payment_network: any, pay_for_quotes: Function, on_paid?: Function | null): Promise<any>;
     /**
-     * Download and reconstruct a private file from the DataMap its uploader kept.
+     * Download a private file into one JavaScript Uint8Array. Takes the same
+     * arguments as downloadPublicFile; openPrivateFile and pipeTo support
+     * files that cannot fit in one JavaScript buffer.
      */
-    downloadPrivateFile(file: any, concurrency?: number | null, on_progress?: Function | null): Promise<any>;
+    downloadPrivateFile(file: any, concurrency?: number | null, on_progress?: Function | null, options?: any | null): Promise<any>;
     /**
-     * Download and reconstruct a complete public Autonomi file.
+     * Download a public file into one JavaScript Uint8Array, using bounded
+     * WASM buffers. `options` is `{ maxMemoryBytes?, signal? }`: the largest
+     * output buffer to allocate, and an AbortSignal that cancels the download.
+     * For disk-backed downloads use openPublicFile and reader.pipeTo(writable).
      */
-    downloadPublicFile(file: any, concurrency?: number | null, on_progress?: Function | null): Promise<any>;
+    downloadPublicFile(file: any, concurrency?: number | null, on_progress?: Function | null, options?: any | null): Promise<any>;
     /**
      * Run Saorsa's iterative closest-node lookup over Rust-owned DataChannels.
      */
@@ -148,6 +168,12 @@ export class BrowserNetworkClient {
      */
     openPublicFile(file: any, on_progress?: Function | null, options?: any | null): Promise<BrowserFileReader>;
     /**
+     * Ask the whole close group whether the pointer at `address` is final,
+     * and on what. Only `status: "final"` means one final state, held by a
+     * majority of the group, with no rival.
+     */
+    pointerFinality(address: string): Promise<any>;
+    /**
      * Resolve a definitively failed payment, persist the updated checkpoint, and return it.
      *
      * Call only after the original upload and wallet request have finished. The trusted
@@ -173,6 +199,18 @@ export class BrowserNetworkClient {
      * an earlier write handed to its `on_paid` callback. Pays nothing.
      */
     storePaidPointer(record: Uint8Array, proof: Uint8Array, payment_network: any): Promise<any>;
+    /**
+     * Hand the pointer `owner_seed` controls over to the pointer at
+     * `recipient`, for good, and pay for the final state. `on_paid` is as for
+     * [`Self::create_pointer`].
+     *
+     * Readers of the pointer's address are redirected to `recipient`, which
+     * only its owner can move, and `owner_seed` can change nothing any more.
+     * Refused before anything is paid if the pointer is already final, or if
+     * `recipient` does not exist or leads back to this pointer. Check the
+     * result with [`Self::pointer_finality`] before relying on it.
+     */
+    transferPointer(owner_seed: Uint8Array, recipient: string, payment_network: any, pay_for_quotes: Function, on_paid?: Function | null): Promise<any>;
     /**
      * Point the pointer `owner_seed` controls at `target`, one past the
      * counter the network serves (or create it), and pay for the new state.
@@ -299,26 +337,9 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
-    readonly __wbg_browserfilereader_free: (a: number, b: number) => void;
-    readonly __wbg_browsernetworkclient_free: (a: number, b: number) => void;
-    readonly browserfilereader_close: (a: number) => void;
-    readonly browserfilereader_contentType: (a: number) => [number, number];
-    readonly browserfilereader_name: (a: number) => [number, number];
-    readonly browserfilereader_readRange: (a: number, b: number, c: number) => any;
-    readonly browserfilereader_size: (a: number) => number;
-    readonly browsernetworkclient_close: (a: number) => void;
-    readonly browsernetworkclient_connect: (a: number, b: number) => any;
-    readonly browsernetworkclient_downloadPrivateFile: (a: number, b: any, c: number, d: number) => any;
-    readonly browsernetworkclient_downloadPublicFile: (a: number, b: any, c: number, d: number) => any;
-    readonly browsernetworkclient_findClosest: (a: number, b: number, c: number, d: number) => any;
-    readonly browsernetworkclient_new: (a: any) => [number, number, number];
-    readonly browsernetworkclient_openPrivateFile: (a: number, b: any, c: number, d: number) => any;
-    readonly browsernetworkclient_openPublicFile: (a: number, b: any, c: number, d: number) => any;
-    readonly browsernetworkclient_uploadPublicFile: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: any, j: number, k: number, l: number, m: number, n: number, o: number, p: number) => any;
-    readonly browsernetworkclient_uploadRecords: (a: number, b: any, c: any, d: any, e: any, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => any;
-    readonly browsernetworkclient_uploadStagedPublicFile: (a: number, b: any, c: any, d: any, e: any, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => any;
     readonly __wbg_browserfileencryptor_free: (a: number, b: number) => void;
     readonly __wbg_browseriterativelookup_free: (a: number, b: number) => void;
+    readonly __wbg_browsernetworkclient_free: (a: number, b: number) => void;
     readonly browserfileencryptor_finish: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
     readonly browserfileencryptor_new: (a: number, b: any) => [number, number, number];
     readonly browserfileencryptor_nextRecord: (a: number) => [number, number, number];
@@ -327,12 +348,17 @@ export interface InitOutput {
     readonly browseriterativelookup_queriedPeers: (a: number) => [number, number, number];
     readonly browseriterativelookup_results: (a: number) => [number, number, number];
     readonly browseriterativelookup_run: (a: number, b: any) => any;
-    readonly browsernetworkclient_createPointer: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: any, j: number) => any;
-    readonly browsernetworkclient_getPointer: (a: number, b: number, c: number) => any;
-    readonly browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
-    readonly browsernetworkclient_resolvePointer: (a: number, b: number, c: number) => any;
-    readonly browsernetworkclient_storePaidPointer: (a: number, b: number, c: number, d: number, e: number, f: any) => any;
-    readonly browsernetworkclient_updatePointer: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: any, j: number) => any;
+    readonly browsernetworkclient_close: (a: number) => void;
+    readonly browsernetworkclient_connect: (a: number, b: number) => any;
+    readonly browsernetworkclient_downloadPrivateFile: (a: number, b: any, c: number, d: number, e: number) => any;
+    readonly browsernetworkclient_downloadPublicFile: (a: number, b: any, c: number, d: number, e: number) => any;
+    readonly browsernetworkclient_findClosest: (a: number, b: number, c: number, d: number) => any;
+    readonly browsernetworkclient_new: (a: any) => [number, number, number];
+    readonly browsernetworkclient_openPrivateFile: (a: number, b: any, c: number, d: number) => any;
+    readonly browsernetworkclient_openPublicFile: (a: number, b: any, c: number, d: number) => any;
+    readonly browsernetworkclient_uploadPublicFile: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: any, j: number, k: number, l: number, m: number, n: number, o: number, p: number) => any;
+    readonly browsernetworkclient_uploadRecords: (a: number, b: any, c: any, d: any, e: any, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => any;
+    readonly browsernetworkclient_uploadStagedPublicFile: (a: number, b: any, c: any, d: any, e: any, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => any;
     readonly contentAddress: (a: number, b: number) => [number, number];
     readonly decodeManifest: (a: number, b: number) => [number, number, number];
     readonly decodeMerklePaymentReceipt: (a: any, b: number, c: number, d: any) => [number, number, number];
@@ -345,12 +371,27 @@ export interface InitOutput {
     readonly parseResponseFrame: (a: number, b: number) => [number, number, number];
     readonly parseWebRtcDirectMultiaddr: (a: any) => [number, number, number];
     readonly paymentQuoteHash: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
-    readonly pointerAddress: (a: number, b: number) => [number, number, number, number];
     readonly serverAnswerFromEndpoint: (a: any, b: number, c: number) => [number, number, number];
     readonly start: () => void;
     readonly verifyRecord: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly verifyStorageQuote: (a: any, b: number, c: number, d: number, e: number) => [number, number, number];
     readonly webRtcDirectV2ServerCredential: (a: number, b: number) => [number, number, number, number];
+    readonly browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
+    readonly browsernetworkclient_createPointer: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: any, j: number) => any;
+    readonly browsernetworkclient_getPointer: (a: number, b: number, c: number) => any;
+    readonly browsernetworkclient_pointerFinality: (a: number, b: number, c: number) => any;
+    readonly browsernetworkclient_resolvePointer: (a: number, b: number, c: number) => any;
+    readonly browsernetworkclient_storePaidPointer: (a: number, b: number, c: number, d: number, e: number, f: any) => any;
+    readonly browsernetworkclient_transferPointer: (a: number, b: number, c: number, d: number, e: number, f: any, g: any, h: number) => any;
+    readonly browsernetworkclient_updatePointer: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: any, j: number) => any;
+    readonly pointerAddress: (a: number, b: number) => [number, number, number, number];
+    readonly __wbg_browserfilereader_free: (a: number, b: number) => void;
+    readonly browserfilereader_close: (a: number) => void;
+    readonly browserfilereader_contentType: (a: number) => [number, number];
+    readonly browserfilereader_name: (a: number) => [number, number];
+    readonly browserfilereader_pipeTo: (a: number, b: any, c: number) => any;
+    readonly browserfilereader_readRange: (a: number, b: number, c: number) => any;
+    readonly browserfilereader_size: (a: number) => number;
     readonly BrotliDecoderCreateInstance: (a: number, b: number, c: number) => number;
     readonly BrotliDecoderDecompress: (a: number, b: number, c: number, d: number) => number;
     readonly BrotliDecoderDecompressPrealloc: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => void;
@@ -374,9 +415,10 @@ export interface InitOutput {
     readonly wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___wasm_bindgen_75c5b43bb1a48c51___JsValue__core_608f92abc48d28da___result__Result_____wasm_bindgen_75c5b43bb1a48c51___JsError___true_: (a: number, b: number, c: any) => [number, number];
     readonly wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___js_sys_2246999dfd1b0ec1___Function_fn_wasm_bindgen_75c5b43bb1a48c51___JsValue_____wasm_bindgen_75c5b43bb1a48c51___sys__Undefined___js_sys_2246999dfd1b0ec1___Function_fn_wasm_bindgen_75c5b43bb1a48c51___JsValue_____wasm_bindgen_75c5b43bb1a48c51___sys__Undefined_______true_: (a: number, b: number, c: any, d: any) => void;
     readonly wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___wasm_bindgen_75c5b43bb1a48c51___JsValue__js_sys_2246999dfd1b0ec1___Promise__true_: (a: number, b: number, c: any) => any;
-    readonly wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___web_sys_e5edc227c6570697___features__gen_MessageEvent__MessageEvent______true_: (a: number, b: number, c: any) => void;
-    readonly wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___web_sys_e5edc227c6570697___features__gen_MessageEvent__MessageEvent______true__3: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___web_sys_1bc45939ec04b236___features__gen_MessageEvent__MessageEvent______true_: (a: number, b: number, c: any) => void;
+    readonly wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___web_sys_1bc45939ec04b236___features__gen_MessageEvent__MessageEvent______true__3: (a: number, b: number, c: any) => void;
     readonly wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke_______true_: (a: number, b: number) => void;
+    readonly wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke_______true__1_: (a: number, b: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_exn_store: (a: number) => void;

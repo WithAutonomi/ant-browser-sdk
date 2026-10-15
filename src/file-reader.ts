@@ -1,7 +1,7 @@
 import { AutonomiError, wrapError } from "./errors.js";
 import { abortable, abortReason, isAbort, throwIfAborted } from "./internal/abort.js";
 import type { RawFileReader } from "./internal/runtime.js";
-import type { ReadOptions, StreamOptions } from "./types.js";
+import type { PipeOptions, PipeResult, ReadOptions, StreamOptions } from "./types.js";
 import { SDK_LIMITS } from "./limits.js";
 
 /** @internal Only the SDK may wrap a WASM reader. Not exported by the package. */
@@ -17,6 +17,9 @@ export class PublicFileReader {
 
   #raw: RawFileReader;
   #closed = false;
+  #active = 0;
+  #freed = false;
+  #pipes = new Set<AbortController>();
 
   private constructor(raw: RawFileReader, address: string) {
     this.#raw = raw;
@@ -52,10 +55,35 @@ export class PublicFileReader {
       );
     }
     try {
-      return await abortable(this.#raw.readRange(start, length), options.signal);
+      return await abortable(this.#call(() => this.#raw.readRange(start, length)), options.signal);
     } catch (error) {
       if (isAbort(error, options.signal)) throw error;
       throw wrapError("OPEN_FILE_FAILED", "Could not read the public file range", error);
+    }
+  }
+
+  /**
+   * Write a verified range with the core's bounded, concurrent download pipeline.
+   * Closes the destination on success and aborts it on transfer failure. Invalid
+   * options leave it untouched. Cancellation during close may happen after the
+   * destination has committed. The reader remains reusable until close().
+   */
+  async pipeTo(destination: WritableStream<Uint8Array>, options: PipeOptions = {}): Promise<PipeResult> {
+    this.#assertOpen();
+    const signal = options.signal;
+    throwIfAborted(signal);
+    const controller = new AbortController();
+    const abort = (): void => controller.abort(abortReason(signal!));
+    signal?.addEventListener("abort", abort, { once: true });
+    this.#pipes.add(controller);
+    try {
+      return await this.#call(() => this.#raw.pipeTo(destination, { ...options, signal: controller.signal }));
+    } catch (error) {
+      if (isAbort(error, controller.signal)) throw error;
+      throw wrapError("OPEN_FILE_FAILED", "Could not stream the file to its destination", error);
+    } finally {
+      signal?.removeEventListener("abort", abort);
+      this.#pipes.delete(controller);
     }
   }
 
@@ -93,6 +121,7 @@ export class PublicFileReader {
         if (!options.signal) return;
         const abort = (): void => {
           aborted = true;
+          removeAbortListener();
           controller.error(abortReason(options.signal!));
         };
         options.signal.addEventListener("abort", abort, { once: true });
@@ -129,7 +158,7 @@ export class PublicFileReader {
           if (!aborted) controller.error(error);
         }
       },
-      cancel: () => removeAbortListener(),
+      cancel: () => { aborted = true; removeAbortListener(); },
     });
   }
 
@@ -137,9 +166,31 @@ export class PublicFileReader {
   close(): void {
     if (this.#closed) return;
     this.#closed = true;
+    for (const pipe of this.#pipes) {
+      pipe.abort(new DOMException("The file reader was closed", "AbortError"));
+    }
     try {
       this.#raw.close();
     } finally {
+      this.#freeWhenIdle();
+    }
+  }
+
+  // A cancelled range can still be settling in WASM. Never free a reader while
+  // a raw method holds it, including when close() interrupts a pending pipe.
+  async #call<T>(run: () => Promise<T>): Promise<T> {
+    this.#active++;
+    try {
+      return await run();
+    } finally {
+      this.#active--;
+      this.#freeWhenIdle();
+    }
+  }
+
+  #freeWhenIdle(): void {
+    if (this.#closed && this.#active === 0 && !this.#freed) {
+      this.#freed = true;
       this.#raw.free();
     }
   }

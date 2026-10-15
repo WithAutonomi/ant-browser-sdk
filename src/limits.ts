@@ -1,15 +1,18 @@
 import { AutonomiError } from "./errors.js";
 
-const MAX_FILE_BYTES = 1_000_000_000;
+const MAX_UPLOAD_BYTES = 1_000_000_000;
 
 /** Limits of the bundled core and media worker. Browser memory/storage may impose lower limits. */
 export const SDK_LIMITS = Object.freeze({
   minFileBytes: 3,
-  maxFileBytes: MAX_FILE_BYTES,
+  /** Upload limit, retained for compatibility. Downloads have no fixed size cap. */
+  maxFileBytes: MAX_UPLOAD_BYTES,
+  maxUploadBytes: MAX_UPLOAD_BYTES,
   maxRangeBytes: 4 * 1024 * 1024,
   defaultStreamChunkBytes: 1024 * 1024,
   downloadConcurrency: Object.freeze({ min: 1, max: 256, default: "auto" as const }),
-  mediaMaxFileBytes: MAX_FILE_BYTES,
+  /** Largest exact byte position supported by JavaScript and the core. */
+  mediaMaxFileBytes: Number.MAX_SAFE_INTEGER,
   /** Bytes read from the start of a media file when a media source is created. */
   mediaPrimeHeadBytes: 1024 * 1024,
   /** Bytes read from the end of a media file when a media source is created. */

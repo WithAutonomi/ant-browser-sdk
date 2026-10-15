@@ -595,16 +595,26 @@ export class AutonomiClient {
       }
       throwIfAborted(operation.signal);
       const cap = concurrency === "auto" ? undefined : concurrency;
+      if (options.maxMemoryBytes !== undefined && (!Number.isSafeInteger(options.maxMemoryBytes) || options.maxMemoryBytes < 0)) {
+        throw new AutonomiError("DOWNLOAD_FAILED", "maxMemoryBytes must be a non-negative safe integer");
+      }
+      const downloadOptions = {
+        ...(options.maxMemoryBytes === undefined ? {} : { maxMemoryBytes: options.maxMemoryBytes }),
+        signal: operation.signal,
+      };
       const raw = (await abortable(
         isPrivateFile(file)
-          ? this.#network.downloadPrivateFile(corePrivateFile(file), cap, report)
-          : this.#network.downloadPublicFile(typeof file === "string" ? file : coreFileReference(file), cap, report),
+          ? this.#network.downloadPrivateFile(corePrivateFile(file), cap, report, downloadOptions)
+          : this.#network.downloadPublicFile(typeof file === "string" ? file : coreFileReference(file), cap, report, downloadOptions),
         operation.signal,
       )) as RawDownloadResult;
       throwIfAborted(operation.signal);
       report(`Downloaded ${raw.file.name}`, { phase: "complete", completed: raw.content.byteLength, total: raw.content.byteLength, unit: "bytes" });
-      const blobBytes = new Uint8Array(raw.content.byteLength);
-      blobBytes.set(raw.content);
+      // The core returns a JS-owned buffer. Blob takes its own snapshot; avoid
+      // another file-sized intermediate copy. Copy only shared-buffer inputs.
+      const blobBytes = raw.content.buffer instanceof ArrayBuffer
+        ? new Uint8Array(raw.content.buffer, raw.content.byteOffset, raw.content.byteLength)
+        : new Uint8Array(raw.content);
       const downloaded = {
         bytes: raw.content,
         blob: new Blob([blobBytes], {

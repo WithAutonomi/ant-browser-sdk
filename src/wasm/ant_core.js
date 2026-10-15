@@ -67,7 +67,8 @@ export class BrowserFileEncryptor {
 if (Symbol.dispose) BrowserFileEncryptor.prototype[Symbol.dispose] = BrowserFileEncryptor.prototype.free;
 
 /**
- * Random-access public-file reader for media playback and bounded downloads.
+ * Random-access file reader. Content memory is bounded independently of file
+ * size. The resolved chunk map and seek index remain resident in memory.
  */
 export class BrowserFileReader {
     static __wrap(ptr) {
@@ -87,13 +88,15 @@ export class BrowserFileReader {
         wasm.__wbg_browserfilereader_free(ptr, 0);
     }
     /**
-     * Release cached encrypted records held for playback read-ahead and seeks.
+     * Close the reader and release the records its read-ahead holds. Later
+     * calls fail; use an AbortSignal to cancel a pipeTo in progress. Records
+     * in the client's shared cache stay; that cache is bounded and may serve
+     * other readers.
      */
     close() {
         wasm.browserfilereader_close(this.__wbg_ptr);
     }
     /**
-     * Browser MIME type advertised by the file descriptor.
      * @returns {string}
      */
     get contentType() {
@@ -109,7 +112,6 @@ export class BrowserFileReader {
         }
     }
     /**
-     * Display filename advertised by the file descriptor.
      * @returns {string}
      */
     get name() {
@@ -125,7 +127,30 @@ export class BrowserFileReader {
         }
     }
     /**
-     * Fetch and decrypt one plaintext byte range without reconstructing the file.
+     * Write the file to a WritableStream (including a file-system writable).
+     * `options` is `{ start?, end?, signal?, onProgress? }`: an optional
+     * half-open byte range, an AbortSignal that cancels the operation, and a
+     * `(bytesWritten, totalBytes)` callback run after each write.
+     *
+     * Chunks are fetched concurrently and written in order, at most 4 MiB per
+     * write, each awaited before the next; fetching continues during writes
+     * until 32 MiB of plaintext is held. Invalid calls reject without touching
+     * the destination. Otherwise the destination is closed on success and
+     * aborted on failure, and the writer lock is always released. An abort
+     * while the destination is closing still rejects, but the destination may
+     * already be committed. Returns the BLAKE3 and byte count of the written
+     * range.
+     * @param {any} writable
+     * @param {any | null} [options]
+     * @returns {Promise<any>}
+     */
+    pipeTo(writable, options) {
+        const ret = wasm.browserfilereader_pipeTo(this.__wbg_ptr, writable, isLikeNone(options) ? 0 : addToExternrefTable0(options));
+        return ret;
+    }
+    /**
+     * Read up to 4 MiB. Positions above 4 GiB are supported without truncation.
+     * Fractions, negatives, and integers not exactly representable in JS fail.
      * @param {number} start
      * @param {number} length
      * @returns {Promise<Uint8Array>}
@@ -135,12 +160,12 @@ export class BrowserFileReader {
         return ret;
     }
     /**
-     * Plaintext file size in bytes.
+     * Exact plaintext byte count as a JavaScript safe integer.
      * @returns {number}
      */
     get size() {
         const ret = wasm.browserfilereader_size(this.__wbg_ptr);
-        return ret >>> 0;
+        return ret;
     }
 }
 if (Symbol.dispose) BrowserFileReader.prototype[Symbol.dispose] = BrowserFileReader.prototype.free;
@@ -281,25 +306,32 @@ export class BrowserNetworkClient {
         return ret;
     }
     /**
-     * Download and reconstruct a private file from the DataMap its uploader kept.
+     * Download a private file into one JavaScript Uint8Array. Takes the same
+     * arguments as downloadPublicFile; openPrivateFile and pipeTo support
+     * files that cannot fit in one JavaScript buffer.
      * @param {any} file
      * @param {number | null} [concurrency]
      * @param {Function | null} [on_progress]
+     * @param {any | null} [options]
      * @returns {Promise<any>}
      */
-    downloadPrivateFile(file, concurrency, on_progress) {
-        const ret = wasm.browsernetworkclient_downloadPrivateFile(this.__wbg_ptr, file, isLikeNone(concurrency) ? Number.MAX_SAFE_INTEGER : (concurrency) >>> 0, isLikeNone(on_progress) ? 0 : addToExternrefTable0(on_progress));
+    downloadPrivateFile(file, concurrency, on_progress, options) {
+        const ret = wasm.browsernetworkclient_downloadPrivateFile(this.__wbg_ptr, file, isLikeNone(concurrency) ? Number.MAX_SAFE_INTEGER : (concurrency) >>> 0, isLikeNone(on_progress) ? 0 : addToExternrefTable0(on_progress), isLikeNone(options) ? 0 : addToExternrefTable0(options));
         return ret;
     }
     /**
-     * Download and reconstruct a complete public Autonomi file.
+     * Download a public file into one JavaScript Uint8Array, using bounded
+     * WASM buffers. `options` is `{ maxMemoryBytes?, signal? }`: the largest
+     * output buffer to allocate, and an AbortSignal that cancels the download.
+     * For disk-backed downloads use openPublicFile and reader.pipeTo(writable).
      * @param {any} file
      * @param {number | null} [concurrency]
      * @param {Function | null} [on_progress]
+     * @param {any | null} [options]
      * @returns {Promise<any>}
      */
-    downloadPublicFile(file, concurrency, on_progress) {
-        const ret = wasm.browsernetworkclient_downloadPublicFile(this.__wbg_ptr, file, isLikeNone(concurrency) ? Number.MAX_SAFE_INTEGER : (concurrency) >>> 0, isLikeNone(on_progress) ? 0 : addToExternrefTable0(on_progress));
+    downloadPublicFile(file, concurrency, on_progress, options) {
+        const ret = wasm.browsernetworkclient_downloadPublicFile(this.__wbg_ptr, file, isLikeNone(concurrency) ? Number.MAX_SAFE_INTEGER : (concurrency) >>> 0, isLikeNone(on_progress) ? 0 : addToExternrefTable0(on_progress), isLikeNone(options) ? 0 : addToExternrefTable0(options));
         return ret;
     }
     /**
@@ -367,6 +399,19 @@ export class BrowserNetworkClient {
         return ret;
     }
     /**
+     * Ask the whole close group whether the pointer at `address` is final,
+     * and on what. Only `status: "final"` means one final state, held by a
+     * majority of the group, with no rival.
+     * @param {string} address
+     * @returns {Promise<any>}
+     */
+    pointerFinality(address) {
+        const ptr0 = passStringToWasm0(address, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.browsernetworkclient_pointerFinality(this.__wbg_ptr, ptr0, len0);
+        return ret;
+    }
+    /**
      * Resolve a definitively failed payment, persist the updated checkpoint, and return it.
      *
      * Call only after the original upload and wallet request have finished. The trusted
@@ -417,6 +462,31 @@ export class BrowserNetworkClient {
         const ptr1 = passArray8ToWasm0(proof, wasm.__wbindgen_malloc);
         const len1 = WASM_VECTOR_LEN;
         const ret = wasm.browsernetworkclient_storePaidPointer(this.__wbg_ptr, ptr0, len0, ptr1, len1, payment_network);
+        return ret;
+    }
+    /**
+     * Hand the pointer `owner_seed` controls over to the pointer at
+     * `recipient`, for good, and pay for the final state. `on_paid` is as for
+     * [`Self::create_pointer`].
+     *
+     * Readers of the pointer's address are redirected to `recipient`, which
+     * only its owner can move, and `owner_seed` can change nothing any more.
+     * Refused before anything is paid if the pointer is already final, or if
+     * `recipient` does not exist or leads back to this pointer. Check the
+     * result with [`Self::pointer_finality`] before relying on it.
+     * @param {Uint8Array} owner_seed
+     * @param {string} recipient
+     * @param {any} payment_network
+     * @param {Function} pay_for_quotes
+     * @param {Function | null} [on_paid]
+     * @returns {Promise<any>}
+     */
+    transferPointer(owner_seed, recipient, payment_network, pay_for_quotes, on_paid) {
+        const ptr0 = passArray8ToWasm0(owner_seed, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.browsernetworkclient_transferPointer(this.__wbg_ptr, ptr0, len0, ptr1, len1, payment_network, pay_for_quotes, isLikeNone(on_paid) ? 0 : addToExternrefTable0(on_paid));
         return ret;
     }
     /**
@@ -888,6 +958,10 @@ function __wbg_get_imports() {
             const ret = typeof(arg0) === 'function';
             return ret;
         },
+        __wbg___wbindgen_is_null_87c3bfe968c6a5ad: function(arg0) {
+            const ret = arg0 === null;
+            return ret;
+        },
         __wbg___wbindgen_is_object_56732c2bc353f41d: function(arg0) {
             const val = arg0;
             const ret = typeof(val) === 'object' && val !== null;
@@ -929,6 +1003,14 @@ function __wbg_get_imports() {
         __wbg__wbg_cb_unref_61db23ac97f16c31: function(arg0) {
             arg0._wbg_cb_unref();
         },
+        __wbg_abort_9746cd1d54b35daa: function(arg0, arg1) {
+            const ret = arg0.abort(arg1);
+            return ret;
+        },
+        __wbg_aborted_3bd851834eb1ecce: function(arg0) {
+            const ret = arg0.aborted;
+            return ret;
+        },
         __wbg_addEventListener_7c5a0db2b2826a06: function() { return handleError(function (arg0, arg1, arg2, arg3) {
             arg0.addEventListener(getStringFromWasm0(arg1, arg2), arg3);
         }, arguments); },
@@ -964,6 +1046,10 @@ function __wbg_get_imports() {
             const ret = clearTimeout(arg0);
             return ret;
         },
+        __wbg_close_314feea4ac97ebd4: function(arg0) {
+            const ret = arg0.close();
+            return ret;
+        },
         __wbg_close_46a302f048f55362: function(arg0) {
             arg0.close();
         },
@@ -974,6 +1060,10 @@ function __wbg_get_imports() {
             const ret = arg0.connectionState;
             return (__wbindgen_enum_RtcPeerConnectionState.indexOf(ret) + 1 || 7) - 1;
         },
+        __wbg_construct_e0f002bb615dbba1: function() { return handleError(function (arg0, arg1) {
+            const ret = Reflect.construct(arg0, arg1);
+            return ret;
+        }, arguments); },
         __wbg_createDataChannel_91bd40e53ea00623: function(arg0, arg1, arg2, arg3) {
             const ret = arg0.createDataChannel(getStringFromWasm0(arg1, arg2), arg3);
             return ret;
@@ -1016,6 +1106,10 @@ function __wbg_get_imports() {
         __wbg_getRandomValues_c44a50d8cfdaebeb: function() { return handleError(function (arg0, arg1) {
             arg0.getRandomValues(arg1);
         }, arguments); },
+        __wbg_getWriter_e5a67ff4a024ff3f: function() { return handleError(function (arg0) {
+            const ret = arg0.getWriter();
+            return ret;
+        }, arguments); },
         __wbg_get_1f8f054ddbaa7db2: function() { return handleError(function (arg0, arg1) {
             const ret = Reflect.get(arg0, arg1);
             return ret;
@@ -1044,6 +1138,16 @@ function __wbg_get_imports() {
             const ret = arg0.iceGatheringState;
             return (__wbindgen_enum_RtcIceGatheringState.indexOf(ret) + 1 || 4) - 1;
         },
+        __wbg_instanceof_AbortSignal_62ae3458aa4f4cc6: function(arg0) {
+            let result;
+            try {
+                result = arg0 instanceof AbortSignal;
+            } catch (_) {
+                result = false;
+            }
+            const ret = result;
+            return ret;
+        },
         __wbg_instanceof_ArrayBuffer_8f49811467741499: function(arg0) {
             let result;
             try {
@@ -1068,6 +1172,16 @@ function __wbg_get_imports() {
             let result;
             try {
                 result = arg0 instanceof Uint8Array;
+            } catch (_) {
+                result = false;
+            }
+            const ret = result;
+            return ret;
+        },
+        __wbg_instanceof_WritableStream_e0d9f1cac23ab05a: function(arg0) {
+            let result;
+            try {
+                result = arg0 instanceof WritableStream;
             } catch (_) {
                 result = false;
             }
@@ -1172,6 +1286,10 @@ function __wbg_get_imports() {
             const ret = arg0.now();
             return ret;
         },
+        __wbg_of_57145fdec12d159f: function(arg0) {
+            const ret = Array.of(arg0);
+            return ret;
+        },
         __wbg_performance_3fcf6e32a7e1ed0a: function(arg0) {
             const ret = arg0.performance;
             return ret;
@@ -1196,6 +1314,13 @@ function __wbg_get_imports() {
         __wbg_readyState_561567918a6f08cd: function(arg0) {
             const ret = arg0.readyState;
             return (__wbindgen_enum_RtcDataChannelState.indexOf(ret) + 1 || 5) - 1;
+        },
+        __wbg_reason_9b42ef28d11fddd8: function(arg0) {
+            const ret = arg0.reason;
+            return ret;
+        },
+        __wbg_releaseLock_5b339d918941b349: function(arg0) {
+            arg0.releaseLock();
         },
         __wbg_removeEventListener_5f35962e6c0b2ddc: function() { return handleError(function (arg0, arg1, arg2, arg3) {
             arg0.removeEventListener(getStringFromWasm0(arg1, arg2), arg3);
@@ -1230,6 +1355,9 @@ function __wbg_get_imports() {
             const ret = setTimeout(arg0, arg1);
             return ret;
         }, arguments); },
+        __wbg_set_29c99a8aac1c01e5: function(arg0, arg1, arg2) {
+            arg0.set(getArrayU8FromWasm0(arg1, arg2));
+        },
         __wbg_set_52b1e1eb5bed906a: function(arg0, arg1, arg2) {
             const ret = arg0.set(arg1, arg2);
             return ret;
@@ -1323,52 +1451,61 @@ function __wbg_get_imports() {
             const ret = arg0.versions;
             return ret;
         },
+        __wbg_write_6d16f58ddd0cc861: function(arg0, arg1) {
+            const ret = arg0.write(arg1);
+            return ret;
+        },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 1074, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 1037, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___wasm_bindgen_75c5b43bb1a48c51___JsValue__core_608f92abc48d28da___result__Result_____wasm_bindgen_75c5b43bb1a48c51___JsError___true_);
             return ret;
         },
         __wbindgen_cast_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 492, ret: NamedExternref("Promise<any>"), inner_ret: Some(NamedExternref("Promise<any>")) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 143, ret: NamedExternref("Promise<any>"), inner_ret: Some(NamedExternref("Promise<any>")) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___wasm_bindgen_75c5b43bb1a48c51___JsValue__js_sys_2246999dfd1b0ec1___Promise__true_);
             return ret;
         },
         __wbindgen_cast_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("Event")], shim_idx: 494, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___web_sys_e5edc227c6570697___features__gen_MessageEvent__MessageEvent______true_);
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("Event")], shim_idx: 145, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___web_sys_1bc45939ec04b236___features__gen_MessageEvent__MessageEvent______true_);
             return ret;
         },
         __wbindgen_cast_0000000000000004: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 494, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___web_sys_e5edc227c6570697___features__gen_MessageEvent__MessageEvent______true__3);
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 145, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___web_sys_1bc45939ec04b236___features__gen_MessageEvent__MessageEvent______true__3);
             return ret;
         },
         __wbindgen_cast_0000000000000005: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 784, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 868, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke_______true_);
             return ret;
         },
-        __wbindgen_cast_0000000000000006: function(arg0) {
+        __wbindgen_cast_0000000000000006: function(arg0, arg1) {
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 882, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            const ret = makeMutClosure(arg0, arg1, wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke_______true__1_);
+            return ret;
+        },
+        __wbindgen_cast_0000000000000007: function(arg0) {
             // Cast intrinsic for `F64 -> Externref`.
             const ret = arg0;
             return ret;
         },
-        __wbindgen_cast_0000000000000007: function(arg0) {
+        __wbindgen_cast_0000000000000008: function(arg0) {
             // Cast intrinsic for `I64 -> Externref`.
             const ret = arg0;
             return ret;
         },
-        __wbindgen_cast_0000000000000008: function(arg0, arg1) {
+        __wbindgen_cast_0000000000000009: function(arg0, arg1) {
             // Cast intrinsic for `Ref(Slice(U8)) -> NamedExternref("Uint8Array")`.
             const ret = getArrayU8FromWasm0(arg0, arg1);
             return ret;
         },
-        __wbindgen_cast_0000000000000009: function(arg0, arg1) {
+        __wbindgen_cast_000000000000000a: function(arg0, arg1) {
             // Cast intrinsic for `Ref(String) -> Externref`.
             const ret = getStringFromWasm0(arg0, arg1);
             return ret;
         },
-        __wbindgen_cast_000000000000000a: function(arg0) {
+        __wbindgen_cast_000000000000000b: function(arg0) {
             // Cast intrinsic for `U64 -> Externref`.
             const ret = BigInt.asUintN(64, arg0);
             return ret;
@@ -1393,12 +1530,16 @@ function wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke_______true
     wasm.wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke_______true_(arg0, arg1);
 }
 
-function wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___web_sys_e5edc227c6570697___features__gen_MessageEvent__MessageEvent______true_(arg0, arg1, arg2) {
-    wasm.wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___web_sys_e5edc227c6570697___features__gen_MessageEvent__MessageEvent______true_(arg0, arg1, arg2);
+function wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke_______true__1_(arg0, arg1) {
+    wasm.wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke_______true__1_(arg0, arg1);
 }
 
-function wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___web_sys_e5edc227c6570697___features__gen_MessageEvent__MessageEvent______true__3(arg0, arg1, arg2) {
-    wasm.wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___web_sys_e5edc227c6570697___features__gen_MessageEvent__MessageEvent______true__3(arg0, arg1, arg2);
+function wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___web_sys_1bc45939ec04b236___features__gen_MessageEvent__MessageEvent______true_(arg0, arg1, arg2) {
+    wasm.wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___web_sys_1bc45939ec04b236___features__gen_MessageEvent__MessageEvent______true_(arg0, arg1, arg2);
+}
+
+function wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___web_sys_1bc45939ec04b236___features__gen_MessageEvent__MessageEvent______true__3(arg0, arg1, arg2) {
+    wasm.wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___web_sys_1bc45939ec04b236___features__gen_MessageEvent__MessageEvent______true__3(arg0, arg1, arg2);
 }
 
 function wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___wasm_bindgen_75c5b43bb1a48c51___JsValue__js_sys_2246999dfd1b0ec1___Promise__true_(arg0, arg1, arg2) {

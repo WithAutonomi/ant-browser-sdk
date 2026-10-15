@@ -51,6 +51,8 @@ export type {
   PaymentSubmission,
   PaymentSubmissionInfo,
   PendingPayment,
+  PipeOptions,
+  PipeResult,
   PrivateDownloadResult,
   PrivateFile,
   PrivateFileReference,

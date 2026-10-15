@@ -12,18 +12,29 @@ it("keeps standalone media-worker limits aligned with the exported SDK limits", 
   runInContext(await readFile(new URL("../public/autonomi-stream-sw.js", import.meta.url), "utf8"), context);
   expect(runInContext("MAX_STREAM_FILE_BYTES", context)).toBe(SDK_LIMITS.mediaMaxFileBytes);
   expect(runInContext("STREAM_BLOCK_BYTES", context)).toBe(SDK_LIMITS.defaultStreamChunkBytes);
-  for (const [size, status] of [[SDK_LIMITS.mediaMaxFileBytes, 200], [SDK_LIMITS.mediaMaxFileBytes + 1, 400]] as const) {
+  for (const [size, status] of [[2 ** 32 + 123, 200], [SDK_LIMITS.mediaMaxFileBytes, 200], [SDK_LIMITS.mediaMaxFileBytes + 1, 400]] as const) {
     let response!: Promise<Response>;
     handlers.get("fetch")!({ request: new Request(`https://app.example/__autonomi_stream/${"ab".repeat(16)}/file?size=${size}`, { method: "HEAD" }),
       respondWith: (value: Promise<Response>) => { response = value; },
     });
     expect((await response).status).toBe(status);
   }
+  const size = 2 ** 32 + 123;
+  const start = 2 ** 32 - 8;
+  const end = 2 ** 32 + 7;
+  let response!: Promise<Response>;
+  handlers.get("fetch")!({ request: new Request(`https://app.example/__autonomi_stream/${"ab".repeat(16)}/file?size=${size}`, {
+    method: "HEAD", headers: { range: `bytes=${start}-${end}` },
+  }), respondWith: (value: Promise<Response>) => { response = value; } });
+  const range = await response;
+  expect(range.status).toBe(206);
+  expect(range.headers.get("content-range")).toBe(`bytes ${start}-${end}/${size}`);
+  expect(range.headers.get("content-length")).toBe("16");
 });
 
 it("enforces the advertised range limit and stream default before calling the core", async () => {
   const raw = { name: "file", contentType: "application/octet-stream", size: SDK_LIMITS.maxFileBytes,
-    readRange: vi.fn(async () => new Uint8Array()), close: vi.fn(), free: vi.fn() };
+    readRange: vi.fn(async () => new Uint8Array()), pipeTo: vi.fn(), close: vi.fn(), free: vi.fn() };
   const reader = createPublicFileReader(raw, "ab".repeat(32));
   await reader.read(0, SDK_LIMITS.maxRangeBytes);
   expect(raw.readRange).toHaveBeenCalledWith(0, SDK_LIMITS.maxRangeBytes);
