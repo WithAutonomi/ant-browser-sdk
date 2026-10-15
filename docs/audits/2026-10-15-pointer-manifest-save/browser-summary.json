@@ -36,36 +36,36 @@
     },
     {
       "pointers": {
-        "address": "adacc22a300ed9c5bb97d21196bd65c50984fbe98af4454462eabd2fcba7bc8e",
+        "address": "66315ec5b564bc1cd8e5c8e00930184396480aa59c7fd64a62bff316b600588f",
         "created": "0",
         "updated": "1",
         "transferred": "18446744073709551615",
         "finality": {
-          "address": "adacc22a300ed9c5bb97d21196bd65c50984fbe98af4454462eabd2fcba7bc8e",
+          "address": "66315ec5b564bc1cd8e5c8e00930184396480aa59c7fd64a62bff316b600588f",
           "group": 7,
           "answered": 7,
           "status": "final",
           "states": [
             {
-              "stateId": "b7bb36a66a8a90b2fc3b9dd8fb2e72e48bf3a1ee1bdb72c61b1bafc53e2bd5d5",
+              "stateId": "d708222bd7cd2a1d2ca02eaf5c0d02767c6ddce894279303e904c62c9bea01a5",
               "kind": "pointer",
               "kindTag": 1,
-              "target": "0cad84c15e7ec6ab44414c0dc145b2f1a56381e866b246199dfbe7e58a125d11",
+              "target": "170ce0eefec9925845b6d9b75bad36f45504b315b08a15ab68ac07ead647028f",
               "holders": 7,
-              "transferredTo": "0cad84c15e7ec6ab44414c0dc145b2f1a56381e866b246199dfbe7e58a125d11"
+              "transferredTo": "170ce0eefec9925845b6d9b75bad36f45504b315b08a15ab68ac07ead647028f"
             }
           ],
           "majority": {
-            "stateId": "b7bb36a66a8a90b2fc3b9dd8fb2e72e48bf3a1ee1bdb72c61b1bafc53e2bd5d5",
+            "stateId": "d708222bd7cd2a1d2ca02eaf5c0d02767c6ddce894279303e904c62c9bea01a5",
             "kind": "pointer",
             "kindTag": 1,
-            "target": "0cad84c15e7ec6ab44414c0dc145b2f1a56381e866b246199dfbe7e58a125d11",
+            "target": "170ce0eefec9925845b6d9b75bad36f45504b315b08a15ab68ac07ead647028f",
             "holders": 7,
-            "transferredTo": "0cad84c15e7ec6ab44414c0dc145b2f1a56381e866b246199dfbe7e58a125d11"
+            "transferredTo": "170ce0eefec9925845b6d9b75bad36f45504b315b08a15ab68ac07ead647028f"
           }
         },
-        "paidRetry": "b7bb36a66a8a90b2fc3b9dd8fb2e72e48bf3a1ee1bdb72c61b1bafc53e2bd5d5",
-        "recovered": "c9a7122e7a4d74473b08ec88b20d7e6340682ad2a945ab0aa2a4d673b1aadddd",
+        "paidRetry": "d708222bd7cd2a1d2ca02eaf5c0d02767c6ddce894279303e904c62c9bea01a5",
+        "recovered": "8f56bdf3eacfeec70a51d7299332fae2c0dc7c470f44f7a8c8116c2c88695f14",
         "payCount": 1
       }
     },

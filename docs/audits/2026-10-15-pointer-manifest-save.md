@@ -2,8 +2,8 @@
 
 SDK implementation `461dc2f8f17080eb8100edd8fa5063e1df1ae7a8` on `feat/large-file-streaming-20261015`
 adds the three follow-ups to the [large-file work](2026-10-15-large-file-streaming.md).
-The runtime exercised in Chromium is the same implementation; the captured
-recovery fixture and its offline tests were added after that browser run.
+Chromium revalidated the committed runtime. The recovery fixture was captured
+in an earlier successful run with the same production WASM build.
 
 ## Changes and compatibility
 
