@@ -4,14 +4,16 @@ import { operationId, progressReporter } from "./internal/progress.js";
 import type {
   DownloadResult,
   PrivateDownloadResult,
-  SaveFileHandle,
   SaveFileWritable,
   SaveOptions,
   SaveResult,
 } from "./types.js";
 
+/** A save picker's FileSystemFileHandle; remove() is not yet available in every browser. */
+export type PickedFileHandle = FileSystemFileHandle & { remove?(): Promise<void> };
+
 interface SaveFilePickerWindow extends Window {
-  showSaveFilePicker?: (options?: { suggestedName?: string }) => Promise<SaveFileHandle>;
+  showSaveFilePicker?: (options?: { suggestedName?: string }) => Promise<PickedFileHandle>;
 }
 
 /** Save a completed download through the File System Access API or an anchor fallback. */
@@ -85,7 +87,7 @@ export async function saveDownload(
 export async function requestSaveFileHandle(
   suggestedName?: string,
   signal?: AbortSignal,
-): Promise<SaveFileHandle | undefined> {
+): Promise<PickedFileHandle | undefined> {
   throwIfAborted(signal);
   if (typeof window === "undefined") return undefined;
   const browserWindow = window as SaveFilePickerWindow;
@@ -118,4 +120,18 @@ function hasErrorName(error: unknown, name: string): boolean {
 
 function quietlyAbortWritable(writable: SaveFileWritable, reason: unknown): void {
   void writable.abort(reason).catch(() => undefined);
+}
+
+/**
+ * After a failed save, remove the file a save picker created once its writable
+ * has settled, unless anything was committed. A picker creates or truncates its
+ * file, so only an empty one is removed.
+ */
+export async function discardUnsavedFile(handle: PickedFileHandle, committed: Promise<boolean> = Promise.resolve(false)): Promise<void> {
+  try {
+    if (await committed || typeof handle.remove !== "function") return;
+    if ((await handle.getFile()).size === 0) await handle.remove();
+  } catch {
+    // Best effort: the save has already failed with its own error.
+  }
 }

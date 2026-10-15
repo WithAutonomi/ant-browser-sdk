@@ -1,3 +1,4 @@
+import { gunzipSync } from "node:zlib";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
@@ -5,7 +6,8 @@ import { corePublicFile, publicFileFromCore } from "../src/internal/protocol.js"
 import { encryptPublicFile, parseBrowserManifest } from "../src/wasm/ant_core.js";
 import * as wasmBindings from "../src/wasm/ant_core.js";
 import { AutonomiClient, getNetworkDefaults, initializeWasm, SDK_LIMITS } from "../src/index.js";
-import { getBindings } from "../src/internal/runtime.js";
+import { getBindings, type RawNetworkClient } from "../src/internal/runtime.js";
+import { resumePointer } from "../src/pointers.js";
 
 describe("packaged Rust/WASM boundary", () => {
   it("ships the network client without standalone node clients or transport test seams", async () => {
@@ -72,23 +74,35 @@ it("round-trips camelCase file metadata through the packaged Rust manifest valid
   expect(sdkFile.chunks[0]).toHaveProperty("dstHash");
 });
 
-it("matches the bundled core's minimum encryption size and maximum descriptor size", async () => {
+it("validates descriptors beyond 4 GiB and 1024 chunks without allocating file content", async () => {
   await initializeWasm(await readFile(new URL("../src/wasm/ant_core_bg.wasm", import.meta.url)));
   expect(() => encryptPublicFile(new Uint8Array(SDK_LIMITS.minFileBytes - 1))).toThrow();
   const encrypted = encryptPublicFile(new Uint8Array(SDK_LIMITS.minFileBytes));
   expect(encrypted.chunks).toHaveLength(3);
-  // Validate metadata at the maximum without allocating a gigabyte of file content.
-  const descriptor = { name: "large.bin", size: SDK_LIMITS.maxFileBytes, content_type: "application/octet-stream", replicas: 5,
+  const chunkSize = 4 * 1024 * 1024;
+  const descriptor = { name: "large.bin", size: 1030 * chunkSize, content_type: "application/octet-stream", replicas: 5,
     address: encrypted.address, blake3: encrypted.blake3, data_map_size: encrypted.data_map_size,
-    chunks: encrypted.chunks.map((chunk: { index: number }) => ({ ...chunk, src_size: chunk.index === 0 ? SDK_LIMITS.maxFileBytes - 2 : 1 })) };
+    chunks: Array.from({ length: 1030 }, (_, index) => ({ ...encrypted.chunks[0], index, src_size: chunkSize })) };
   const manifest = { version: 6, network_id: "api-limits-test",
     endpoints: [{ multiaddr: endpoint("ab".repeat(32), 0xbb) }],
     payment: { chain_id: 31337, payment_token_address: `0x${"11".repeat(20)}`, payment_vault_address: `0x${"22".repeat(20)}` },
     files: [descriptor],
   };
-  expect(parseBrowserManifest(manifest).files[0].size).toBe(SDK_LIMITS.maxFileBytes);
+  expect(parseBrowserManifest(manifest).files[0].size).toBe(1030 * chunkSize);
   descriptor.size++;
   expect(() => parseBrowserManifest(manifest)).toThrow();
+});
+
+it("ships writable streaming and validates download budgets and abort signals in the core", async () => {
+  await initializeWasm(await readFile(new URL("../src/wasm/ant_core_bg.wasm", import.meta.url)));
+  expect(wasmBindings.BrowserFileReader.prototype.pipeTo).toBeTypeOf("function");
+  const client = new (getBindings().BrowserNetworkClient)([{ multiaddr: endpoint("ab".repeat(32), 0xbb) }]);
+  try {
+    await expect(client.downloadPublicFile("cd".repeat(32), undefined, undefined, { maxMemoryBytes: -1 })).rejects.toContain("memory budget");
+    const controller = new AbortController();
+    controller.abort("cancel before network");
+    await expect(client.downloadPublicFile("cd".repeat(32), undefined, undefined, { signal: controller.signal })).rejects.toBe("cancel before network");
+  } finally { client.close(); client.free(); }
 });
 
 it("ships provenance matching the bundled production WASM", async () => {
@@ -140,4 +154,56 @@ it("uses the packaged native validator for failed payment reconciliation", async
     client.close();
     client.free();
   }
+});
+
+
+it("rebuilds the exact paid pointer proof from a real devnet checkpoint without network access", async () => {
+  await initializeWasm(await readFile(new URL("../src/wasm/ant_core_bg.wasm", import.meta.url)));
+  // Captured from production WASM on the isolated 2026-10-15 devnet. Contains
+  // signed public records/quotes and a local Anvil receipt, never an owner seed.
+  const fixture = JSON.parse(gunzipSync(await readFile(new URL("./fixtures/pointer-payment-devnet.json.gz", import.meta.url))).toString());
+  const fetch = vi.spyOn(globalThis, "fetch");
+  try {
+    const recovered = getBindings().recoverPointerPayment(fixture.prepared, fixture.receipt) as { record: Uint8Array; proof: Uint8Array };
+    expect(Array.from(recovered.record)).toEqual(fixture.paid.record);
+    expect(Array.from(recovered.proof)).toEqual(fixture.paid.proof);
+    expect(fetch).not.toHaveBeenCalled();
+  } finally { fetch.mockRestore(); }
+});
+
+it("resumes a real devnet checkpoint through the packaged core and stores the exact paid proof", async () => {
+  await initializeWasm(await readFile(new URL("../src/wasm/ant_core_bg.wasm", import.meta.url)));
+  const fixture = JSON.parse(gunzipSync(await readFile(new URL("./fixtures/pointer-payment-devnet.json.gz", import.meta.url))).toString());
+  const network = { chainId: 31337, paymentTokenAddress: `0x${"11".repeat(20)}`, paymentVaultAddress: `0x${"22".repeat(20)}` };
+  const [[quoteHash, transactionHash]] = Object.entries(fixture.receipt.transactionHashes as Record<string, string>) as [[string, string]];
+  const quotes = [{ quote: {}, quoteHash, rewardsAddress: `0x${"33".repeat(20)}`, amount: fixture.receipt.totalAmount }];
+  const checkpoint = JSON.stringify({ version: 1, network, prepared: fixture.prepared, quotes, submissions: [{ transactionHash, totalAmount: fixture.receipt.totalAmount }] });
+  const storePaidPointer = vi.fn(async () => ({ address: "ab".repeat(32), counter: "0", kind: "chunk", kindTag: 0, target: "cd".repeat(32), stateId: "ef".repeat(32) }));
+  const persisted: string[] = [];
+  await resumePointer({ storePaidPointer } as unknown as RawNetworkClient, network, checkpoint, {
+    payment: { pay: vi.fn(), recover: vi.fn(async () => fixture.receipt) },
+    onCheckpoint: (value) => { persisted.push(value); },
+  }, vi.fn());
+  const [record, proof] = storePaidPointer.mock.calls[0] as unknown as [Uint8Array, Uint8Array];
+  expect(Array.from(record)).toEqual(fixture.paid.record);
+  expect(Array.from(proof)).toEqual(fixture.paid.proof);
+  // Base64 keeps the paid proof far smaller than a JSON byte array.
+  expect(persisted.at(-1)!.length).toBeLessThan(checkpoint.length + JSON.stringify(fixture.paid).length / 2);
+});
+
+it("rejects altered pointer signatures, mismatched payment plans and missing transactions", async () => {
+  await initializeWasm(await readFile(new URL("../src/wasm/ant_core_bg.wasm", import.meta.url)));
+  const fixture = JSON.parse(gunzipSync(await readFile(new URL("./fixtures/pointer-payment-devnet.json.gz", import.meta.url))).toString());
+  type Checkpoint = { version: number; record: number[]; plan: { data_size: number; address: number[] } };
+  for (const mutate of [
+    (value: Checkpoint) => { value.version = 2; },
+    (value: Checkpoint) => { value.record[100] = value.record[100]! ^ 1; },
+    (value: Checkpoint) => { value.plan.data_size++; },
+    (value: Checkpoint) => { value.plan.address[0] = value.plan.address[0]! ^ 1; },
+  ]) {
+    const value = JSON.parse(fixture.prepared);
+    mutate(value);
+    expect(() => getBindings().recoverPointerPayment(JSON.stringify(value), fixture.receipt)).toThrow();
+  }
+  expect(() => getBindings().recoverPointerPayment(fixture.prepared, { totalAmount: "0" })).toThrow();
 });

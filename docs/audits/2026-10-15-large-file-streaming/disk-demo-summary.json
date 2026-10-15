@@ -1,0 +1,10 @@
+{
+  "browser": "151.0.7922.34",
+  "result": {
+    "size": 13056,
+    "matched": true,
+    "cancelDisabled": true,
+    "log": "Verified and saved 13056 bytes to demo-disk.bin; BLAKE3 cb0ef44162971fee6b6098e8b0b55efe23593a2ab56711324e71fc6b67e4b78d"
+  },
+  "errors": []
+}

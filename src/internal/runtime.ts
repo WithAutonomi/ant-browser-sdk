@@ -3,18 +3,23 @@ import initAntCore, {
   parseWebRtcDirectMultiaddr,
   decodeMerklePaymentReceipt,
   decodeManifest,
+  createManifest,
+  createFileLink,
+  pointerAddress,
+  recoverPointerPayment,
   encryptPublicFile,
   mainnetNetworkDefaults,
   parseManifestLink,
 } from "../wasm/ant_core.js";
 import { AutonomiError } from "../errors.js";
-import type { WasmSource } from "../types.js";
+import type { PipeOptions, PipeResult, WasmSource } from "../types.js";
 
 export interface RawFileReader {
   readonly size: number;
   readonly contentType: string;
   readonly name: string;
   readRange(start: number, length: number): Promise<Uint8Array>;
+  pipeTo(destination: WritableStream<Uint8Array>, options?: PipeOptions): Promise<PipeResult>;
   close(): void;
   free(): void;
 }
@@ -25,8 +30,28 @@ export interface RawFileReaderOptions {
   streaming?: boolean;
 }
 
+export interface RawDownloadOptions {
+  maxMemoryBytes?: number;
+  signal?: AbortSignal;
+}
+
+/** The core's trailing pointer-write options. It refuses any other key. */
+export interface RawPointerWriteOptions {
+  /** Awaited with the signed record and payment plan before the wallet is invoked; a rejection pays nothing. */
+  onPrepared?: (checkpoint: string) => Promise<void>;
+  /** Handed the paid record and proof before storing; the state is stored whatever this does. */
+  onPaid?: (value: { record: Uint8Array; proof: Uint8Array }) => Promise<void>;
+}
+
 export interface RawNetworkClient {
   connect(expectedPayment?: unknown): Promise<unknown>;
+  getPointer(address: string): Promise<unknown>;
+  resolvePointer(address: string): Promise<unknown>;
+  pointerFinality(address: string): Promise<unknown>;
+  createPointer(seed: Uint8Array, target: string, kind: string, network: unknown, pay: (...args: unknown[]) => Promise<unknown>, options: RawPointerWriteOptions): Promise<unknown>;
+  updatePointer: RawNetworkClient["createPointer"];
+  transferPointer(seed: Uint8Array, recipient: string, network: unknown, pay: (...args: unknown[]) => Promise<unknown>, options: RawPointerWriteOptions): Promise<unknown>;
+  storePaidPointer(record: Uint8Array, proof: Uint8Array, network: unknown): Promise<unknown>;
   reconcileFailedUploadPayment(
     checkpoint: string,
     verifyFailure: (attempt: unknown, scope: string) => unknown,
@@ -37,6 +62,7 @@ export interface RawNetworkClient {
     file: unknown,
     concurrency: number | undefined,
     onProgress?: (message: string) => void,
+    options?: RawDownloadOptions,
   ): Promise<unknown>;
   openPublicFile(
     file: unknown,
@@ -47,6 +73,7 @@ export interface RawNetworkClient {
     file: unknown,
     concurrency: number | undefined,
     onProgress?: (message: string) => void,
+    options?: RawDownloadOptions,
   ): Promise<unknown>;
   openPrivateFile(
     file: unknown,
@@ -79,6 +106,10 @@ export interface WasmBindings {
   parseManifestLink(link: string): unknown;
   /** Decode `.ant` manifest bytes (ant-client ADR-0006). */
   decodeManifest(bytes: Uint8Array): unknown;
+  createManifest(input: unknown): unknown;
+  createFileLink(address: string): string;
+  pointerAddress(seed: Uint8Array): string;
+  recoverPointerPayment(checkpoint: string, receipt: unknown): unknown;
 }
 
 type LoadedSource = ArrayBuffer | WebAssembly.Module;
@@ -160,5 +191,9 @@ export function getBindings(): WasmBindings {
     mainnetNetworkDefaults,
     parseManifestLink,
     decodeManifest,
+    createManifest,
+    createFileLink,
+    pointerAddress,
+    recoverPointerPayment,
   };
 }

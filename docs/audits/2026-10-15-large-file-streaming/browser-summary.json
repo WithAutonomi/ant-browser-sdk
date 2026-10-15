@@ -1,0 +1,42 @@
+{
+  "browser": "151.0.7922.34",
+  "sdkBase": "29ab175",
+  "sdkRevision": "456dbb7b6b6ccbcce0603bbae2fd7b1664b68975",
+  "wasm": "225a6768589ecbb6a0c77d70df329f343b22776f",
+  "wasmSha256": "9298d1564f1809f97f06b3bacee3a674040ff74c6af1aa3366d1f0ba542a8352",
+  "node": "26129a2611cac08f9f53a557f91fb8806b40a1cc",
+  "phases": [
+    {
+      "visibility": "public",
+      "address": "eccac1618853ecee64ab24d56de20a149b1702838f77c5a5cdf4c630e07df55e",
+      "knownSize": 13056,
+      "creatorSize": 1,
+      "downloadBytes": 13056,
+      "rangeReads": 3,
+      "mediaRanges": 2,
+      "sha256": "f4d99b7cad3937caccb331974609f53b4eabb2fa944f6f39d768be4f2e26d91b",
+      "wasmHashes": [
+        "9298d1564f1809f97f06b3bacee3a674040ff74c6af1aa3366d1f0ba542a8352",
+        "9298d1564f1809f97f06b3bacee3a674040ff74c6af1aa3366d1f0ba542a8352"
+      ],
+      "pageErrors": [],
+      "consoleErrors": []
+    },
+    {
+      "visibility": "private",
+      "address": "f2853ce4176147f432464dd9059bf6c74901ef0aeaf5f032985d268f152e39dd",
+      "knownSize": 13056,
+      "creatorSize": 1,
+      "downloadBytes": 13056,
+      "rangeReads": 3,
+      "mediaRanges": 2,
+      "sha256": "ea713b9f6096ac909d6166c705b4d9e139547b972bd471467e31f2445b12fffa",
+      "wasmHashes": [
+        "9298d1564f1809f97f06b3bacee3a674040ff74c6af1aa3366d1f0ba542a8352",
+        "9298d1564f1809f97f06b3bacee3a674040ff74c6af1aa3366d1f0ba542a8352"
+      ],
+      "pageErrors": [],
+      "consoleErrors": []
+    }
+  ]
+}

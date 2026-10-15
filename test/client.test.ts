@@ -42,6 +42,8 @@ const state = vi.hoisted(() => ({
     downloadPrivateFile: ReturnType<typeof vi.fn>;
     openPrivateFile: ReturnType<typeof vi.fn>;
     reconcileFailedUploadPayment: ReturnType<typeof vi.fn>;
+    getPointer: ReturnType<typeof vi.fn>;
+    createPointer: ReturnType<typeof vi.fn>;
   }>,
 }));
 
@@ -57,6 +59,8 @@ vi.mock("../src/internal/runtime.js", () => {
     downloadPrivateFile = vi.fn();
     openPrivateFile = vi.fn();
     reconcileFailedUploadPayment = vi.fn();
+    getPointer = vi.fn();
+    createPointer = vi.fn();
 
     constructor(endpoints: unknown) {
       this.endpoints = endpoints;
@@ -92,6 +96,7 @@ vi.mock("../src/internal/runtime.js", () => {
       mainnetNetworkDefaults: () => ({ id: "mainnet", seeds: state.defaultSeeds, payment: state.hello.payment, rpc_url: "https://rpc.example" }),
       BrowserNetworkClient: NetworkClient,
       encryptPublicFile: state.encrypt,
+      recoverPointerPayment: () => ({ record: Uint8Array.of(1), proof: Uint8Array.of(2) }),
       parseWebRtcDirectMultiaddr: (endpoint: unknown) => {
         if (typeof endpoint !== "string" || !endpoint.includes("/webrtc-direct/")) {
           throw new Error("invalid WebRTC Direct multiaddress");
@@ -281,14 +286,18 @@ describe("AutonomiClient", () => {
 
   it("aborts active operations when the client closes", async () => {
     const client = await AutonomiClient.connect(endpoint);
-    state.networks[0]!.findClosest.mockReturnValue(new Promise(() => undefined));
+    let settle!: (error: Error) => void;
+    state.networks[0]!.findClosest.mockReturnValue(new Promise((_resolve, reject) => { settle = reject; }));
 
     const lookup = client.findClosest();
     client.close();
 
     await expect(lookup).rejects.toMatchObject({ name: "AbortError" });
     expect(state.networks[0]?.closed).toBe(true);
-    expect(state.networks[0]?.freed).toBe(true);
+    // The lookup's Rust future still borrows the handle until the closed transport fails it.
+    expect(state.networks[0]?.freed).toBe(false);
+    settle(new Error("transport closed"));
+    await vi.waitFor(() => expect(state.networks[0]?.freed).toBe(true));
   });
 
   it("forwards custom WASM to staging and terminates its worker on close", async () => {
@@ -417,7 +426,7 @@ describe("AutonomiClient", () => {
     raw.downloadPrivateFile.mockResolvedValue({ content: Uint8Array.of(1), hash: file.blake3,
       file: { ...wireFile, name: "secret.txt", address: "ab".repeat(32) } });
     const downloaded = await client.download(privateFile, { concurrency: 3 });
-    expect(raw.downloadPrivateFile).toHaveBeenCalledWith({ data_map: dataMap, name: "secret.txt", content_type: "text/plain" }, 3, expect.any(Function));
+    expect(raw.downloadPrivateFile).toHaveBeenCalledWith({ data_map: dataMap, name: "secret.txt", content_type: "text/plain" }, 3, expect.any(Function), expect.objectContaining({ signal: expect.any(AbortSignal) }));
     expect(raw.downloadPublicFile).not.toHaveBeenCalled();
     expect(downloaded.file).toMatchObject({ name: "secret.txt", size: file.size, blake3: file.blake3, dataMap });
     expect(downloaded.file).not.toHaveProperty("address");
@@ -439,7 +448,7 @@ describe("AutonomiClient", () => {
     raw.downloadPrivateFile.mockResolvedValueOnce({ content: Uint8Array.of(1), hash: file.blake3,
       file: { ...wireFile, name: "private-file-0123456789abcdef.bin" } });
     const bare = await client.download({ dataMap });
-    expect(raw.downloadPrivateFile).toHaveBeenLastCalledWith({ data_map: dataMap, name: "", content_type: "" }, undefined, expect.any(Function));
+    expect(raw.downloadPrivateFile).toHaveBeenLastCalledWith({ data_map: dataMap, name: "", content_type: "" }, undefined, expect.any(Function), expect.objectContaining({ signal: expect.any(AbortSignal) }));
     expect(bare.file).toMatchObject({ name: "private-file-0123456789abcdef.bin", dataMap });
 
     await expect(client.download({ ...privateFile, dataMap: new Uint8Array() })).rejects.toMatchObject({ code: "INVALID_SOURCE" });
@@ -457,13 +466,13 @@ describe("AutonomiClient", () => {
       file: { ...wireFile, name: "a.jpg", address: "ab".repeat(32) } });
     await client.download(embedded, { concurrency: 2 });
     // The entry's last path component names the file; no DataMap fetch happens.
-    expect(raw.downloadPrivateFile).toHaveBeenCalledWith({ data_map: dataMap, name: "a.jpg", content_type: "" }, 2, expect.any(Function));
+    expect(raw.downloadPrivateFile).toHaveBeenCalledWith({ data_map: dataMap, name: "a.jpg", content_type: "" }, 2, expect.any(Function), expect.objectContaining({ signal: expect.any(AbortSignal) }));
     expect(raw.downloadPublicFile).not.toHaveBeenCalled();
 
     raw.downloadPublicFile.mockResolvedValue({ content: Uint8Array.of(1), hash: file.blake3, file: wireFile,
       dataMapNode: { peer_id: "77".repeat(32), native_addresses: [], reliability: 1 } });
     await client.download(publicEntry);
-    expect(raw.downloadPublicFile).toHaveBeenCalledWith("cd".repeat(32), undefined, expect.any(Function));
+    expect(raw.downloadPublicFile).toHaveBeenCalledWith("cd".repeat(32), undefined, expect.any(Function), expect.objectContaining({ signal: expect.any(AbortSignal) }));
 
     raw.openPrivateFile.mockResolvedValue({ size: 12, name: "a.jpg", contentType: "image/jpeg",
       readRange: vi.fn(), close: vi.fn(), free: vi.fn() });
@@ -1133,7 +1142,7 @@ it("translates public file metadata into the existing wire format for downloads 
   const rawNode = { peer_id: "77".repeat(32), native_addresses: ["/native"], reliability: 1, webrtc_direct: { multiaddr: endpoint } };
   raw.downloadPublicFile.mockResolvedValue({ content: Uint8Array.of(1), hash: file.blake3, file: wireFile, dataMapNode: rawNode });
   const downloaded = await client.download(file);
-  expect(raw.downloadPublicFile).toHaveBeenCalledWith({ address: file.address, name: file.name, content_type: file.contentType }, undefined, expect.any(Function));
+  expect(raw.downloadPublicFile).toHaveBeenCalledWith({ address: file.address, name: file.name, content_type: file.contentType }, undefined, expect.any(Function), expect.objectContaining({ signal: expect.any(AbortSignal) }));
   expect(downloaded.file).toEqual(file);
   expect(downloaded.dataMapNode).toEqual({ peerId: rawNode.peer_id, nativeAddresses: ["/native"], reliability: 1, webrtcDirect: { multiaddr: endpoint } });
   expect(downloaded.file).not.toHaveProperty("content_type");
@@ -1172,7 +1181,7 @@ it("accepts the advertised concurrency bounds and rejects values outside them", 
     dataMapNode: { peer_id: "aa".repeat(32), native_addresses: [], reliability: 1 } });
   for (const concurrency of [SDK_LIMITS.downloadConcurrency.min, SDK_LIMITS.downloadConcurrency.max]) {
     await client.download(file, { concurrency });
-    expect(download).toHaveBeenLastCalledWith({ address: file.address, name: file.name, content_type: file.contentType }, concurrency, expect.any(Function));
+    expect(download).toHaveBeenLastCalledWith({ address: file.address, name: file.name, content_type: file.contentType }, concurrency, expect.any(Function), expect.objectContaining({ signal: expect.any(AbortSignal) }));
   }
   for (const concurrency of [SDK_LIMITS.downloadConcurrency.min - 1, SDK_LIMITS.downloadConcurrency.max + 1, 1.5, NaN, Infinity]) {
     await expect(client.download(file, { concurrency })).rejects.toMatchObject({ code: "DOWNLOAD_FAILED" });
@@ -1180,7 +1189,7 @@ it("accepts the advertised concurrency bounds and rejects values outside them", 
   expect(download).toHaveBeenCalledTimes(2);
   for (const options of [{}, { concurrency: "auto" as const }]) {
     await client.download(file, options);
-    expect(download).toHaveBeenLastCalledWith({ address: file.address, name: file.name, content_type: file.contentType }, undefined, expect.any(Function));
+    expect(download).toHaveBeenLastCalledWith({ address: file.address, name: file.name, content_type: file.contentType }, undefined, expect.any(Function), expect.objectContaining({ signal: expect.any(AbortSignal) }));
   }
   client.close();
 });
@@ -1191,7 +1200,43 @@ it("derives read size from the DataMap rather than a supplied descriptor", async
   download.mockResolvedValue({ content: Uint8Array.of(1), hash: file.blake3, file: wireFile,
     dataMapNode: { peer_id: "aa".repeat(32), native_addresses: [], reliability: 1 } });
   await client.download({ ...file, size: Number.MAX_SAFE_INTEGER, chunks: [], blake3: "invalid hint" });
-  expect(download).toHaveBeenCalledWith({ address: file.address, name: file.name, content_type: file.contentType }, undefined, expect.any(Function));
+  expect(download).toHaveBeenCalledWith({ address: file.address, name: file.name, content_type: file.contentType }, undefined, expect.any(Function), expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  client.close();
+});
+
+it("forwards memory budgets and cancellation to both core download paths", async () => {
+  const client = await AutonomiClient.connect(endpoint);
+  const raw = state.networks[0]!;
+  for (const [source, download] of [[file, raw.downloadPublicFile], [{ dataMap: Uint8Array.of(1) }, raw.downloadPrivateFile]] as const) {
+    let coreSignal!: AbortSignal;
+    download.mockImplementation((_file, _cap, _progress, options) => {
+      expect(options.maxMemoryBytes).toBe(64 * 1024 * 1024);
+      coreSignal = options.signal;
+      return new Promise((_resolve, reject) => coreSignal.addEventListener("abort", () => reject(coreSignal.reason), { once: true }));
+    });
+    const controller = new AbortController();
+    const pending = client.download(source, { maxMemoryBytes: 64 * 1024 * 1024, signal: controller.signal });
+    controller.abort("cancel core transfer");
+    await expect(pending).rejects.toBe("cancel core transfer");
+    expect(coreSignal.aborted).toBe(true);
+    expect(client.closed).toBe(false);
+  }
+  raw.downloadPublicFile.mockClear();
+  for (const maxMemoryBytes of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+    await expect(client.download(file, { maxMemoryBytes })).rejects.toMatchObject({ code: "DOWNLOAD_FAILED" });
+  }
+  expect(raw.downloadPublicFile).not.toHaveBeenCalled();
+  client.close();
+});
+
+it("snapshots only the downloaded byte view in its Blob", async () => {
+  const client = await AutonomiClient.connect(endpoint);
+  const bytes = Uint8Array.of(9, 1, 2, 3, 8).subarray(1, 4);
+  state.networks[0]!.downloadPublicFile.mockResolvedValue({ content: bytes, hash: file.blake3, file: wireFile,
+    dataMapNode: { peer_id: "aa".repeat(32), native_addresses: [], reliability: 1 } });
+  const result = await client.download(file);
+  bytes.fill(0);
+  expect(new Uint8Array(await result.blob.arrayBuffer())).toEqual(Uint8Array.of(1, 2, 3));
   client.close();
 });
 
@@ -1280,4 +1325,243 @@ it("propagates native verification and persistence failures without authorizing 
   }
   expect(state.networks[0]!.uploadRecords).not.toHaveBeenCalled();
   client.close();
+});
+
+
+describe("streamAndSave", () => {
+  function rawReader() {
+    return { size: 3, name: "file.bin", contentType: "application/octet-stream", close: vi.fn(), free: vi.fn(), readRange: vi.fn(),
+      pipeTo: vi.fn(async (destination: WritableStream<Uint8Array>, options: { onProgress: (written: number, total: number) => void }) => {
+        const writer = destination.getWriter();
+        try { await writer.write(Uint8Array.of(1, 2, 3)); options.onProgress(3, 3); await writer.close(); }
+        finally { writer.releaseLock(); }
+        return { bytesWritten: 3, hash: "verified" };
+      }) };
+  }
+  it("chooses a picker before opening, streams verified bytes and closes its reader", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    const raw = state.networks[0]!;
+    const reader = rawReader();
+    raw.openPublicFile.mockResolvedValue(reader);
+    const write = vi.fn();
+    const picker = vi.fn(async () => {
+      expect(raw.openPublicFile).not.toHaveBeenCalled();
+      return { name: "chosen.bin", createWritable: async () => new WritableStream({ write }) };
+    });
+    vi.stubGlobal("window", { showSaveFilePicker: picker });
+    const events: import("../src/types.js").ProgressEvent[] = [];
+    expect(await client.streamAndSave(file, { onProgress: event => events.push(event) })).toEqual({ name: "chosen.bin", method: "file-picker", bytesWritten: 3, hash: "verified" });
+    expect(write.mock.calls[0]![0]).toEqual(Uint8Array.of(1, 2, 3));
+    expect(raw.downloadPublicFile).not.toHaveBeenCalled();
+    expect(reader.close).toHaveBeenCalledOnce();
+    expect(reader.free).toHaveBeenCalledOnce();
+    expect(events.filter(e => e.operation === "stream-and-save" && e.status !== "running")).toHaveLength(1);
+    client.close();
+  });
+
+  it("streams a private manifest entry into a caller destination", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    const raw = state.networks[0]!;
+    const reader = rawReader();
+    raw.openPrivateFile.mockResolvedValue(reader);
+    const write = vi.fn();
+    const result = await client.streamAndSave({ kind: "embedded", name: "dir/private.bin", address: file.address, dataMap: Uint8Array.of(1) }, { destination: new WritableStream({ write }) });
+    expect(result).toMatchObject({ name: "private.bin", method: "stream" });
+    expect(raw.openPublicFile).not.toHaveBeenCalled();
+    expect(raw.downloadPrivateFile).not.toHaveBeenCalled();
+    expect(write).toHaveBeenCalledOnce();
+    client.close();
+  });
+
+  it("fails before opening when no streaming destination is available", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    vi.stubGlobal("window", {});
+    await expect(client.streamAndSave(file)).rejects.toMatchObject({ code: "SAVE_FAILED" });
+    expect(state.networks[0]!.openPublicFile).not.toHaveBeenCalled();
+    client.close();
+  });
+
+  it("aborts a writable that arrives after cancellation and releases the reader", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    const reader = rawReader();
+    state.networks[0]!.openPublicFile.mockResolvedValue(reader);
+    let release!: (value: WritableStream<Uint8Array>) => void;
+    const controller = new AbortController();
+    const creating = vi.fn(() => new Promise<WritableStream<Uint8Array>>(resolve => { release = resolve; }));
+    const saving = client.streamAndSave(file, { fileHandle: { createWritable: creating }, signal: controller.signal });
+    await vi.waitFor(() => expect(creating).toHaveBeenCalledOnce());
+    controller.abort();
+    await expect(saving).rejects.toMatchObject({ name: "AbortError" });
+    const abort = vi.fn();
+    release(new WritableStream({ abort }));
+    await vi.waitFor(() => expect(abort).toHaveBeenCalledOnce());
+    expect(reader.close).toHaveBeenCalledOnce();
+    expect(reader.pipeTo).not.toHaveBeenCalled();
+    client.close();
+  });
+
+  it("names saves from normalized addresses and never from an empty name", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    const raw = state.networks[0]!;
+    raw.downloadPublicFile.mockResolvedValue({ content: Uint8Array.of(1), hash: file.blake3, file: wireFile,
+      dataMapNode: { peer_id: "aa".repeat(32), native_addresses: [], reliability: 1 } });
+    await client.download(file);
+    raw.openPublicFile.mockImplementation(async () => rawReader());
+    raw.openPrivateFile.mockImplementation(async () => rawReader());
+    const known = await client.streamAndSave(`0X${file.address.toUpperCase()}`, { destination: new WritableStream() });
+    expect(known.name).toBe(file.name);
+    const unnamed = await client.streamAndSave({ dataMap: Uint8Array.of(1), name: "" }, { destination: new WritableStream() });
+    expect(unnamed.name).toBe("autonomi-file");
+    client.close();
+  });
+
+  it("reports a destination write failure as a save failure", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    state.networks[0]!.openPublicFile.mockResolvedValue(rawReader());
+    const full = new DOMException("The disk is full", "QuotaExceededError");
+    const saving = client.streamAndSave(file, { destination: new WritableStream({ write: () => { throw full; } }) });
+    await expect(saving).rejects.toMatchObject({ code: "SAVE_FAILED", cause: full });
+    client.close();
+  });
+
+  it("removes the empty file its own picker created when the save fails before writing", async () => {
+    for (const size of [0, 5]) {
+      const client = await AutonomiClient.connect(endpoint);
+      state.networks.at(-1)!.openPublicFile.mockRejectedValue(new Error("no route to the DataMap"));
+      const remove = vi.fn(async () => undefined);
+      vi.stubGlobal("window", { showSaveFilePicker: async () => ({ name: "movie.mp4", getFile: async () => ({ size }), remove,
+        createWritable: async () => new WritableStream() }) });
+      await expect(client.streamAndSave(file)).rejects.toMatchObject({ code: "OPEN_FILE_FAILED" });
+      if (size === 0) await vi.waitFor(() => expect(remove).toHaveBeenCalledOnce());
+      else {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(remove).not.toHaveBeenCalled();
+      }
+      client.close();
+    }
+  });
+
+  it("removes an empty picked file after a transfer failure once the destination is released", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    const reader = rawReader();
+    reader.pipeTo.mockImplementation(async (destination: WritableStream<Uint8Array>) => {
+      const writer = destination.getWriter();
+      await writer.write(Uint8Array.of(1));
+      void writer.abort(new Error("record unavailable"));
+      writer.releaseLock();
+      throw new Error("record unavailable");
+    });
+    state.networks[0]!.openPublicFile.mockResolvedValue(reader);
+    const remove = vi.fn(async () => undefined);
+    const abort = vi.fn();
+    vi.stubGlobal("window", { showSaveFilePicker: async () => ({ name: "movie.mp4", getFile: async () => ({ size: 0 }), remove,
+      createWritable: async () => new WritableStream({ abort }) }) });
+    await expect(client.streamAndSave(file)).rejects.toMatchObject({ code: "OPEN_FILE_FAILED" });
+    await vi.waitFor(() => expect(remove).toHaveBeenCalledOnce());
+    expect(abort).toHaveBeenCalledOnce();
+    client.close();
+  });
+});
+
+it("removes an empty picked file when a buffered download fails", async () => {
+  const remove = vi.fn(async () => undefined);
+  vi.stubGlobal("window", { showSaveFilePicker: async () => ({ name: "archive.bin", getFile: async () => ({ size: 0 }), remove,
+    createWritable: vi.fn() }) });
+  const client = await AutonomiClient.connect(endpoint);
+  state.networks[0]!.downloadPublicFile.mockRejectedValue(new Error("record unavailable"));
+  await expect(client.downloadAndSave(file)).rejects.toMatchObject({ code: "DOWNLOAD_FAILED" });
+  await vi.waitFor(() => expect(remove).toHaveBeenCalledOnce());
+  client.close();
+});
+
+it("applies the default buffered-download budget", async () => {
+  const client = await AutonomiClient.connect(endpoint);
+  const download = state.networks[0]!.downloadPublicFile;
+  download.mockRejectedValue(new Error("file exceeds the memory budget"));
+  await expect(client.download(file)).rejects.toMatchObject({ code: "DOWNLOAD_FAILED" });
+  expect(download.mock.calls[0]![3]).toMatchObject({ maxMemoryBytes: SDK_LIMITS.defaultDownloadMemoryBytes });
+  expect(SDK_LIMITS.defaultDownloadMemoryBytes).toBe(1_000_000_000);
+  client.close();
+});
+
+it("shuts the transport on close and frees the handle once an in-flight download settles", async () => {
+  const client = await AutonomiClient.connect(endpoint);
+  const raw = state.networks[0]!;
+  let finish!: (error: Error) => void;
+  raw.downloadPublicFile.mockReturnValue(new Promise((_resolve, reject) => { finish = reject; }));
+  const pending = client.download(file);
+  await vi.waitFor(() => expect(raw.downloadPublicFile).toHaveBeenCalledOnce());
+  client.close();
+  await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  expect(raw.closed).toBe(true);
+  expect(raw.freed).toBe(false);
+  finish(new Error("transport closed"));
+  await vi.waitFor(() => expect(raw.freed).toBe(true));
+  await expect(client.findClosest()).rejects.toMatchObject({ code: "CLIENT_CLOSED" });
+});
+
+
+it("retains the network until an in-flight pointer read settles after cancellation", async () => {
+  const client = await AutonomiClient.connect(endpoint);
+  const raw = state.networks[0]!;
+  let release!: (value: null) => void;
+  raw.getPointer.mockReturnValue(new Promise<null>(resolve => { release = resolve; }));
+  const controller = new AbortController();
+  const pending = client.getPointer(file.address, { signal: controller.signal });
+  controller.abort();
+  await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  client.close();
+  // A read needs no transport after close; only the borrowed handle waits.
+  expect(raw.closed).toBe(true);
+  expect(raw.freed).toBe(false);
+  release(null);
+  await vi.waitFor(() => expect(raw.freed).toBe(true));
+});
+
+it("closing before the wallet is invoked stops a pointer write without payment", async () => {
+  const payment: PaymentProvider = { pay: vi.fn() };
+  const client = await AutonomiClient.connect(endpoint, { payment });
+  const raw = state.networks[0]!;
+  let release!: () => void;
+  const checkpoint = vi.fn(() => new Promise<void>(resolve => { release = resolve; }));
+  raw.createPointer.mockImplementation(async (_seed, _target, _kind, network, pay, { onPrepared }) => {
+    await onPrepared("signed plan");
+    return pay(network, [{ quote: {}, quoteHash: "aa", rewardsAddress: "bb", amount: "1" }]);
+  });
+  const pending = client.createPointer({ ownerSeed: new Uint8Array(32), kind: "chunk", target: file.address, onCheckpoint: checkpoint });
+  await vi.waitFor(() => expect(checkpoint).toHaveBeenCalledOnce());
+  client.close();
+  expect(raw.closed).toBe(true);
+  await expect(pending).rejects.toMatchObject({ name: "AbortError", checkpoint: undefined });
+  release();
+  expect(payment.pay).not.toHaveBeenCalled();
+  await vi.waitFor(() => expect(raw.freed).toBe(true));
+});
+
+it("settles and persists a submitted pointer payment when the client closes", async () => {
+  let release!: () => void;
+  const checkpoint = vi.fn();
+  const payment: PaymentProvider = { pay: vi.fn(async (_n, _q, context) => {
+    const receipt = { transactionHash: `0x${"12".repeat(32)}`, totalAmount: "1" };
+    context.submitted({ ...receipt, wait: async () => ({ status: "confirmed", receipt }) });
+    await new Promise<void>(resolve => { release = resolve; });
+    return receipt;
+  }) };
+  const client = await AutonomiClient.connect(endpoint, { payment });
+  const raw = state.networks[0]!;
+  raw.createPointer.mockImplementation(async (_seed, _target, _kind, network, pay, { onPrepared, onPaid }) => {
+    await onPrepared("signed plan");
+    await pay(network, [{ quote: {}, quoteHash: "aa", rewardsAddress: "bb", amount: "1" }]);
+    await onPaid({ record: Uint8Array.of(1), proof: Uint8Array.of(2) });
+    return { pointer: { address: file.address, counter: "0", kind: "chunk", kindTag: 0, target: file.address, stateId: file.address }, storageCostAtto: "1" };
+  });
+  const pending = client.createPointer({ ownerSeed: new Uint8Array(32), kind: "chunk", target: file.address, onCheckpoint: checkpoint });
+  await vi.waitFor(() => expect(payment.pay).toHaveBeenCalledOnce());
+  client.close();
+  expect(raw.closed).toBe(false);
+  release();
+  await expect(pending).resolves.toMatchObject({ pointer: { counter: "0" } });
+  expect(raw.closed).toBe(true);
+  expect(raw.freed).toBe(true);
+  expect(JSON.parse(checkpoint.mock.calls.at(-1)![0])).toMatchObject({ paid: { record: "AQ==", proof: "Ag==" } });
 });

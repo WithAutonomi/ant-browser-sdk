@@ -3,6 +3,7 @@ import { expectTypeOf, it } from "vitest";
 import type {
   AutonomiClient, PublicFileReader, NetworkConnectionOptions, NetworkDefaults, getNetworkDefaults,
   PrivateDownloadResult, PrivateFile, PrivateFileReference, PublicFile, UploadResult, DownloadResult,
+  PipeOptions, PipeResult,
 } from "@withautonomi/ant-browser-sdk";
 
 it("types private uploads and reads by the DataMap their holder keeps", () => {
@@ -37,6 +38,13 @@ it("exposes readers through openFile without a public constructor or factory", (
   expectTypeOf<"createPublicFileReader">().not.toMatchTypeOf<keyof typeof import("@withautonomi/ant-browser-sdk")>();
 });
 
+it("types writable streaming and output-memory budgets in the published declarations", () => {
+  const pipe = (reader: PublicFileReader, destination: WritableStream<Uint8Array>, options: PipeOptions) => reader.pipeTo(destination, options);
+  expectTypeOf<Awaited<ReturnType<typeof pipe>>>().toEqualTypeOf<PipeResult>();
+  const download = (client: AutonomiClient, address: string) => client.download(address, { maxMemoryBytes: 1024 });
+  expectTypeOf<Awaited<ReturnType<typeof download>>>().toEqualTypeOf<DownloadResult>();
+});
+
 it("exports camelCase metadata across the published API", () => {
   type PublicFile = import("@withautonomi/ant-browser-sdk").PublicFile;
   type PaymentNetwork = import("@withautonomi/ant-browser-sdk").PaymentNetwork;
@@ -46,4 +54,17 @@ it("exports camelCase metadata across the published API", () => {
   expectTypeOf<Extract<keyof PublicFile | keyof PaymentNetwork | keyof HelloInfo | keyof NetworkNode | keyof ChunkInfo, `${string}_${string}`>>().toBeNever();
   expectTypeOf<PublicFile["contentType"]>().toBeString();
   expectTypeOf<PaymentNetwork["paymentTokenAddress"]>().toBeString();
+});
+
+
+it("types pointer recovery, manifest exports and streaming save destinations", () => {
+  type SDK = typeof import("@withautonomi/ant-browser-sdk");
+  type Pointer = import("@withautonomi/ant-browser-sdk").Pointer;
+  type Options = import("@withautonomi/ant-browser-sdk").PointerWriteOptions;
+  expectTypeOf<Pointer["counter"]>().toEqualTypeOf<string>();
+  expectTypeOf<Awaited<ReturnType<AutonomiClient["getPointer"]>>>().toEqualTypeOf<Pointer | null>();
+  expectTypeOf<Awaited<ReturnType<SDK["createManifest"]>>>().toEqualTypeOf<import("@withautonomi/ant-browser-sdk").CreatedManifest>();
+  expectTypeOf<Pick<Options, "onCheckpoint">>().not.toMatchTypeOf<{ onCheckpoint: undefined }>();
+  const save = (client: AutonomiClient, handle: FileSystemFileHandle, source: PrivateFileReference) => client.streamAndSave(source, { fileHandle: handle });
+  expectTypeOf<Awaited<ReturnType<typeof save>>>().toEqualTypeOf<import("@withautonomi/ant-browser-sdk").StreamSaveResult>();
 });

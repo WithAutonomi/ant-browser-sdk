@@ -1,0 +1,31 @@
+# SDK worktree: /Users/mick/RustroverProjects/ant-browser-sdk-pr6-20261015
+# Branch: feat/large-file-streaming-20261015 from merged main 29ab1758e1188fc445b82465949dcc655345935b
+# Tested SDK implementation: 456dbb7b6b6ccbcce0603bbae2fd7b1664b68975
+npm ci
+RUSTUP_TOOLCHAIN=1.99.0 PYTHON=/Users/mick/.local/bin/python3.11 npm run sync:wasm
+# The successful retry supplied GITHUB_TOKEN privately from gh auth token through
+# subprocess environment, to avoid the unauthenticated GitHub API rate limit.
+npm run check
+npm run verify:wasm
+npm run build:examples
+npm pack --dry-run --json
+python3 scripts/adr-governance.py
+python3 .github/scripts/test_check_pr.py
+# Clean ant-client 225a6768589ecbb6a0c77d70df329f343b22776f:
+RUSTUP_TOOLCHAIN=1.99.0 cargo build --locked --release --bin ant
+# Clean ant-node 26129a2611cac08f9f53a557f91fb8806b40a1cc:
+RUSTUP_TOOLCHAIN=1.99.0 cargo build --locked --bin ant-devnet
+target/debug/ant-devnet --nodes 7 --bootstrap-count 3 --base-port 0 --webrtc-direct --webrtc-direct-base-port 0 --serve-port 39870 --enable-evm --data-dir /private/tmp/sdk-20261015-devnet-data --manifest /private/tmp/sdk-20261015-devnet-manifest.json
+# SDK:
+node node_modules/vite/bin/vite.js --config examples/all-in-one/vite.config.ts --port 39871 --strictPort
+# Native fixture: 4,303,347,835 repetitions of byte 90, written in 4 MiB blocks;
+# expected address/hash from ant-core/wasm-tests/fixtures/large-file.json.
+# SECRET_KEY supplied privately from the verified local Anvil devnet manifest.
+ant --json --devnet-manifest /private/tmp/sdk-20261015-large/devnet-manifest.json --allow-loopback --evm-network local file upload /private/tmp/sdk-20261015-large/large-file.bin --public
+# Only this command's newly created manifest_id record was moved from the
+# macOS upload-history directory into the task's temporary directory.
+# Exact probes are retained as .mjs.gz; they use the real production SDK/WASM.
+node /private/tmp/sdk-20261015-browser-check.mjs
+node /private/tmp/sdk-20261015-disk-demo.mjs
+node /private/tmp/sdk-20261015-large-browser.mjs
+# Stop only the two task-owned servers through their PTY sessions with SIGINT.

@@ -12,6 +12,11 @@ export {
 export { saveDownload } from "./save.js";
 export {
   decodeManifest,
+  createManifest,
+  createFileLink,
+  type CreatedManifest,
+  type ManifestInput,
+  type ManifestEntryInput,
   fileName as manifestFileName,
   isManifestEntry,
   manifestEntrySource,
@@ -51,6 +56,8 @@ export type {
   PaymentSubmission,
   PaymentSubmissionInfo,
   PendingPayment,
+  PipeOptions,
+  PipeResult,
   PrivateDownloadResult,
   PrivateFile,
   PrivateFileReference,
@@ -77,3 +84,8 @@ export type {
 
 export { storedUploadCheckpoints } from "./internal/record-store.js";
 export { getNetworkDefaults, type NetworkProfile, type NetworkDefaults, type NetworkDefaultsOptions, type NetworkConnectionOptions } from "./network-profile.js";
+
+export { pointerAddress, PointerError, type Pointer, type PointerTarget, type PointerFinalState,
+  type PointerFinality, type PointerWriteResult, type PointerRecoveryOptions, type PointerWriteOptions,
+  type PointerTransferOptions } from "./pointers.js";
+export type { StreamSaveOptions, StreamSaveResult, StreamSaveFileHandle } from "./types.js";

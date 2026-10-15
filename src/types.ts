@@ -205,6 +205,8 @@ export type Operation =
   | "upload"
   | "download"
   | "download-and-save"
+  | "stream-and-save"
+  | "pointer"
   | "save"
   | "open-file"
   | "media";
@@ -349,6 +351,13 @@ export interface UploadResult<F extends PublicFile | PrivateFile = PublicFile> {
 export interface DownloadOptions extends OperationOptions {
   /** Adaptive by default. An integer from 1 through 256 caps logical record fetches. */
   concurrency?: number | "auto";
+  /**
+   * Maximum bytes in the core's output Uint8Array; checked before content transfer.
+   * Defaults to `SDK_LIMITS.defaultDownloadMemoryBytes` (1,000,000,000). This is not
+   * a total memory budget: the result's Blob and core caches also use memory. Use
+   * streamAndSave() or reader.pipeTo() for bounded disk streaming.
+   */
+  maxMemoryBytes?: number;
 }
 
 export interface DownloadResult {
@@ -407,6 +416,22 @@ export interface StreamOptions extends ReadOptions {
   chunkSize?: number;
 }
 
+/** Options for writing a verified file range directly to a WritableStream. */
+export interface PipeOptions extends ReadOptions {
+  /** First byte to write, default 0. */
+  start?: number;
+  /** Exclusive end, default the file size. */
+  end?: number;
+  /** Called after each successful write, relative to the selected range. Throwing aborts the transfer. */
+  onProgress?: (bytesWritten: number, totalBytes: number) => void;
+}
+
+export interface PipeResult {
+  bytesWritten: number;
+  /** BLAKE3 of the bytes written; for a partial range, this is not the whole-file hash. */
+  hash: string;
+}
+
 export interface MediaOptions extends OperationOptions {
   /**
    * Must be served from the same origin. Defaults to /autonomi-stream-sw.js.
@@ -427,4 +452,21 @@ export interface MediaSource {
   url: string;
   file: Pick<PublicFile, "name" | "size" | "contentType" | "address">;
   close(): void;
+}
+
+
+/** A file handle whose writable accepts streamed byte chunks, including FileSystemFileHandle. */
+export interface StreamSaveFileHandle {
+  readonly name?: string;
+  createWritable(): Promise<WritableStream<Uint8Array>>;
+}
+export interface StreamSaveOptions extends OperationOptions {
+  suggestedName?: string;
+  /** Supply at most one of destination and fileHandle; with neither, opens the browser save picker. */
+  destination?: WritableStream<Uint8Array>;
+  fileHandle?: StreamSaveFileHandle;
+}
+export interface StreamSaveResult extends PipeResult {
+  readonly name: string;
+  readonly method: "file-picker" | "stream";
 }
