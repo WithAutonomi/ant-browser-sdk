@@ -1524,8 +1524,8 @@ it("closing before the wallet is invoked stops a pointer write without payment",
   const raw = state.networks[0]!;
   let release!: () => void;
   const checkpoint = vi.fn(() => new Promise<void>(resolve => { release = resolve; }));
-  raw.createPointer.mockImplementation(async (_seed, _target, _kind, network, pay, _paid, prepared) => {
-    await prepared("signed plan");
+  raw.createPointer.mockImplementation(async (_seed, _target, _kind, network, pay, { onPrepared }) => {
+    await onPrepared("signed plan");
     return pay(network, [{ quote: {}, quoteHash: "aa", rewardsAddress: "bb", amount: "1" }]);
   });
   const pending = client.createPointer({ ownerSeed: new Uint8Array(32), kind: "chunk", target: file.address, onCheckpoint: checkpoint });
@@ -1549,10 +1549,10 @@ it("settles and persists a submitted pointer payment when the client closes", as
   }) };
   const client = await AutonomiClient.connect(endpoint, { payment });
   const raw = state.networks[0]!;
-  raw.createPointer.mockImplementation(async (_seed, _target, _kind, network, pay, paid, prepared) => {
-    await prepared("signed plan");
+  raw.createPointer.mockImplementation(async (_seed, _target, _kind, network, pay, { onPrepared, onPaid }) => {
+    await onPrepared("signed plan");
     await pay(network, [{ quote: {}, quoteHash: "aa", rewardsAddress: "bb", amount: "1" }]);
-    await paid({ record: Uint8Array.of(1), proof: Uint8Array.of(2) });
+    await onPaid({ record: Uint8Array.of(1), proof: Uint8Array.of(2) });
     return { pointer: { address: file.address, counter: "0", kind: "chunk", kindTag: 0, target: file.address, stateId: file.address }, storageCostAtto: "1" };
   });
   const pending = client.createPointer({ ownerSeed: new Uint8Array(32), kind: "chunk", target: file.address, onCheckpoint: checkpoint });

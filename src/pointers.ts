@@ -210,9 +210,10 @@ export async function writePointer(
   };
   try {
     throwIfAborted(signal);
+    const hooks = { onPrepared: observe(onPrepared), onPaid };
     const result = method === "transferPointer"
-      ? await raw.transferPointer(seed, (options as PointerTransferOptions).recipient, corePaymentNetwork(network), observe(pay), onPaid, observe(onPrepared))
-      : await raw[method](seed, (options as PointerWriteOptions).target, (options as PointerWriteOptions).kind, corePaymentNetwork(network), observe(pay), onPaid, observe(onPrepared));
+      ? await raw.transferPointer(seed, (options as PointerTransferOptions).recipient, corePaymentNetwork(network), observe(pay), hooks)
+      : await raw[method](seed, (options as PointerWriteOptions).target, (options as PointerWriteOptions).kind, corePaymentNetwork(network), observe(pay), hooks);
     forgetObservers(journal);
     // The stored state is the outcome; let checkpoint writes settle so none lands after the caller cleans up.
     await writer.idle();
@@ -292,8 +293,18 @@ function acceptReceipt(journal: Journal, value: unknown): PaidState {
   if (!evidence || evidence.totalAmount === undefined) throw new Error("Payment provider returned an invalid receipt");
   const receipt = evidence as PaymentReceipt;
   validateReceipt(receipt, journal.quotes);
-  const paid = getBindings().recoverPointerPayment(journal.prepared, receipt) as { record: Uint8Array; proof: Uint8Array };
+  const paid = getBindings().recoverPointerPayment(journal.prepared, { transactionHashes: quoteTransactions(receipt, journal.quotes) }) as { record: Uint8Array; proof: Uint8Array };
   return { receipt, record: toBase64(paid.record), proof: toBase64(paid.proof) };
+}
+
+/**
+ * Rust names each quote's transaction by quote hash. A wallet that returns one hash
+ * paid every quote it was asked to pay, which this journal records.
+ */
+function quoteTransactions(receipt: PaymentReceipt, quotes: readonly VerifiedStorageQuote[]): Record<string, string> {
+  const keyed = "transactionHashes" in receipt ? receipt.transactionHashes : undefined;
+  if (keyed && Object.keys(keyed).length > 0) return { ...keyed };
+  return Object.fromEntries(quotes.map((quote) => [quote.quoteHash, receipt.transactionHash!]));
 }
 
 /** Observe this page's broadcasts for the journal again. Never submits a transaction. */

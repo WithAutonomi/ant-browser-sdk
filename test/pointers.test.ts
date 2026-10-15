@@ -16,10 +16,10 @@ const confirmed = async (): Promise<PaymentSettlement> => ({ status: "confirmed"
 function fixture() {
   let stored = false;
   const raw = {
-    createPointer: vi.fn(async (_seed, _target, _kind, _network, pay, paid, prepared) => {
-      await prepared("original signed state and plan");
+    createPointer: vi.fn(async (_seed, _target, _kind, _network, pay, { onPrepared, onPaid }) => {
+      await onPrepared("original signed state and plan");
       await pay(wire, quotes);
-      try { await paid({ record: Uint8Array.of(1, 2), proof: Uint8Array.of(3, 4) }); } catch { /* Rust stores paid states anyway. */ }
+      try { await onPaid({ record: Uint8Array.of(1, 2), proof: Uint8Array.of(3, 4) }); } catch { /* Rust stores paid states anyway. */ }
       stored = true;
       return { pointer, transactionHash: receipt.transactionHash, storageCostAtto: "1" };
     }),
@@ -53,6 +53,19 @@ describe("pointer payment recovery", () => {
     expect(f.options.ownerSeed.every(n => n === 19)).toBe(true);
     expect(f.mocks.createPointer.mock.calls[0]![0].every((n: number) => n === 0)).toBe(true);
     expect(f.release).toHaveBeenCalledOnce();
+  });
+
+  it("hands Rust the receipt's transaction keyed by the journaled quote it paid", async () => {
+    const f = fixture();
+    proof.mockClear();
+    await writePointer(f.raw, network, "createPointer", f.options, f.context);
+    expect(proof).toHaveBeenCalledWith("original signed state and plan", { transactionHashes: { aa: receipt.transactionHash } });
+
+    const keyed = { ...receipt, transactionHashes: { aa: `0x${"cd".repeat(32)}` } };
+    f.payment.pay = vi.fn(async () => keyed);
+    proof.mockClear();
+    await writePointer(f.raw, network, "createPointer", f.options, f.context);
+    expect(proof).toHaveBeenCalledWith("original signed state and plan", { transactionHashes: keyed.transactionHashes });
   });
 
   it("blocks payment if durable intent persistence fails and reports that nothing was requested", async () => {

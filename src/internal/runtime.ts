@@ -35,14 +35,22 @@ export interface RawDownloadOptions {
   signal?: AbortSignal;
 }
 
+/** The core's trailing pointer-write options. It refuses any other key. */
+export interface RawPointerWriteOptions {
+  /** Awaited with the signed record and payment plan before the wallet is invoked; a rejection pays nothing. */
+  onPrepared?: (checkpoint: string) => Promise<void>;
+  /** Handed the paid record and proof before storing; the state is stored whatever this does. */
+  onPaid?: (value: { record: Uint8Array; proof: Uint8Array }) => Promise<void>;
+}
+
 export interface RawNetworkClient {
   connect(expectedPayment?: unknown): Promise<unknown>;
   getPointer(address: string): Promise<unknown>;
   resolvePointer(address: string): Promise<unknown>;
   pointerFinality(address: string): Promise<unknown>;
-  createPointer(seed: Uint8Array, target: string, kind: string, network: unknown, pay: (...args: unknown[]) => Promise<unknown>, paid: (value: { record: Uint8Array; proof: Uint8Array }) => Promise<void>, prepared: (checkpoint: string) => Promise<void>): Promise<unknown>;
+  createPointer(seed: Uint8Array, target: string, kind: string, network: unknown, pay: (...args: unknown[]) => Promise<unknown>, options: RawPointerWriteOptions): Promise<unknown>;
   updatePointer: RawNetworkClient["createPointer"];
-  transferPointer(seed: Uint8Array, recipient: string, network: unknown, pay: (...args: unknown[]) => Promise<unknown>, paid: (value: { record: Uint8Array; proof: Uint8Array }) => Promise<void>, prepared: (checkpoint: string) => Promise<void>): Promise<unknown>;
+  transferPointer(seed: Uint8Array, recipient: string, network: unknown, pay: (...args: unknown[]) => Promise<unknown>, options: RawPointerWriteOptions): Promise<unknown>;
   storePaidPointer(record: Uint8Array, proof: Uint8Array, network: unknown): Promise<unknown>;
   reconcileFailedUploadPayment(
     checkpoint: string,
