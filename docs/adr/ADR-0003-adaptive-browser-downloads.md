@@ -129,3 +129,17 @@ unchanged file bytes and integrity checks, elapsed time and received bytes.
 PUTs retain exclusive per-lane admission, including through cancellation drain.
 GETs and control RPCs may multiplex; enabling the capability does not multiply
 large incoming uploads against the node's existing source byte limit.
+
+## Playback priming at media-source creation (2026-10-07)
+
+A player issues two sequential reads before it can play: the header, then
+the index that MP4 and WebM files usually keep at the end. The streaming
+reader already fetches the last record once the first read arrives; this
+amendment moves both reads to the moment `createMediaSource()` resolves.
+For audio and video content types, and common media extensions, the SDK
+reads the first `mediaPrimeHeadBytes` (1 MiB) and the last
+`mediaPrimeTailBytes` (64 KiB) at once in the background, so a player
+attached afterwards is served from the reader's cache. The option
+`primePlayback` forces or disables it. The reads are never awaited and
+never fail the media source; a failure is left for the player to report.
+No core or wire change: the reads use the ordinary streaming reader.

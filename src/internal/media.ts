@@ -10,6 +10,29 @@ interface MediaSession {
   source: MediaSource;
 }
 
+/** File extensions treated as playable media when the content type says nothing. */
+const MEDIA_EXTENSION = /\.(mp4|m4v|m4a|webm|ogv|ogg|oga|mov|mp3|wav|flac|aac|mkv)$/i;
+
+/** Whether a file looks like something a media element will play. */
+export function isPlayableMedia(file: Pick<PublicFileReader, "name" | "contentType">): boolean {
+  return /^(audio|video)\//i.test(file.contentType) || MEDIA_EXTENSION.test(file.name);
+}
+
+/**
+ * Read the head and the tail of the file at once. A player reads the header,
+ * then seeks to the index that MP4 files usually keep at the end, and only
+ * then plays; reading both now leaves them in the streaming reader's cache so
+ * playback can start as soon as the element is attached. Failures are the
+ * player's to discover and report; this never throws.
+ */
+export async function primePlayback(reader: PublicFileReader): Promise<void> {
+  const head = Math.min(reader.size, SDK_LIMITS.mediaPrimeHeadBytes);
+  const tailStart = Math.max(head, reader.size - SDK_LIMITS.mediaPrimeTailBytes);
+  const reads = [reader.read(0, head)];
+  if (tailStart < reader.size) reads.push(reader.read(tailStart, reader.size - tailStart));
+  await Promise.allSettled(reads);
+}
+
 export class MediaBridge {
   #sessions = new Map<string, MediaSession>();
   #workerUrl?: string;

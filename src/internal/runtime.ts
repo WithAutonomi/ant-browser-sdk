@@ -2,8 +2,10 @@ import initAntCore, {
   BrowserNetworkClient,
   parseWebRtcDirectMultiaddr,
   decodeMerklePaymentReceipt,
+  decodeManifest,
   encryptPublicFile,
   mainnetNetworkDefaults,
+  parseManifestLink,
 } from "../wasm/ant_core.js";
 import { AutonomiError } from "../errors.js";
 import type { WasmSource } from "../types.js";
@@ -73,6 +75,10 @@ export interface WasmBindings {
   parseWebRtcDirectMultiaddr(value: unknown): { multiaddr: string };
   decodeMerklePaymentReceipt?(request: unknown, vault: string, logs: unknown): unknown;
   encryptPublicFile(content: Uint8Array): unknown;
+  /** Decode an `ant://` link (ant-client ADR-0006). */
+  parseManifestLink(link: string): unknown;
+  /** Decode `.ant` manifest bytes (ant-client ADR-0006). */
+  decodeManifest(bytes: Uint8Array): unknown;
 }
 
 type LoadedSource = ArrayBuffer | WebAssembly.Module;
@@ -152,5 +158,7 @@ export function getBindings(): WasmBindings {
     decodeMerklePaymentReceipt,
     encryptPublicFile,
     mainnetNetworkDefaults,
+    parseManifestLink,
+    decodeManifest,
   };
 }

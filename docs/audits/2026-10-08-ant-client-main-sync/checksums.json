@@ -1,0 +1,12 @@
+{
+  "browser-check.log.gz": "e32e136a0878c21afb0db0f3142bad573a8ef0f8dc909fb95cbf27ec84431760",
+  "browser-check.mjs.gz": "9f6876a0e0bb562e7b85de75b9a6c15ae99274b0897bc7ffccf2c29a15e87ce0",
+  "browser-summary.json": "32810b1c568cf6bc77982afc70e8bb5ce611d4495a8c2795b94748ec9fd787c6",
+  "commands.txt": "108c234cc3752e31b5187af6b5e8acd1395107a813482fdd8a11561ce55c5190",
+  "devnet-build.log.gz": "e49f546c4228cbd853f018d6fd6b5fcbb68f1f83015a96ab51c0a8a6685df680",
+  "example-builds.log.gz": "22463df89e0c70bb8f1b07399043fbe4b3a09b077909152d599c21c0517ba091",
+  "pack-dry-run.log.gz": "ed06b6d3ac2142edbe1d12b3226cd6f7746a70355f0981bafbb85391f878e02f",
+  "sdk-check.log.gz": "885af1fd580a652538b173ddcb820fc7c1ca9db6e6c1fc4f58a66b9fc81bbaaa",
+  "source.json": "e6a2420870de5961caef67d8232aed7e300c1920ca277c0dddbbe54ca8911180",
+  "wasm-sync.log.gz": "5cf472d6371d2fe01f5d75707ee51d4d62c5d83dad57416d54d48d1a3b6d7456"
+}
