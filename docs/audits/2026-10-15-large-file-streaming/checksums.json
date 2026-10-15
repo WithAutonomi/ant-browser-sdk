@@ -1,0 +1,8 @@
+{
+  "src/wasm/ant_core_bg.wasm": "9298d1564f1809f97f06b3bacee3a674040ff74c6af1aa3366d1f0ba542a8352",
+  "src/wasm/ant_core.js": "1f3fa3ca1ff5b871cdf97b35493f784cce044571b17b7bc0d40cde16f7aa0c1f",
+  "src/wasm/ant_core.d.ts": "5fcea753514fd95f745fcac63386cb266b31b4ded6869a11011b53b13fc25a86",
+  "src/wasm/THIRD-PARTY-NOTICES.txt": "96342e4398d82820d5e1fcd89b05910ff621765a78ed1edf8537ee9ef9f13845",
+  "ant-devnet": "6315c3bc07a54898ff3b486d9e5f4b265cc089f9a5c93410c98228465d04fea3",
+  "ant": "d346fef802b00324b7d764f09425dcf4aefcb2b5d44ad670e86a71f63ffdccc4"
+}
