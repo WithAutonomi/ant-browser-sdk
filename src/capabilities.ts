@@ -5,7 +5,7 @@ export type BrowserFeature =
 
 export type BrowserOperation =
   | "connect" | "uploadBytes" | "uploadBlob" | "download" | "read" | "stream"
-  | "pipeTo" | "media" | "saveWithPicker" | "saveWithDownload";
+  | "pipeTo" | "streamAndSave" | "media" | "saveWithPicker" | "saveWithDownload";
 
 export interface CapabilitySupport {
   /** Required APIs are present. Permissions, quota, CSP, codecs, and network reachability are not probed. */
@@ -57,6 +57,7 @@ export function getBrowserCapabilities(): BrowserCapabilities {
       read: support(...connection),
       stream: support(...connection, "readableStream"),
       pipeTo: support(...connection, "writableStream"),
+      streamAndSave: support(...connection, "writableStream"),
       media: support(...connection, "secureContext", "serviceWorker", "messageChannel", "readableStream"),
       saveWithPicker: support("window", "secureContext", "filePicker"),
       saveWithDownload: support("document", "objectUrls"),

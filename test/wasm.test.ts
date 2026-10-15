@@ -1,3 +1,4 @@
+import { gunzipSync } from "node:zlib";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
@@ -152,4 +153,36 @@ it("uses the packaged native validator for failed payment reconciliation", async
     client.close();
     client.free();
   }
+});
+
+
+it("rebuilds the exact paid pointer proof from a real devnet checkpoint without network access", async () => {
+  await initializeWasm(await readFile(new URL("../src/wasm/ant_core_bg.wasm", import.meta.url)));
+  // Captured from production WASM on the isolated 2026-10-15 devnet. Contains
+  // signed public records/quotes and a local Anvil receipt, never an owner seed.
+  const fixture = JSON.parse(gunzipSync(await readFile(new URL("./fixtures/pointer-payment-devnet.json.gz", import.meta.url))).toString());
+  const fetch = vi.spyOn(globalThis, "fetch");
+  try {
+    const recovered = getBindings().recoverPointerPayment(fixture.prepared, fixture.receipt) as { record: Uint8Array; proof: Uint8Array };
+    expect(Array.from(recovered.record)).toEqual(fixture.paid.record);
+    expect(Array.from(recovered.proof)).toEqual(fixture.paid.proof);
+    expect(fetch).not.toHaveBeenCalled();
+  } finally { fetch.mockRestore(); }
+});
+
+it("rejects altered pointer signatures, mismatched payment plans and missing transactions", async () => {
+  await initializeWasm(await readFile(new URL("../src/wasm/ant_core_bg.wasm", import.meta.url)));
+  const fixture = JSON.parse(gunzipSync(await readFile(new URL("./fixtures/pointer-payment-devnet.json.gz", import.meta.url))).toString());
+  type Checkpoint = { version: number; record: number[]; plan: { data_size: number; address: number[] } };
+  for (const mutate of [
+    (value: Checkpoint) => { value.version = 2; },
+    (value: Checkpoint) => { value.record[100] = value.record[100]! ^ 1; },
+    (value: Checkpoint) => { value.plan.data_size++; },
+    (value: Checkpoint) => { value.plan.address[0] = value.plan.address[0]! ^ 1; },
+  ]) {
+    const value = JSON.parse(fixture.prepared);
+    mutate(value);
+    expect(() => getBindings().recoverPointerPayment(JSON.stringify(value), fixture.receipt)).toThrow();
+  }
+  expect(() => getBindings().recoverPointerPayment(fixture.prepared, { totalAmount: "0" })).toThrow();
 });

@@ -42,6 +42,8 @@ const state = vi.hoisted(() => ({
     downloadPrivateFile: ReturnType<typeof vi.fn>;
     openPrivateFile: ReturnType<typeof vi.fn>;
     reconcileFailedUploadPayment: ReturnType<typeof vi.fn>;
+    getPointer: ReturnType<typeof vi.fn>;
+    createPointer: ReturnType<typeof vi.fn>;
   }>,
 }));
 
@@ -57,6 +59,8 @@ vi.mock("../src/internal/runtime.js", () => {
     downloadPrivateFile = vi.fn();
     openPrivateFile = vi.fn();
     reconcileFailedUploadPayment = vi.fn();
+    getPointer = vi.fn();
+    createPointer = vi.fn();
 
     constructor(endpoints: unknown) {
       this.endpoints = endpoints;
@@ -1316,4 +1320,123 @@ it("propagates native verification and persistence failures without authorizing 
   }
   expect(state.networks[0]!.uploadRecords).not.toHaveBeenCalled();
   client.close();
+});
+
+
+describe("streamAndSave", () => {
+  function rawReader() {
+    return { size: 3, name: "file.bin", contentType: "application/octet-stream", close: vi.fn(), free: vi.fn(), readRange: vi.fn(),
+      pipeTo: vi.fn(async (destination: WritableStream<Uint8Array>, options: { onProgress: (written: number, total: number) => void }) => {
+        const writer = destination.getWriter();
+        try { await writer.write(Uint8Array.of(1, 2, 3)); options.onProgress(3, 3); await writer.close(); }
+        finally { writer.releaseLock(); }
+        return { bytesWritten: 3, hash: "verified" };
+      }) };
+  }
+  it("chooses a picker before opening, streams verified bytes and closes its reader", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    const raw = state.networks[0]!;
+    const reader = rawReader();
+    raw.openPublicFile.mockResolvedValue(reader);
+    const write = vi.fn();
+    const picker = vi.fn(async () => {
+      expect(raw.openPublicFile).not.toHaveBeenCalled();
+      return { name: "chosen.bin", createWritable: async () => new WritableStream({ write }) };
+    });
+    vi.stubGlobal("window", { showSaveFilePicker: picker });
+    const events: import("../src/types.js").ProgressEvent[] = [];
+    expect(await client.streamAndSave(file, { onProgress: event => events.push(event) })).toEqual({ name: "chosen.bin", method: "file-picker", bytesWritten: 3, hash: "verified" });
+    expect(write.mock.calls[0]![0]).toEqual(Uint8Array.of(1, 2, 3));
+    expect(raw.downloadPublicFile).not.toHaveBeenCalled();
+    expect(reader.close).toHaveBeenCalledOnce();
+    expect(reader.free).toHaveBeenCalledOnce();
+    expect(events.filter(e => e.operation === "stream-and-save" && e.status !== "running")).toHaveLength(1);
+    client.close();
+  });
+
+  it("streams a private manifest entry into a caller destination", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    const raw = state.networks[0]!;
+    const reader = rawReader();
+    raw.openPrivateFile.mockResolvedValue(reader);
+    const write = vi.fn();
+    const result = await client.streamAndSave({ kind: "embedded", name: "dir/private.bin", address: file.address, dataMap: Uint8Array.of(1) }, { destination: new WritableStream({ write }) });
+    expect(result).toMatchObject({ name: "private.bin", method: "stream" });
+    expect(raw.openPublicFile).not.toHaveBeenCalled();
+    expect(raw.downloadPrivateFile).not.toHaveBeenCalled();
+    expect(write).toHaveBeenCalledOnce();
+    client.close();
+  });
+
+  it("fails before opening when no streaming destination is available", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    vi.stubGlobal("window", {});
+    await expect(client.streamAndSave(file)).rejects.toMatchObject({ code: "SAVE_FAILED" });
+    expect(state.networks[0]!.openPublicFile).not.toHaveBeenCalled();
+    client.close();
+  });
+
+  it("aborts a writable that arrives after cancellation and releases the reader", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    const reader = rawReader();
+    state.networks[0]!.openPublicFile.mockResolvedValue(reader);
+    let release!: (value: WritableStream<Uint8Array>) => void;
+    const controller = new AbortController();
+    const creating = vi.fn(() => new Promise<WritableStream<Uint8Array>>(resolve => { release = resolve; }));
+    const saving = client.streamAndSave(file, { fileHandle: { createWritable: creating }, signal: controller.signal });
+    await vi.waitFor(() => expect(creating).toHaveBeenCalledOnce());
+    controller.abort();
+    await expect(saving).rejects.toMatchObject({ name: "AbortError" });
+    const abort = vi.fn();
+    release(new WritableStream({ abort }));
+    await vi.waitFor(() => expect(abort).toHaveBeenCalledOnce());
+    expect(reader.close).toHaveBeenCalledOnce();
+    expect(reader.pipeTo).not.toHaveBeenCalled();
+    client.close();
+  });
+});
+
+
+it("retains the network until an in-flight pointer read settles after cancellation", async () => {
+  const client = await AutonomiClient.connect(endpoint);
+  const raw = state.networks[0]!;
+  let release!: (value: null) => void;
+  raw.getPointer.mockReturnValue(new Promise<null>(resolve => { release = resolve; }));
+  const controller = new AbortController();
+  const pending = client.getPointer(file.address, { signal: controller.signal });
+  controller.abort();
+  await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  client.close();
+  expect(raw.freed).toBe(false);
+  release(null);
+  await vi.waitFor(() => expect(raw.freed).toBe(true));
+  expect(raw.closed).toBe(true);
+});
+
+it("settles and persists a submitted pointer payment when the client closes", async () => {
+  let release!: () => void;
+  const checkpoint = vi.fn();
+  const payment: PaymentProvider = { pay: vi.fn(async (_n, _q, context) => {
+    const receipt = { transactionHash: `0x${"12".repeat(32)}`, totalAmount: "1" };
+    context.submitted({ ...receipt, wait: async () => ({ status: "confirmed", receipt }) });
+    await new Promise<void>(resolve => { release = resolve; });
+    return receipt;
+  }) };
+  const client = await AutonomiClient.connect(endpoint, { payment });
+  const raw = state.networks[0]!;
+  raw.createPointer.mockImplementation(async (_seed, _target, _kind, network, pay, paid, prepared) => {
+    await prepared("signed plan");
+    await pay(network, [{ quote: {}, quoteHash: "aa", rewardsAddress: "bb", amount: "1" }]);
+    await paid({ record: Uint8Array.of(1), proof: Uint8Array.of(2) });
+    return { pointer: { address: file.address, counter: "0", kind: "chunk", kindTag: 0, target: file.address, stateId: file.address }, storageCostAtto: "1" };
+  });
+  const pending = client.createPointer({ ownerSeed: new Uint8Array(32), kind: "chunk", target: file.address, onCheckpoint: checkpoint });
+  await vi.waitFor(() => expect(payment.pay).toHaveBeenCalledOnce());
+  client.close();
+  expect(raw.closed).toBe(false);
+  release();
+  await expect(pending).resolves.toMatchObject({ pointer: { counter: "0" } });
+  expect(raw.closed).toBe(true);
+  expect(raw.freed).toBe(true);
+  expect(checkpoint.mock.calls.at(-1)![0]).toContain('"proof":[2]');
 });

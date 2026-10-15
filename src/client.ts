@@ -1,3 +1,6 @@
+import { writePointer, resumePointer, type Pointer, type PointerTarget, type PointerFinality, type PointerWriteOptions, type PointerTransferOptions, type PointerWriteResult, type PointerRecoveryOptions } from "./pointers.js";
+import type { StreamSaveOptions, StreamSaveResult } from "./types.js";
+import { requestStreamSaveFileHandle } from "./save.js";
 import { getNetworkDefaults, snapshotNetworkProfile, type NetworkConnectionOptions, type NetworkProfile } from "./network-profile.js";
 import { saveUploadCheckpoint } from "./internal/record-store.js";
 import { assertFileSize, SDK_LIMITS } from "./limits.js";
@@ -85,6 +88,7 @@ export class AutonomiClient {
   #listeners = new Set<ProgressListener>();
   #operations = new Set<AbortController>();
   #closed = false;
+  #pointerTasks = 0;
   #media?: MediaBridge;
   #workerWasm: WorkerWasmSource | undefined;
 
@@ -692,6 +696,103 @@ export class AutonomiClient {
     }
   }
 
+  /** Stream a complete verified file to disk or a supplied stream, with bounded memory. */
+  async streamAndSave(
+    source: string | PublicFile | PrivateFileReference | ManifestEntry,
+    options: StreamSaveOptions = {},
+  ): Promise<StreamSaveResult> {
+    const operation = this.#startOperation(options);
+    const report = this.#reporter("stream-and-save", options.onProgress, operation);
+    let reader: PublicFileReader | undefined;
+    let destination: WritableStream<Uint8Array> | undefined;
+    try {
+      this.#assertOpen();
+      throwIfAborted(operation.signal);
+      if (options.destination && options.fileHandle) throw new AutonomiError("INVALID_SOURCE", "Supply either destination or fileHandle");
+      if (options.destination?.locked) throw new AutonomiError("INVALID_SOURCE", "The destination stream is locked");
+      const known = typeof source === "string" ? this.files.find((file) => file.address === normalizeAddress(source)) : source;
+      const name = options.suggestedName ?? (known && isManifestEntry(known) ? known.name.split("/").pop() : known?.name) ?? "autonomi-file";
+      report("Choosing a streaming destination", { phase: "saving" });
+      // Invoke the picker before any network await, while user activation is available.
+      const handle = options.fileHandle ?? (options.destination ? undefined : await requestStreamSaveFileHandle(name, operation.signal));
+      destination = options.destination;
+      reader = await this.openFile(source, { signal: operation.signal, parentOperationId: operation.id, ...(options.onProgress ? { onProgress: options.onProgress } : {}) });
+      if (handle) destination = await abortable(handle.createWritable(), operation.signal, undefined,
+        (late) => { void late.abort(operation.signal.reason).catch(() => undefined); });
+      if (!destination) throw new AutonomiError("SAVE_FAILED", "No streaming destination was selected");
+      throwIfAborted(operation.signal);
+      const result = await reader.pipeTo(destination, {
+        signal: operation.signal,
+        onProgress: (completed, total) => report(`Saved ${completed} of ${total} bytes`, { phase: "saving", completed, total, unit: "bytes" }),
+      });
+      report(`Saved ${handle?.name ?? name}`, { phase: "complete" });
+      return { ...result, name: handle?.name ?? name, method: handle ? "file-picker" : "stream" };
+    } catch (error) {
+      // pipeTo owns its writer during transfer. Abort an acquired but not yet handed-off stream too.
+      if (destination && !destination.locked) void destination.abort(error).catch(() => undefined);
+      const failure = isAbort(error, operation.signal) ? error : wrapError("SAVE_FAILED", "Could not stream and save the file", error);
+      operation.fail(failure);
+      throw failure;
+    } finally {
+      reader?.close();
+      operation.finish();
+    }
+  }
+
+  getPointer(address: string, options: OperationOptions = {}): Promise<Pointer | null> {
+    return this.#pointerOperation(options, () => this.#network.getPointer(address) as Promise<Pointer | null>, true);
+  }
+
+  resolvePointer(address: string, options: OperationOptions = {}): Promise<PointerTarget> {
+    return this.#pointerOperation(options, () => this.#network.resolvePointer(address) as Promise<PointerTarget>, true);
+  }
+
+  pointerFinality(address: string, options: OperationOptions = {}): Promise<PointerFinality> {
+    return this.#pointerOperation(options, () => this.#network.pointerFinality(address) as Promise<PointerFinality>, true);
+  }
+
+  createPointer(options: PointerWriteOptions): Promise<PointerWriteResult> {
+    return this.#pointerOperation(options, (signal, report) => writePointer(this.#network, this.#connection.paymentNetwork,
+      "createPointer", { ...options, signal, payment: options.payment ?? this.#payment }, report));
+  }
+
+  updatePointer(options: PointerWriteOptions): Promise<PointerWriteResult> {
+    return this.#pointerOperation(options, (signal, report) => writePointer(this.#network, this.#connection.paymentNetwork,
+      "updatePointer", { ...options, signal, payment: options.payment ?? this.#payment }, report));
+  }
+
+  /** Permanently transfer control. A successful write still requires a finality check. */
+  transferPointer(options: PointerTransferOptions): Promise<PointerWriteResult> {
+    return this.#pointerOperation(options, (signal, report) => writePointer(this.#network, this.#connection.paymentNetwork,
+      "transferPointer", { ...options, signal, payment: options.payment ?? this.#payment }, report));
+  }
+
+  /** Reuse the original payment and signed state; never submits another payment. */
+  resumePointer(checkpoint: string, options: PointerRecoveryOptions): Promise<Pointer> {
+    return this.#pointerOperation(options, (signal, report) => resumePointer(this.#network, this.#connection.paymentNetwork,
+      checkpoint, { ...options, signal, payment: options.payment ?? this.#payment }, report));
+  }
+
+  async #pointerOperation<T>(options: OperationOptions, run: (signal: AbortSignal, report: Reporter) => Promise<T>, cancellable = false): Promise<T> {
+    const operation = this.#startOperation(options);
+    const report = this.#reporter("pointer", options.onProgress, operation, false);
+    try {
+      this.#assertOpen();
+      throwIfAborted(operation.signal);
+      this.#pointerTasks++;
+      const pending = new Promise<T>(resolve => resolve(run(operation.signal, report))).finally(() => {
+        this.#pointerTasks--;
+        if (this.#closed && this.#pointerTasks === 0) closeNetwork(this.#network);
+      });
+      const result = await (cancellable ? abortable(pending, operation.signal) : pending);
+      return snapshot(result);
+    } catch (error) {
+      const failure = isAbort(error, operation.signal) ? error : wrapError("POINTER_FAILED", "Pointer operation failed", error);
+      operation.fail(failure);
+      throw failure;
+    } finally { operation.finish(); }
+  }
+
   /** Open a bounded random-access reader without reconstructing the whole file. */
   openFile(
     file: string | PublicFile | PrivateFileReference | ManifestEntry,
@@ -798,7 +899,7 @@ export class AutonomiClient {
     } catch {
       // Continue closing the network if a media reader cleanup failed.
     } finally {
-      closeNetwork(this.#network);
+      if (this.#pointerTasks === 0) closeNetwork(this.#network);
       if (this.#operations.size === 0) this.#listeners.clear();
     }
   }
@@ -814,6 +915,7 @@ export class AutonomiClient {
     cancellable = true,
   ): Reporter {
     const phases = {
+      "stream-and-save": "saving", pointer: "opening",
       connect: "connecting", lookup: "lookup", upload: "preparing",
       download: "downloading", "open-file": "opening", media: "media", "download-and-save": "downloading", save: "saving",
     } as const;

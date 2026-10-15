@@ -125,9 +125,10 @@ export class BrowserNetworkClient {
      * `on_paid`, if given, is called with `{ record, proof }` once the state
      * is paid for and before it is stored. Keep both: if storing fails, or the
      * page is lost, [`Self::store_paid_pointer`] stores the same state without
-     * paying again.
+     * paying again. `on_prepared` is awaited with an opaque record/plan checkpoint
+     * before any payment; persist it durably to recover a later receipt.
      */
-    createPointer(owner_seed: Uint8Array, target: string, kind: string, payment_network: any, pay_for_quotes: Function, on_paid?: Function | null): Promise<any>;
+    createPointer(owner_seed: Uint8Array, target: string, kind: string, payment_network: any, pay_for_quotes: Function, on_paid?: Function | null, on_prepared?: Function | null): Promise<any>;
     /**
      * Download a private file into one JavaScript Uint8Array. Takes the same
      * arguments as downloadPublicFile; openPrivateFile and pipeTo support
@@ -210,13 +211,13 @@ export class BrowserNetworkClient {
      * `recipient` does not exist or leads back to this pointer. Check the
      * result with [`Self::pointer_finality`] before relying on it.
      */
-    transferPointer(owner_seed: Uint8Array, recipient: string, payment_network: any, pay_for_quotes: Function, on_paid?: Function | null): Promise<any>;
+    transferPointer(owner_seed: Uint8Array, recipient: string, payment_network: any, pay_for_quotes: Function, on_paid?: Function | null, on_prepared?: Function | null): Promise<any>;
     /**
      * Point the pointer `owner_seed` controls at `target`, one past the
      * counter the network serves (or create it), and pay for the new state.
      * `on_paid` is as for [`Self::create_pointer`].
      */
-    updatePointer(owner_seed: Uint8Array, target: string, kind: string, payment_network: any, pay_for_quotes: Function, on_paid?: Function | null): Promise<any>;
+    updatePointer(owner_seed: Uint8Array, target: string, kind: string, payment_network: any, pay_for_quotes: Function, on_paid?: Function | null, on_prepared?: Function | null): Promise<any>;
     /**
      * Self-encrypt, quote, pay through a wallet callback, and store a public file.
      */
@@ -244,6 +245,16 @@ export class BrowserNetworkClient {
  * Native BLAKE3 content address.
  */
 export function contentAddress(content: Uint8Array): string;
+
+/**
+ * Format a public file link using the shared link grammar.
+ */
+export function createFileLink(address: string): string;
+
+/**
+ * Build canonical `.ant` bytes and a compact share link without network I/O.
+ */
+export function createManifest(input: any): any;
 
 /**
  * Decode the bytes of a `.ant` manifest file (ADR-0006).
@@ -309,6 +320,13 @@ export function paymentQuoteHash(signed_bytes: Uint8Array, public_key: Uint8Arra
 export function pointerAddress(owner_seed: Uint8Array): string;
 
 /**
+ * Rebuild an already-paid proof from the original plan and a confirmed receipt.
+ * Does not quote, sign, submit payment, or contact the network. Only use an
+ * application's own persisted checkpoint; this never authorizes fresh payment.
+ */
+export function recoverPointerPayment(checkpoint: string, receipt: any): any;
+
+/**
  * Build the ICE-lite answer pinned by a WebRTC Direct endpoint.
  */
 export function serverAnswerFromEndpoint(endpoint: any, ice_credential: string): any;
@@ -339,7 +357,6 @@ export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_browserfileencryptor_free: (a: number, b: number) => void;
     readonly __wbg_browseriterativelookup_free: (a: number, b: number) => void;
-    readonly __wbg_browsernetworkclient_free: (a: number, b: number) => void;
     readonly browserfileencryptor_finish: (a: number, b: number, c: number, d: number, e: number) => [number, number, number];
     readonly browserfileencryptor_new: (a: number, b: any) => [number, number, number];
     readonly browserfileencryptor_nextRecord: (a: number) => [number, number, number];
@@ -348,18 +365,9 @@ export interface InitOutput {
     readonly browseriterativelookup_queriedPeers: (a: number) => [number, number, number];
     readonly browseriterativelookup_results: (a: number) => [number, number, number];
     readonly browseriterativelookup_run: (a: number, b: any) => any;
-    readonly browsernetworkclient_close: (a: number) => void;
-    readonly browsernetworkclient_connect: (a: number, b: number) => any;
-    readonly browsernetworkclient_downloadPrivateFile: (a: number, b: any, c: number, d: number, e: number) => any;
-    readonly browsernetworkclient_downloadPublicFile: (a: number, b: any, c: number, d: number, e: number) => any;
-    readonly browsernetworkclient_findClosest: (a: number, b: number, c: number, d: number) => any;
-    readonly browsernetworkclient_new: (a: any) => [number, number, number];
-    readonly browsernetworkclient_openPrivateFile: (a: number, b: any, c: number, d: number) => any;
-    readonly browsernetworkclient_openPublicFile: (a: number, b: any, c: number, d: number) => any;
-    readonly browsernetworkclient_uploadPublicFile: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: any, j: number, k: number, l: number, m: number, n: number, o: number, p: number) => any;
-    readonly browsernetworkclient_uploadRecords: (a: number, b: any, c: any, d: any, e: any, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => any;
-    readonly browsernetworkclient_uploadStagedPublicFile: (a: number, b: any, c: any, d: any, e: any, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => any;
     readonly contentAddress: (a: number, b: number) => [number, number];
+    readonly createFileLink: (a: number, b: number) => [number, number, number, number];
+    readonly createManifest: (a: any) => [number, number, number];
     readonly decodeManifest: (a: number, b: number) => [number, number, number];
     readonly decodeMerklePaymentReceipt: (a: any, b: number, c: number, d: any) => [number, number, number];
     readonly decodePublicDataMap: (a: number, b: number) => [number, number, number];
@@ -376,15 +384,19 @@ export interface InitOutput {
     readonly verifyRecord: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly verifyStorageQuote: (a: any, b: number, c: number, d: number, e: number) => [number, number, number];
     readonly webRtcDirectV2ServerCredential: (a: number, b: number) => [number, number, number, number];
+    readonly __wbg_browsernetworkclient_free: (a: number, b: number) => void;
+    readonly browsernetworkclient_close: (a: number) => void;
+    readonly browsernetworkclient_connect: (a: number, b: number) => any;
+    readonly browsernetworkclient_downloadPrivateFile: (a: number, b: any, c: number, d: number, e: number) => any;
+    readonly browsernetworkclient_downloadPublicFile: (a: number, b: any, c: number, d: number, e: number) => any;
+    readonly browsernetworkclient_findClosest: (a: number, b: number, c: number, d: number) => any;
+    readonly browsernetworkclient_new: (a: any) => [number, number, number];
+    readonly browsernetworkclient_openPrivateFile: (a: number, b: any, c: number, d: number) => any;
+    readonly browsernetworkclient_openPublicFile: (a: number, b: any, c: number, d: number) => any;
+    readonly browsernetworkclient_uploadPublicFile: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: any, j: number, k: number, l: number, m: number, n: number, o: number, p: number) => any;
+    readonly browsernetworkclient_uploadRecords: (a: number, b: any, c: any, d: any, e: any, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => any;
+    readonly browsernetworkclient_uploadStagedPublicFile: (a: number, b: any, c: any, d: any, e: any, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => any;
     readonly browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
-    readonly browsernetworkclient_createPointer: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: any, j: number) => any;
-    readonly browsernetworkclient_getPointer: (a: number, b: number, c: number) => any;
-    readonly browsernetworkclient_pointerFinality: (a: number, b: number, c: number) => any;
-    readonly browsernetworkclient_resolvePointer: (a: number, b: number, c: number) => any;
-    readonly browsernetworkclient_storePaidPointer: (a: number, b: number, c: number, d: number, e: number, f: any) => any;
-    readonly browsernetworkclient_transferPointer: (a: number, b: number, c: number, d: number, e: number, f: any, g: any, h: number) => any;
-    readonly browsernetworkclient_updatePointer: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: any, j: number) => any;
-    readonly pointerAddress: (a: number, b: number) => [number, number, number, number];
     readonly __wbg_browserfilereader_free: (a: number, b: number) => void;
     readonly browserfilereader_close: (a: number) => void;
     readonly browserfilereader_contentType: (a: number) => [number, number];
@@ -392,6 +404,15 @@ export interface InitOutput {
     readonly browserfilereader_pipeTo: (a: number, b: any, c: number) => any;
     readonly browserfilereader_readRange: (a: number, b: number, c: number) => any;
     readonly browserfilereader_size: (a: number) => number;
+    readonly browsernetworkclient_createPointer: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: any, j: number, k: number) => any;
+    readonly browsernetworkclient_getPointer: (a: number, b: number, c: number) => any;
+    readonly browsernetworkclient_pointerFinality: (a: number, b: number, c: number) => any;
+    readonly browsernetworkclient_resolvePointer: (a: number, b: number, c: number) => any;
+    readonly browsernetworkclient_storePaidPointer: (a: number, b: number, c: number, d: number, e: number, f: any) => any;
+    readonly browsernetworkclient_transferPointer: (a: number, b: number, c: number, d: number, e: number, f: any, g: any, h: number, i: number) => any;
+    readonly browsernetworkclient_updatePointer: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: any, i: any, j: number, k: number) => any;
+    readonly pointerAddress: (a: number, b: number) => [number, number, number, number];
+    readonly recoverPointerPayment: (a: number, b: number, c: any) => [number, number, number];
     readonly BrotliDecoderCreateInstance: (a: number, b: number, c: number) => number;
     readonly BrotliDecoderDecompress: (a: number, b: number, c: number, d: number) => number;
     readonly BrotliDecoderDecompressPrealloc: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => void;

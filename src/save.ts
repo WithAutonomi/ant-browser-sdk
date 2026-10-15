@@ -119,3 +119,17 @@ function hasErrorName(error: unknown, name: string): boolean {
 function quietlyAbortWritable(writable: SaveFileWritable, reason: unknown): void {
   void writable.abort(reason).catch(() => undefined);
 }
+
+
+/** Strict streaming picker: there is no whole-file Blob fallback. */
+export async function requestStreamSaveFileHandle(
+  suggestedName: string,
+  signal?: AbortSignal,
+): Promise<import("./types.js").StreamSaveFileHandle> {
+  throwIfAborted(signal);
+  const picker = typeof window === "undefined" ? undefined : (window as unknown as {
+    showSaveFilePicker?: (options: { suggestedName: string }) => Promise<import("./types.js").StreamSaveFileHandle>;
+  }).showSaveFilePicker;
+  if (!picker) throw new AutonomiError("SAVE_FAILED", "Streaming saves require a destination WritableStream, fileHandle, or browser save picker");
+  return abortable(picker.call(window, { suggestedName }), signal);
+}

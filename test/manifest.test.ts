@@ -2,6 +2,9 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import {
   decodeManifest,
+  createManifest,
+  createFileLink,
+  pointerAddress,
   initializeWasm,
   isManifestEntry,
   manifestEntrySource,
@@ -107,4 +110,36 @@ describe("manifests", () => {
     const { dataMap: _withheld, ...withoutDataMap } = embedded;
     expect(() => manifestEntrySource(withoutDataMap)).toThrow(/carries no DataMap/);
   });
+});
+
+
+it("exports canonical mixed manifests and links through production WASM", async () => {
+  await wasm();
+  const parsed = await parseManifestLink(LINK);
+  if (parsed.kind !== "manifest") throw new Error("fixture");
+  const dataMap = parsed.manifest.entries[0]!.dataMap!;
+  const created = await createManifest({ name: "share", torrent: { infoHashV1: "cd".repeat(20), infoHashV2: "ef".repeat(32) }, entries: [
+    { kind: "public", path: "z.bin", address: ADDRESS, size: 1 },
+    { kind: "embedded", path: "private/a.bin", dataMap },
+  ] });
+  expect(await decodeManifest(created.bytes)).toEqual(created.manifest);
+  expect(created.manifest.entries.map(e => e.name)).toEqual(["private/a.bin", "z.bin"]);
+  expect(created.manifest.entries[0]!.address).toBe(ADDRESS);
+  expect((await parseManifestLink(created.link))).toEqual({ kind: "manifest", manifest: created.manifest });
+  expect(created.linkRecommended).toBe(true);
+  expect(await createFileLink(ADDRESS.toUpperCase())).toBe(`ant://${ADDRESS}`);
+  expect(await pointerAddress(new Uint8Array(32))).toMatch(/^[a-f0-9]{64}$/u);
+  await expect(pointerAddress(new Uint8Array(31))).rejects.toMatchObject({ code: "INVALID_SOURCE" });
+});
+
+it("rejects unsafe paths, collisions, malformed maps, torrent identities and imprecise size hints", async () => {
+  await wasm();
+  const entry = { kind: "public" as const, address: ADDRESS };
+  for (const input of [
+    { entries: [{ ...entry, path: "../escape" }] },
+    { entries: [{ ...entry, path: "same" }, { ...entry, path: "same" }] },
+    { entries: [{ ...entry, size: Number.MAX_SAFE_INTEGER + 1 }] },
+    { entries: [{ kind: "embedded" as const, dataMap: Uint8Array.of(1) }] },
+    { entries: [entry], torrent: { infoHashV1: "aa" } },
+  ]) await expect(createManifest(input)).rejects.toMatchObject({ code: "INVALID_SOURCE" });
 });

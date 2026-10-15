@@ -55,3 +55,16 @@ it("exports camelCase metadata across the published API", () => {
   expectTypeOf<PublicFile["contentType"]>().toBeString();
   expectTypeOf<PaymentNetwork["paymentTokenAddress"]>().toBeString();
 });
+
+
+it("types pointer recovery, manifest exports and streaming save destinations", () => {
+  type SDK = typeof import("@withautonomi/ant-browser-sdk");
+  type Pointer = import("@withautonomi/ant-browser-sdk").Pointer;
+  type Options = import("@withautonomi/ant-browser-sdk").PointerWriteOptions;
+  expectTypeOf<Pointer["counter"]>().toEqualTypeOf<string>();
+  expectTypeOf<Awaited<ReturnType<AutonomiClient["getPointer"]>>>().toEqualTypeOf<Pointer | null>();
+  expectTypeOf<Awaited<ReturnType<SDK["createManifest"]>>>().toEqualTypeOf<import("@withautonomi/ant-browser-sdk").CreatedManifest>();
+  expectTypeOf<Pick<Options, "onCheckpoint">>().not.toMatchTypeOf<{ onCheckpoint: undefined }>();
+  const save = (client: AutonomiClient, handle: FileSystemFileHandle, source: PrivateFileReference) => client.streamAndSave(source, { fileHandle: handle });
+  expectTypeOf<Awaited<ReturnType<typeof save>>>().toEqualTypeOf<import("@withautonomi/ant-browser-sdk").StreamSaveResult>();
+});

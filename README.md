@@ -743,6 +743,131 @@ See the [main sync validation](docs/audits/2026-10-08-ant-client-main-sync.md)
 for production WASM and real-browser devnet evidence. The earlier streaming
 timings above were measured with a draft build.
 
+## Creating manifests and share links
+
+`createManifest()` builds canonical `.ant` bytes and an `ant://manifest/...`
+link offline through Rust. It accepts existing upload results; it does not
+upload another file or publish the manifest. The core validates portable paths,
+rejects collisions, derives embedded addresses and sorts entries canonically.
+
+```ts
+import { createManifest, createFileLink } from "@withautonomi/ant-browser-sdk";
+
+const exported = await createManifest({
+  name: "photos",
+  entries: [
+    { kind: "public", address: publicUpload.file.address, path: "public.jpg" },
+    { kind: "embedded", dataMap: privateUpload.file.dataMap, path: "private.jpg" },
+  ],
+});
+const manifestBlob = new Blob([exported.bytes.slice()], { type: "application/octet-stream" });
+// Save manifestBlob as photos.ant through your application's file UI.
+console.log(exported.link, exported.linkRecommended);
+console.log(await createFileLink(publicUpload.file.address));
+```
+
+Embedded DataMaps in both the exported file and link grant read access to private
+files. `linkRecommended` is false when the encoded link payload exceeds the core's
+1,500-byte recommendation; offer the `.ant` file then. A file may retain a root
+DataMap while its link uses the compact published form, with the same identity.
+Optional `torrent.infoHashV1` and `infoHashV2` are hex metadata, validated by Rust.
+
+## Pointers and payment recovery
+
+Pointers are owner-signed mutable references. `pointerAddress(ownerSeed)` computes
+an address offline from an application-owned 32-byte FIPS 204 seed. Keep that seed
+securely for later updates; the SDK never includes it in a checkpoint.
+
+```ts
+import { pointerAddress, PointerError } from "@withautonomi/ant-browser-sdk";
+
+const address = await pointerAddress(ownerSeed);
+// Use an application-owned file or database transaction for durable checkpoints.
+const onCheckpoint = async (checkpoint: string) => {
+  const writable = await journalFileHandle.createWritable();
+  await writable.write(checkpoint);
+  await writable.close();
+};
+
+try {
+  await client.createPointer({ ownerSeed, kind: "chunk", target: fileAddress, onCheckpoint });
+  await client.updatePointer({ ownerSeed, kind: "chunk", target: nextFileAddress, onCheckpoint });
+} catch (error) {
+  if (error instanceof PointerError && error.checkpoint) {
+    // Retain the original checkpoint. The configured payment provider's recover()
+    // observes an existing transaction; this call never submits a new payment.
+    await client.resumePointer(error.checkpoint, { onCheckpoint });
+  } else throw error;
+}
+const record = await client.getPointer(address); // Pointer or null
+const target = await client.resolvePointer(address);
+```
+
+Each write requires `onCheckpoint`; resolve it only after durable storage. Keep
+pending checkpoints across reloads and serialize writes for each owner in your
+application. The SDK checkpoints the original signed state and verified plan
+before calling the wallet, then retains broadcast evidence, the receipt and paid
+proof. A rejected callback after payment does not stop Rust from storing the paid
+state; `PointerError.checkpoint` retains the latest evidence if persistence failed.
+Retain that checkpoint even if the original operation was cancelled or failed.
+Unresponsive persistence callbacks time out after 30 seconds; queued writes keep
+their order, and the error retains the full checkpoint.
+
+`resumePointer()` uses the client's payment provider, or an explicit `payment`
+override, only through its observation-only `recover()` method. Ethers and Wagmi
+adapters support this. A paid proof needs no wallet. Recovery never signs a new
+state, refreshes quotes or calls `pay()`. If a crash hid the transaction hash,
+reconcile the original wallet externally; an empty journal is not proof that no
+transaction was submitted. Do not retry a fresh write while payment is unresolved.
+Checkpoints are application-owned, versioned opaque strings; do not edit them or
+accept them from untrusted sources. They contain signed state and payment evidence.
+
+```ts
+await client.transferPointer({ ownerSeed, recipient: recipientPointerAddress, onCheckpoint });
+const finality = await client.pointerFinality(address);
+if (finality.status === "final") {
+  console.log(finality.majority?.transferredTo);
+}
+```
+
+Transfer permanently redirects control to an existing recipient pointer. A write
+result alone does not establish finality: retain all five statuses (`open`,
+`settling`, `unconfirmed`, `final`, `forked`) and their holder counts. Only `final`
+means the core observed a majority with every peer answering and no rival final
+state. Pointer counters are decimal strings, including the final counter
+`18446744073709551615`; never convert them to `number`. Unknown target kinds retain
+their numeric `kindTag`.
+
+Pointer operations accept `signal` and `onProgress`. Cancellation before payment
+prevents submission. After submission, the write continues observing settlement,
+persisting evidence and storing the paid state; client closure waits for that work
+before freeing the underlying network. This cannot outlive page termination;
+resume from the durable checkpoint on the next page load.
+
+## Streaming saves
+
+`client.streamAndSave(source, options)` accepts a public file/address, private
+DataMap reference or manifest entry. Invoke it directly from a click handler to
+open the browser save picker before network work:
+
+```ts
+const saved = await client.streamAndSave(entry, {
+  suggestedName: "movie.mp4",
+  signal: controller.signal,
+  onProgress: event => console.log(event.completed, event.total),
+});
+console.log(saved.name, saved.bytesWritten, saved.hash);
+```
+
+Pass `fileHandle` to reuse a selected file or OPFS handle, or `destination` for an
+application-owned `WritableStream<Uint8Array>`. Supply one destination. The method
+uses the core's bounded pipeline, closes its reader and destination on success,
+and aborts acquired destinations on failure/cancellation. Cancellation during close
+may arrive after the file has committed. It returns byte count and BLAKE3 without
+a whole-file Blob. Without a supplied destination or browser save picker, it
+rejects with `SAVE_FAILED`. `downloadAndSave()` retains its buffered return value
+and ordinary browser-download fallback.
+
 ## Random-access reads
 
 `openFile()` avoids reconstructing the entire file. Each `read()` call can request
@@ -974,7 +1099,7 @@ needs quota for at least one encrypted record.
 `getBrowserCapabilities()` safely runs outside a browser and makes no network
 requests, allocations of workers, or permission prompts. `features` reports each
 API's presence. `operations` reports requirements for `connect`, `uploadBytes`,
-`uploadBlob`, `download`, `read`, `stream`, `pipeTo`, `media`, `saveWithPicker`, and
+`uploadBlob`, `download`, `read`, `stream`, `pipeTo`, `streamAndSave`, `media`, `saveWithPicker`, and
 `saveWithDownload`, including missing features for each. Call it again to get a
 fresh snapshot.
 
@@ -1021,6 +1146,14 @@ and traffic policy remain deployment responsibilities.
 | `client.resumeUpload()` | Resume retained input with explicit authorization for new payments |
 | `recovery.discard()` | Release retained input after pending work settles |
 | `parseManifestLink()` | Decode an `ant://manifest/...` or `ant://<address>` link without network access |
+| `createManifest()` | Create canonical `.ant` bytes and a compact share link offline |
+| `createFileLink()` | Format a public file share link |
+| `pointerAddress()` | Derive a pointer address from its owner seed offline |
+| `client.getPointer()` / `resolvePointer()` | Read a verified pointer or resolve its chain |
+| `client.createPointer()` / `updatePointer()` | Pay for and store a state with durable recovery checkpoints |
+| `client.transferPointer()` / `pointerFinality()` | Transfer control permanently and inspect finality |
+| `client.resumePointer()` | Recover the original paid state without repayment |
+| `client.streamAndSave()` | Save through the bounded streaming pipeline |
 | `decodeManifest()` | Decode the bytes of a `.ant` manifest file |
 | `client.download()` | Fetch, reconstruct, and verify a complete public file, private file or manifest entry |
 | `client.downloadAndSave()` | Download and open a browser save flow |

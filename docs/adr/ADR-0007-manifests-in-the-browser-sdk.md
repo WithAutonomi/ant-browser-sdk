@@ -66,6 +66,14 @@ and `isManifestEntry` expose that mapping. Entry `size` is never used for
 anything but display. No extraction to a filesystem is added: the browser has
 none, and applications own how files are saved.
 
+
+`createManifest(input)` also creates canonical `.ant` bytes, the normalized
+manifest view, a compact link and a `linkRecommended` flag through Rust.
+`createFileLink(address)` formats public links through the core grammar. Inputs
+contain public addresses or canonical embedded DataMaps, optional relative paths,
+size hints and torrent metadata. No TypeScript format encoder or network upload
+is added. Exported embedded maps and links grant private-file access.
+
 ## Consequences
 
 ### Positive

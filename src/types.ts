@@ -205,6 +205,8 @@ export type Operation =
   | "upload"
   | "download"
   | "download-and-save"
+  | "stream-and-save"
+  | "pointer"
   | "save"
   | "open-file"
   | "media";
@@ -449,4 +451,21 @@ export interface MediaSource {
   url: string;
   file: Pick<PublicFile, "name" | "size" | "contentType" | "address">;
   close(): void;
+}
+
+
+/** A file handle whose writable accepts streamed byte chunks, including FileSystemFileHandle. */
+export interface StreamSaveFileHandle {
+  readonly name?: string;
+  createWritable(): Promise<WritableStream<Uint8Array>>;
+}
+export interface StreamSaveOptions extends OperationOptions {
+  suggestedName?: string;
+  /** Supply exactly one destination or fileHandle; otherwise opens the browser save picker. */
+  destination?: WritableStream<Uint8Array>;
+  fileHandle?: StreamSaveFileHandle;
+}
+export interface StreamSaveResult extends PipeResult {
+  readonly name: string;
+  readonly method: "file-picker" | "stream";
 }

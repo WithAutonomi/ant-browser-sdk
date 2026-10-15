@@ -3,6 +3,10 @@ import initAntCore, {
   parseWebRtcDirectMultiaddr,
   decodeMerklePaymentReceipt,
   decodeManifest,
+  createManifest,
+  createFileLink,
+  pointerAddress,
+  recoverPointerPayment,
   encryptPublicFile,
   mainnetNetworkDefaults,
   parseManifestLink,
@@ -33,6 +37,13 @@ export interface RawDownloadOptions {
 
 export interface RawNetworkClient {
   connect(expectedPayment?: unknown): Promise<unknown>;
+  getPointer(address: string): Promise<unknown>;
+  resolvePointer(address: string): Promise<unknown>;
+  pointerFinality(address: string): Promise<unknown>;
+  createPointer(seed: Uint8Array, target: string, kind: string, network: unknown, pay: (...args: unknown[]) => Promise<unknown>, paid: (value: { record: Uint8Array; proof: Uint8Array }) => Promise<void>, prepared: (checkpoint: string) => Promise<void>): Promise<unknown>;
+  updatePointer: RawNetworkClient["createPointer"];
+  transferPointer(seed: Uint8Array, recipient: string, network: unknown, pay: (...args: unknown[]) => Promise<unknown>, paid: (value: { record: Uint8Array; proof: Uint8Array }) => Promise<void>, prepared: (checkpoint: string) => Promise<void>): Promise<unknown>;
+  storePaidPointer(record: Uint8Array, proof: Uint8Array, network: unknown): Promise<unknown>;
   reconcileFailedUploadPayment(
     checkpoint: string,
     verifyFailure: (attempt: unknown, scope: string) => unknown,
@@ -87,6 +98,10 @@ export interface WasmBindings {
   parseManifestLink(link: string): unknown;
   /** Decode `.ant` manifest bytes (ant-client ADR-0006). */
   decodeManifest(bytes: Uint8Array): unknown;
+  createManifest(input: unknown): unknown;
+  createFileLink(address: string): string;
+  pointerAddress(seed: Uint8Array): string;
+  recoverPointerPayment(checkpoint: string, receipt: unknown): unknown;
 }
 
 type LoadedSource = ArrayBuffer | WebAssembly.Module;
@@ -168,5 +183,9 @@ export function getBindings(): WasmBindings {
     mainnetNetworkDefaults,
     parseManifestLink,
     decodeManifest,
+    createManifest,
+    createFileLink,
+    pointerAddress,
+    recoverPointerPayment,
   };
 }

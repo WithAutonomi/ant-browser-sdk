@@ -56,6 +56,13 @@ Number.MAX_SAFE_INTEGER. Uploads remain limited by upstream to 1,000,000,000
 bytes. SDK_LIMITS.maxFileBytes retains that upload limit for compatibility;
 maxUploadBytes names it explicitly. No network, DataMap or payment format changes.
 
+
+`client.streamAndSave(source, options)` owns destination selection, reader lifetime
+and `pipeTo` orchestration. It accepts a supplied WritableStream, a file handle or
+a picker invoked before network awaits, returns byte count/hash, closes readers,
+and aborts acquired destinations on failure. It never falls back to full-file
+buffering. `downloadAndSave` keeps its existing buffered contract.
+
 ## Consequences
 
 ### Positive

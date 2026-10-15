@@ -1,5 +1,5 @@
 import {
-  AutonomiClient, type ClientOptions, type MediaSource, type PrivateFileReference, type UploadOptions,
+  AutonomiClient, createManifest, type ClientOptions, type MediaSource, type PrivateFileReference, type UploadOptions,
 } from "@withautonomi/ant-browser-sdk";
 import { createEthersPaymentProvider } from "@withautonomi/ant-browser-sdk/ethers";
 import "../shared/style.css";
@@ -97,6 +97,22 @@ saveDataMapButton.addEventListener("click", () => {
   URL.revokeObjectURL(link.href);
 });
 
+element<HTMLButtonElement>("export-manifest").addEventListener("click", async () => {
+  try {
+    const target = readTarget();
+    const exported = await createManifest({ entries: [typeof target === "string"
+      ? { kind: "public", address: target, path: "public-file" }
+      : { kind: "embedded", dataMap: target.dataMap, path: target.name ?? "private-file" }] });
+    element<HTMLTextAreaElement>("share-link").value = exported.link;
+    const anchor = document.createElement("a");
+    anchor.href = URL.createObjectURL(new Blob([exported.bytes.slice()], { type: "application/octet-stream" }));
+    anchor.download = "files.ant";
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(anchor.href), 60_000);
+    write(exported.linkRecommended ? "Exported manifest and share link" : "Exported manifest; the file is recommended for this long share link");
+  } catch (error) { writeError(error); }
+});
+
 dataMapInput.addEventListener("change", async () => {
   const selected = dataMapInput.files?.[0];
   if (!selected) return;
@@ -123,25 +139,16 @@ diskDownloadButton.addEventListener("click", async () => {
   diskDownload = controller;
   diskDownloadButton.disabled = true;
   cancelDownloadButton.disabled = false;
-  let reader;
   try {
-    // Open the picker during the click's activation, before any network await.
-    const handle = await pickerWindow.showSaveFilePicker({ suggestedName: privateFile?.name ?? "autonomi-file" });
-    reader = await downloadingClient.openFile(target, { signal: controller.signal });
-    const writable = await handle.createWritable();
-    if (controller.signal.aborted) {
-      await writable.abort(controller.signal.reason);
-      throw controller.signal.reason;
-    }
-    const result = await reader.pipeTo(writable, {
+    const result = await downloadingClient.streamAndSave(target, {
+      suggestedName: privateFile?.name ?? "autonomi-file",
       signal: controller.signal,
-      onProgress: (written, total) => write(`Saved ${written}/${total} bytes`),
+      onProgress: (event) => { if (event.unit === "bytes") write(`Saved ${event.completed}/${event.total} bytes`); },
     });
-    write(`Verified and saved ${result.bytesWritten} bytes to ${handle.name}; BLAKE3 ${result.hash}`);
+    write(`Verified and saved ${result.bytesWritten} bytes to ${result.name}; BLAKE3 ${result.hash}`);
   } catch (error) {
     writeError(error);
   } finally {
-    reader?.close();
     diskDownload = undefined;
     diskDownloadButton.disabled = !client || !pickerWindow.showSaveFilePicker;
     cancelDownloadButton.disabled = true;

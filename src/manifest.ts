@@ -143,3 +143,47 @@ function manifestFromCore(raw: CoreManifest): Manifest {
     }))),
   });
 }
+
+
+/** Inputs contain only creator-supplied metadata; Rust derives addresses for embedded maps. */
+export interface ManifestInput {
+  readonly name?: string;
+  readonly torrent?: TorrentReference;
+  readonly entries: readonly ManifestEntryInput[];
+}
+export type ManifestEntryInput = { readonly path?: string; readonly size?: number } & (
+  | { readonly kind: "public"; readonly address: string }
+  | { readonly kind: "embedded"; readonly dataMap: Uint8Array }
+);
+export interface CreatedManifest {
+  readonly manifest: Manifest;
+  /** Canonical `.ant` file bytes. Embedded DataMaps grant access to private files. */
+  readonly bytes: Uint8Array;
+  /** Self-contained link, using the core's compact published DataMap form. */
+  readonly link: string;
+  /** False when the encoded link payload exceeds the core's recommended chat size. */
+  readonly linkRecommended: boolean;
+}
+
+/** Create a portable `.ant` file and share link offline through the Rust encoder. */
+export async function createManifest(input: ManifestInput, options: ManifestOptions = {}): Promise<CreatedManifest> {
+  throwIfAborted(options.signal);
+  let copied: ManifestInput;
+  try { copied = structuredClone(input); }
+  catch (error) { throw wrapError("INVALID_SOURCE", "Could not copy the manifest input", error); }
+  await abortable(initializeClientWasm(options.wasm), options.signal);
+  throwIfAborted(options.signal);
+  try {
+    const raw = getBindings().createManifest(copied) as Omit<CreatedManifest, "manifest"> & { manifest: CoreManifest };
+    return Object.freeze({ ...raw, manifest: manifestFromCore(raw.manifest) });
+  } catch (error) { throw wrapError("INVALID_SOURCE", "Could not create the manifest", error); }
+}
+
+/** Format a public file share link using the shared core's address grammar. */
+export async function createFileLink(address: string, options: ManifestOptions = {}): Promise<string> {
+  throwIfAborted(options.signal);
+  await abortable(initializeClientWasm(options.wasm), options.signal);
+  throwIfAborted(options.signal);
+  try { return getBindings().createFileLink(address); }
+  catch (error) { throw wrapError("INVALID_SOURCE", "Could not create a file link", error); }
+}
