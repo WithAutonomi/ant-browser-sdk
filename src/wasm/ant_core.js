@@ -283,28 +283,33 @@ export class BrowserNetworkClient {
      * `kind` is `"chunk"` or `"pointer"`. Refused before anything is paid if
      * the pointer already exists.
      *
-     * `options` is `{ onPrepared, onPaid }`, each optional; a bare function
-     * is taken as `onPaid`, as earlier releases took it.
+     * `options` is `{ onPrepared, onSubmission, onPaid }`, each optional.
+     * An unknown option is refused before anything is paid.
      *
-     * - `onPrepared` is awaited with an opaque checkpoint, the signed record
-     *   and its payment plan (never the owner seed), before the wallet is
-     *   asked to pay. If it fails, nothing is paid. With the receipt of the
-     *   payment that follows, [`recover_pointer_payment`] rebuilds the paid
-     *   state, so persist it durably before it settles.
+     * - `onPrepared` is awaited with an opaque checkpoint string, the signed
+     *   record and its payment plan (never the owner seed), before the
+     *   wallet is asked to pay. Persist it durably before it settles; if it
+     *   fails, or does not settle within 30 seconds, nothing is paid.
+     * - `onSubmission` is handed what the wallet reports for each
+     *   transaction it broadcasts, `{ transactionHash }` or
+     *   `{ transactionHashes }`, and the wallet waits on its promise. Keep
+     *   it: with the checkpoint, [`recover_pointer_payment`] rebuilds the
+     *   paid state once the transaction is confirmed, so a page lost before
+     *   the receipt never pays twice.
      * - `onPaid` is called with `{ record, proof }` once the state is paid
      *   for and before it is stored. Keep both: if storing fails, or the page
      *   is lost, [`Self::store_paid_pointer`] stores the same state without
      *   paying again.
      *
-     * The `onSubmission` the wallet is handed records nothing for a pointer
-     * write, unlike an upload's: the wallet must keep the transaction hash
-     * it broadcasts, or a page lost before the receipt pays again on retry.
+     * Nothing is paid unless `pay_for_quotes` is called. A write that fails
+     * before calling it says "payment was not submitted"; any later failure
+     * may have paid, and is recovered from what the callbacks were handed.
      * @param {Uint8Array} owner_seed
      * @param {string} target
      * @param {string} kind
      * @param {any} payment_network
      * @param {Function} pay_for_quotes
-     * @param {any} options
+     * @param {any | null} [options]
      * @returns {Promise<any>}
      */
     createPointer(owner_seed, target, kind, payment_network, pay_for_quotes, options) {
@@ -314,7 +319,7 @@ export class BrowserNetworkClient {
         const len1 = WASM_VECTOR_LEN;
         const ptr2 = passStringToWasm0(kind, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len2 = WASM_VECTOR_LEN;
-        const ret = wasm.browsernetworkclient_createPointer(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2, payment_network, pay_for_quotes, options);
+        const ret = wasm.browsernetworkclient_createPointer(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2, payment_network, pay_for_quotes, isLikeNone(options) ? 0 : addToExternrefTable0(options));
         return ret;
     }
     /**
@@ -462,7 +467,11 @@ export class BrowserNetworkClient {
     }
     /**
      * Store a pointer state already paid for, from the `record` and `proof`
-     * an earlier write handed to its `on_paid` callback. Pays nothing.
+     * an earlier write handed to its `onPaid` callback or
+     * [`recover_pointer_payment`] rebuilt. Pays nothing.
+     *
+     * Storers accept a proof only while its quotes are under a day old; a
+     * refusal of an older proof says it expired.
      * @param {Uint8Array} record
      * @param {Uint8Array} proof
      * @param {any} payment_network
@@ -490,7 +499,7 @@ export class BrowserNetworkClient {
      * @param {string} recipient
      * @param {any} payment_network
      * @param {Function} pay_for_quotes
-     * @param {any} options
+     * @param {any | null} [options]
      * @returns {Promise<any>}
      */
     transferPointer(owner_seed, recipient, payment_network, pay_for_quotes, options) {
@@ -498,7 +507,7 @@ export class BrowserNetworkClient {
         const len0 = WASM_VECTOR_LEN;
         const ptr1 = passStringToWasm0(recipient, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len1 = WASM_VECTOR_LEN;
-        const ret = wasm.browsernetworkclient_transferPointer(this.__wbg_ptr, ptr0, len0, ptr1, len1, payment_network, pay_for_quotes, options);
+        const ret = wasm.browsernetworkclient_transferPointer(this.__wbg_ptr, ptr0, len0, ptr1, len1, payment_network, pay_for_quotes, isLikeNone(options) ? 0 : addToExternrefTable0(options));
         return ret;
     }
     /**
@@ -510,7 +519,7 @@ export class BrowserNetworkClient {
      * @param {string} kind
      * @param {any} payment_network
      * @param {Function} pay_for_quotes
-     * @param {any} options
+     * @param {any | null} [options]
      * @returns {Promise<any>}
      */
     updatePointer(owner_seed, target, kind, payment_network, pay_for_quotes, options) {
@@ -520,7 +529,7 @@ export class BrowserNetworkClient {
         const len1 = WASM_VECTOR_LEN;
         const ptr2 = passStringToWasm0(kind, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len2 = WASM_VECTOR_LEN;
-        const ret = wasm.browsernetworkclient_updatePointer(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2, payment_network, pay_for_quotes, options);
+        const ret = wasm.browsernetworkclient_updatePointer(this.__wbg_ptr, ptr0, len0, ptr1, len1, ptr2, len2, payment_network, pay_for_quotes, isLikeNone(options) ? 0 : addToExternrefTable0(options));
         return ret;
     }
     /**
@@ -868,13 +877,14 @@ export function pointerAddress(owner_seed) {
 /**
  * Rebuild an already-paid state, `{ record, proof }` for
  * [`BrowserNetworkClient::store_paid_pointer`], from the checkpoint a write
- * handed `onPrepared` and the receipt of the payment that followed it, as
+ * handed `onPrepared` and the receipt of the payment that followed it, or
+ * the submission `onSubmission` was handed: `{ transactionHash }` or
  * `{ transactionHashes: { <quote hash>: <transaction hash> } }`.
  *
- * Does not quote, sign, submit payment, or contact the network, and checks
- * only that the receipt names this checkpoint's quote: confirm the
- * transaction on chain first. Only use an application's own persisted
- * checkpoint; this never authorizes fresh payment.
+ * Does not quote, sign, submit payment, or contact the network. A keyed
+ * receipt must name this checkpoint's quote; beyond that the transaction is
+ * not checked, so confirm it on chain first. Only use an application's own
+ * persisted checkpoint; this never authorizes fresh payment.
  * @param {string} checkpoint
  * @param {any} receipt
  * @returns {any}
@@ -1243,6 +1253,16 @@ function __wbg_get_imports() {
             const ret = result;
             return ret;
         },
+        __wbg_instanceof_Object_873c13f9f41aec78: function(arg0) {
+            let result;
+            try {
+                result = arg0 instanceof Object;
+            } catch (_) {
+                result = false;
+            }
+            const ret = result;
+            return ret;
+        },
         __wbg_instanceof_Uint8Array_86f30649f63ef9c2: function(arg0) {
             let result;
             try {
@@ -1398,6 +1418,10 @@ function __wbg_get_imports() {
             const ret = arg0.reason;
             return ret;
         },
+        __wbg_reject_5cfff571450086dd: function(arg0) {
+            const ret = Promise.reject(arg0);
+            return ret;
+        },
         __wbg_releaseLock_5b339d918941b349: function(arg0) {
             arg0.releaseLock();
         },
@@ -1535,32 +1559,32 @@ function __wbg_get_imports() {
             return ret;
         },
         __wbindgen_cast_0000000000000001: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 1145, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 1152, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___wasm_bindgen_75c5b43bb1a48c51___JsValue__core_608f92abc48d28da___result__Result_____wasm_bindgen_75c5b43bb1a48c51___JsError___true_);
             return ret;
         },
         __wbindgen_cast_0000000000000002: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 524, ret: NamedExternref("Promise<any>"), inner_ret: Some(NamedExternref("Promise<any>")) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 583, ret: NamedExternref("Promise<any>"), inner_ret: Some(NamedExternref("Promise<any>")) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___wasm_bindgen_75c5b43bb1a48c51___JsValue__js_sys_2246999dfd1b0ec1___Promise__true_);
             return ret;
         },
         __wbindgen_cast_0000000000000003: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("Event")], shim_idx: 526, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("Event")], shim_idx: 585, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___web_sys_1bc45939ec04b236___features__gen_MessageEvent__MessageEvent______true_);
             return ret;
         },
         __wbindgen_cast_0000000000000004: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 526, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("MessageEvent")], shim_idx: 585, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke___web_sys_1bc45939ec04b236___features__gen_MessageEvent__MessageEvent______true__3);
             return ret;
         },
         __wbindgen_cast_0000000000000005: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 846, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 853, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke_______true_);
             return ret;
         },
         __wbindgen_cast_0000000000000006: function(arg0, arg1) {
-            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 857, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
+            // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [], shim_idx: 864, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
             const ret = makeMutClosure(arg0, arg1, wasm_bindgen_75c5b43bb1a48c51___convert__closures_____invoke_______true__1_);
             return ret;
         },

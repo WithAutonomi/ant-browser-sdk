@@ -93,7 +93,7 @@ export async function pointerAddress(ownerSeed: Uint8Array, options: ManifestOpt
 const JOURNAL_VERSION = 1;
 /** Largest checkpoint accepted for recovery; the core's own part is at most 4 MiB. */
 const MAX_CHECKPOINT_CHARS = 16 * 1024 * 1024;
-/** As Rust's onPaid timeout: an unresponsive persistence adapter cannot stall a paid write. */
+/** As Rust's page-callback timeout: an unresponsive persistence adapter cannot stall a paid write. */
 const CHECKPOINT_TIMEOUT_MS = 30_000;
 /** Bytes passed to one String.fromCharCode call while base64-encoding. */
 const BASE64_BLOCK_BYTES = 0x8000;
@@ -287,24 +287,17 @@ function parseJournal(checkpoint: string, network: PaymentNetwork): Journal {
   } catch (error) { throw wrapError("INVALID_SOURCE", "Invalid pointer checkpoint or payment network", error); }
 }
 
-/** Rust checks that the receipt pays this plan and rebuilds the proof; the total is checked as for uploads. */
+/**
+ * Rust checks that the receipt pays this plan and rebuilds the proof; the total is checked as for uploads.
+ * Rust reads `transactionHashes` keyed by quote hash, or else one `transactionHash` paying every quote.
+ */
 function acceptReceipt(journal: Journal, value: unknown): PaidState {
   const evidence = paymentFields(value);
   if (!evidence || evidence.totalAmount === undefined) throw new Error("Payment provider returned an invalid receipt");
   const receipt = evidence as PaymentReceipt;
   validateReceipt(receipt, journal.quotes);
-  const paid = getBindings().recoverPointerPayment(journal.prepared, { transactionHashes: quoteTransactions(receipt, journal.quotes) }) as { record: Uint8Array; proof: Uint8Array };
+  const paid = getBindings().recoverPointerPayment(journal.prepared, receipt) as { record: Uint8Array; proof: Uint8Array };
   return { receipt, record: toBase64(paid.record), proof: toBase64(paid.proof) };
-}
-
-/**
- * Rust names each quote's transaction by quote hash. A wallet that returns one hash
- * paid every quote it was asked to pay, which this journal records.
- */
-function quoteTransactions(receipt: PaymentReceipt, quotes: readonly VerifiedStorageQuote[]): Record<string, string> {
-  const keyed = "transactionHashes" in receipt ? receipt.transactionHashes : undefined;
-  if (keyed && Object.keys(keyed).length > 0) return { ...keyed };
-  return Object.fromEntries(quotes.map((quote) => [quote.quoteHash, receipt.transactionHash!]));
 }
 
 /** Observe this page's broadcasts for the journal again. Never submits a transaction. */

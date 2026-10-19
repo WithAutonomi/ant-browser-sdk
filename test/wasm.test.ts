@@ -161,12 +161,19 @@ it("rebuilds the exact paid pointer proof from a real devnet checkpoint without 
   await initializeWasm(await readFile(new URL("../src/wasm/ant_core_bg.wasm", import.meta.url)));
   // Captured from production WASM on the isolated 2026-10-15 devnet. Contains
   // signed public records/quotes and a local Anvil receipt, never an owner seed.
+  // The core's checkpoint was re-encoded on 2026-10-19 into the layout of
+  // ant-client bab6beb (base64url record, base64url MessagePack plan) from the
+  // same signed record and plan; the receipt and paid state are as captured.
   const fixture = JSON.parse(gunzipSync(await readFile(new URL("./fixtures/pointer-payment-devnet.json.gz", import.meta.url))).toString());
+  const [transactionHash] = Object.values(fixture.receipt.transactionHashes as Record<string, string>);
   const fetch = vi.spyOn(globalThis, "fetch");
   try {
-    const recovered = getBindings().recoverPointerPayment(fixture.prepared, fixture.receipt) as { record: Uint8Array; proof: Uint8Array };
-    expect(Array.from(recovered.record)).toEqual(fixture.paid.record);
-    expect(Array.from(recovered.proof)).toEqual(fixture.paid.proof);
+    // A keyed receipt, and the single hash a wallet or its submission reports.
+    for (const receipt of [fixture.receipt, { transactionHash, totalAmount: fixture.receipt.totalAmount }]) {
+      const recovered = getBindings().recoverPointerPayment(fixture.prepared, receipt) as { record: Uint8Array; proof: Uint8Array };
+      expect(Array.from(recovered.record)).toEqual(fixture.paid.record);
+      expect(Array.from(recovered.proof)).toEqual(fixture.paid.proof);
+    }
     expect(fetch).not.toHaveBeenCalled();
   } finally { fetch.mockRestore(); }
 });
@@ -194,16 +201,58 @@ it("resumes a real devnet checkpoint through the packaged core and stores the ex
 it("rejects altered pointer signatures, mismatched payment plans and missing transactions", async () => {
   await initializeWasm(await readFile(new URL("../src/wasm/ant_core_bg.wasm", import.meta.url)));
   const fixture = JSON.parse(gunzipSync(await readFile(new URL("./fixtures/pointer-payment-devnet.json.gz", import.meta.url))).toString());
-  type Checkpoint = { version: number; record: number[]; plan: { data_size: number; address: number[] } };
+  // The record is base64url; the plan is base64url MessagePack with named fields.
+  type Checkpoint = { version: number; record: string; plan: string };
+  const editBytes = (value: string, edit: (bytes: Uint8Array) => void) => {
+    const bytes = new Uint8Array(Buffer.from(value, "base64url"));
+    edit(bytes);
+    return Buffer.from(bytes).toString("base64url");
+  };
   for (const mutate of [
     (value: Checkpoint) => { value.version = 2; },
-    (value: Checkpoint) => { value.record[100] = value.record[100]! ^ 1; },
-    (value: Checkpoint) => { value.plan.data_size++; },
-    (value: Checkpoint) => { value.plan.address[0] = value.plan.address[0]! ^ 1; },
+    (value: Checkpoint) => { value.record = editBytes(value.record, (record) => { record[100]! ^= 1; }); },
+    (value: Checkpoint) => {
+      value.plan = editBytes(value.plan, (plan) => {
+        const at = planField(plan, "data_size");
+        expect(plan[at]).toBe(MSGPACK_UINT16);
+        const view = new DataView(plan.buffer);
+        view.setUint16(at + 1, view.getUint16(at + 1) + 1);
+      });
+    },
+    (value: Checkpoint) => {
+      value.plan = editBytes(value.plan, (plan) => {
+        const at = planField(plan, "address");
+        expect(Array.from(plan.subarray(at, at + 3))).toEqual([MSGPACK_ARRAY16, 0, ADDRESS_LEN]);
+        // The first address byte: a positive fixint, or a uint8 after its marker.
+        plan[plan[at + 3] === MSGPACK_UINT8 ? at + 4 : at + 3]! ^= 1;
+      });
+    },
   ]) {
-    const value = JSON.parse(fixture.prepared);
+    const value = JSON.parse(fixture.prepared) as Checkpoint;
     mutate(value);
     expect(() => getBindings().recoverPointerPayment(JSON.stringify(value), fixture.receipt)).toThrow();
   }
+  // The unchanged checkpoint recovers, so each refusal above is the edit's.
+  expect(() => getBindings().recoverPointerPayment(fixture.prepared, fixture.receipt)).not.toThrow();
   expect(() => getBindings().recoverPointerPayment(fixture.prepared, { totalAmount: "0" })).toThrow();
 });
+
+/** Bytes in a content address, which MessagePack writes as an array16 of that many bytes. */
+const ADDRESS_LEN = 32;
+const MSGPACK_UINT8 = 0xcc;
+const MSGPACK_UINT16 = 0xcd;
+const MSGPACK_ARRAY16 = 0xdc;
+const MSGPACK_FIXSTR = 0xa0;
+/** Largest key a MessagePack fixstr holds. */
+const MSGPACK_FIXSTR_MAX = 31;
+
+/** Offset of the value that follows `key`, a fixstr, where it first appears in a named MessagePack map. */
+function planField(plan: Uint8Array, key: string): number {
+  const name = new TextEncoder().encode(key);
+  if (name.length > MSGPACK_FIXSTR_MAX) throw new Error(`${key} is not a fixstr`);
+  const marker = [MSGPACK_FIXSTR | name.length, ...name];
+  for (let at = 0; at + marker.length <= plan.length; at++) {
+    if (marker.every((byte, index) => plan[at + index] === byte)) return at + marker.length;
+  }
+  throw new Error(`The plan has no ${key} field`);
+}

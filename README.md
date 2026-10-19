@@ -835,10 +835,13 @@ transaction hashes are kept as evidence so recovery can observe them again.
 `wait()`, then uses the client's payment provider, or an explicit `payment`
 override, only through its observation-only `recover()` method. Ethers and Wagmi
 adapters support this. A paid proof needs no wallet; it is stored even if
-persisting the recovered proof fails. Recovery never signs a new
-state, refreshes quotes or calls `pay()`. If a crash hid the transaction hash,
-reconcile the original wallet externally; an empty journal is not proof that no
-transaction was submitted. Do not retry a fresh write while payment is unresolved.
+persisting the recovered proof fails. Storers accept a paid proof only while its
+quotes are under a day old: past that, `resumePointer()` fails with "paid proof
+expired", and that state cannot be stored without paying again. Recovery never
+signs a new state, refreshes quotes or calls `pay()`. If a crash hid the
+transaction hash, reconcile the original wallet externally; an empty journal is
+not proof that no transaction was submitted. Do not retry a fresh write while
+payment is unresolved.
 Checkpoints are application-owned, versioned opaque strings; do not edit them or
 accept them from untrusted sources. They contain signed state and payment evidence.
 

@@ -55,17 +55,17 @@ describe("pointer payment recovery", () => {
     expect(f.release).toHaveBeenCalledOnce();
   });
 
-  it("hands Rust the receipt's transaction keyed by the journaled quote it paid", async () => {
+  it("hands Rust a single-hash or keyed receipt as the wallet returned it", async () => {
     const f = fixture();
     proof.mockClear();
     await writePointer(f.raw, network, "createPointer", f.options, f.context);
-    expect(proof).toHaveBeenCalledWith("original signed state and plan", { transactionHashes: { aa: receipt.transactionHash } });
+    expect(proof).toHaveBeenCalledWith("original signed state and plan", receipt);
 
     const keyed = { ...receipt, transactionHashes: { aa: `0x${"cd".repeat(32)}` } };
     f.payment.pay = vi.fn(async () => keyed);
     proof.mockClear();
     await writePointer(f.raw, network, "createPointer", f.options, f.context);
-    expect(proof).toHaveBeenCalledWith("original signed state and plan", { transactionHashes: keyed.transactionHashes });
+    expect(proof).toHaveBeenCalledWith("original signed state and plan", keyed);
   });
 
   it("blocks payment if durable intent persistence fails and reports that nothing was requested", async () => {
