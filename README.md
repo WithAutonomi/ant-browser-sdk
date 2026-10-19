@@ -737,7 +737,10 @@ client reads for an entry, `manifestFileName(entry)` its last path component, an
 is rejected. Entry `size` is a hint from the manifest's creator and decides
 nothing. `knownSize`, when present, is the plaintext size the core derives from
 an embedded root DataMap; public entries and shrunk maps omit it. Downloads and
-readers verify the actual content through the core.
+readers verify the actual content through the core. `sha256`, when present, is
+the hex SHA-256 of the plaintext as the manifest's creator recorded it; the ant
+CLI records one for every file it uploads. The SDK surfaces it but does not check
+it, unlike the CLI's extraction; hash the downloaded bytes to check the claim.
 
 The bundled core reads the finalized ADR-0006 v1 encoding from `ant-client`
 main. Links and files created by the earlier draft builds using the
@@ -776,6 +779,8 @@ files. `linkRecommended` is false when the encoded link payload exceeds the core
 1,500-byte recommendation; offer the `.ant` file then. A file may retain a root
 DataMap while its link uses the compact published form, with the same identity.
 Optional `torrent.infoHashV1` and `infoHashV2` are hex metadata, validated by Rust.
+An entry's optional `sha256` is the hex SHA-256 of its plaintext, recorded as your
+claim as the CLI records its own; the SDK computes none.
 
 ## Pointers and payment recovery
 

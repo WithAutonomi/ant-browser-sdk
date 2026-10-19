@@ -46,10 +46,17 @@ exactly the latter, and a public entry exactly the former.
 The SDK exports `parseManifestLink(link)` and `decodeManifest(bytes)`, both
 asynchronous because they initialise the WASM module, returning frozen
 `ManifestLink` and `Manifest` values whose entries carry `name`, optional
-`path` and `size`, optional `knownSize`, `kind`, hex `address`, and for embedded entries the
-canonical DataMap bytes; a manifest also exposes the torrent info hashes its
-creator recorded, as hex, which the SDK only surfaces. Failures carry the
-`INVALID_SOURCE` code.
+`path` and `size`, optional `knownSize`, optional hex `sha256`, `kind`, hex
+`address`, and for embedded entries the canonical DataMap bytes; a manifest
+also exposes the torrent info hashes its creator recorded, as hex, which the
+SDK only surfaces. Failures carry the `INVALID_SOURCE` code.
+
+`sha256` is the creator's whole-file hash of the plaintext (ant-client
+ADR-0006). The CLI checks it when extracting; the SDK only surfaces it, as it
+does the torrent hashes. Downloads and readers are verified by content address,
+which is what Autonomi relies on, and a ranged reader never holds the whole file
+to hash. An application that wants the creator's claim checked hashes the bytes
+it downloads.
 
 The core derives an embedded entry's address by hashing its published DataMap
 form, so a root map and its shrunk map identify the same file. `knownSize` is
@@ -71,8 +78,9 @@ none, and applications own how files are saved.
 manifest view, a compact link and a `linkRecommended` flag through Rust.
 `createFileLink(address)` formats public links through the core grammar. Inputs
 contain public addresses or canonical embedded DataMaps, optional relative paths,
-size hints and torrent metadata. No TypeScript format encoder or network upload
-is added. Exported embedded maps and links grant private-file access.
+size hints, `sha256` claims and torrent metadata. No TypeScript format encoder
+or network upload is added. Exported embedded maps and links grant private-file
+access.
 
 ## Consequences
 
@@ -106,6 +114,9 @@ is added. Exported embedded maps and links grant private-file access.
   exposed as `knownSize`, distinct from the creator's `size` on a public entry.
   Draft DataMap layouts and unsupported format versions reject with
   `INVALID_SOURCE`.
+- The ant-client golden v1 fixture with a creator's `sha256` decodes with it
+  as hex; `createManifest` records a `sha256` through to the decoded bytes and
+  link, and rejects a malformed one.
 - Client tests: an embedded entry routes to the private download and reader
   with the entry's file name and no public DataMap fetch; a public entry
   routes to the public download; an embedded entry without DataMap bytes is

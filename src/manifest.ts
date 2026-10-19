@@ -19,6 +19,8 @@ export interface ManifestEntry {
   readonly size?: number;
   /** Plaintext size derived by the core when the entry embeds a root DataMap. */
   readonly knownSize?: number;
+  /** Hex SHA-256 of the plaintext as the creator recorded it. Surfaced only; the SDK does not check it. */
+  readonly sha256?: string;
   readonly kind: "embedded" | "public";
   /** Hex content address: the public DataMap address of the file. */
   readonly address: string;
@@ -54,7 +56,7 @@ export interface ManifestOptions extends OperationOptions {
 }
 
 interface CoreManifestEntry {
-  name: string; path?: string | null; size?: number | null; knownSize?: number | null; kind: "embedded" | "public"; address: string; dataMap?: Uint8Array;
+  name: string; path?: string | null; size?: number | null; knownSize?: number | null; sha256?: string | null; kind: "embedded" | "public"; address: string; dataMap?: Uint8Array;
 }
 interface CoreTorrent { infoHashV1?: string | null; infoHashV2?: string | null }
 interface CoreManifest { name?: string | null; torrent?: CoreTorrent | null; entries: CoreManifestEntry[] }
@@ -137,6 +139,7 @@ function manifestFromCore(raw: CoreManifest): Manifest {
       ...(entry.path ? { path: entry.path } : {}),
       ...(typeof entry.size === "number" ? { size: entry.size } : {}),
       ...(typeof entry.knownSize === "number" ? { knownSize: entry.knownSize } : {}),
+      ...(entry.sha256 ? { sha256: entry.sha256 } : {}),
       kind: entry.kind,
       address: entry.address,
       ...(entry.dataMap ? { dataMap: entry.dataMap } : {}),
@@ -151,7 +154,8 @@ export interface ManifestInput {
   readonly torrent?: TorrentReference;
   readonly entries: readonly ManifestEntryInput[];
 }
-export type ManifestEntryInput = { readonly path?: string; readonly size?: number } & (
+/** `sha256` is the hex SHA-256 of the plaintext, recorded as the creator's claim; the SDK computes none. */
+export type ManifestEntryInput = { readonly path?: string; readonly size?: number; readonly sha256?: string } & (
   | { readonly kind: "public"; readonly address: string }
   | { readonly kind: "embedded"; readonly dataMap: Uint8Array }
 );
