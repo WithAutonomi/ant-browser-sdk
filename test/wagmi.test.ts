@@ -228,6 +228,20 @@ it("retries a submitted storage transaction after an RPC timeout without rebroad
   expect(mocks.waitForTransactionReceipt.mock.calls[1]![1].hash).toBe(submission.transactionHash);
 });
 
+it("waits for the broadcast to be journaled before observing its receipt", async () => {
+  mocks.readContract.mockResolvedValue(100n);
+  mocks.waitForTransactionReceipt.mockReset().mockResolvedValue({ status: "success", transactionHash: "0xconfirmed" });
+  let journaled!: () => void;
+  const submitted = vi.fn(() => new Promise<void>((resolve) => { journaled = resolve; }));
+  const pending = createWagmiPaymentProvider({ config }).pay(network, quotes, { submitted, report() {} });
+  await vi.waitFor(() => expect(submitted).toHaveBeenCalledOnce());
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(mocks.waitForTransactionReceipt).not.toHaveBeenCalled();
+  journaled();
+  await expect(pending).resolves.toMatchObject({ transactionHash: "0xconfirmed" });
+  expect(mocks.waitForTransactionReceipt).toHaveBeenCalledOnce();
+});
+
 it("submits Rust Merkle calldata and decodes the confirmed vault receipt", async () => {
   const request = { calldata: "0xabcdef", maximumAmount: "100", depth: 2, timestamp: 42, poolHashes: ["ab".repeat(32)] };
   mocks.readContract.mockResolvedValue(100n);

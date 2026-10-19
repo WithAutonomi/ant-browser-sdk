@@ -485,6 +485,36 @@ describe("AutonomiClient", () => {
     client.close();
   });
 
+  it("holds a manifest entry's download to its recorded sha256 before returning or saving it", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    const raw = state.networks[0]!;
+    const content = new TextEncoder().encode("hello");
+    const sha256 = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+    const entry = { name: "docs/hello.txt", path: "docs/hello.txt", kind: "embedded" as const, address: "ab".repeat(32), dataMap: Uint8Array.of(0x93, 1, 2) };
+    raw.downloadPrivateFile.mockImplementation(async () => ({ content: content.slice(), hash: file.blake3,
+      file: { ...wireFile, name: "hello.txt", address: "ab".repeat(32) } }));
+    try {
+      expect((await client.download({ ...entry, sha256: sha256.toUpperCase() })).bytes).toEqual(content);
+
+      const mismatch = { ...entry, sha256: "00".repeat(32) };
+      await expect(client.download(mismatch)).rejects.toMatchObject({ code: "DOWNLOAD_FAILED",
+        message: expect.stringContaining(`hello.txt does not match its manifest entry's sha256: expected ${"00".repeat(32)}, got ${sha256}`) });
+      const createWritable = vi.fn();
+      await expect(client.downloadAndSave(mismatch, { fileHandle: { createWritable } })).rejects.toMatchObject({ code: "DOWNLOAD_FAILED" });
+      expect(createWritable).not.toHaveBeenCalled();
+
+      // A malformed claim is refused before anything is fetched.
+      raw.downloadPrivateFile.mockClear();
+      await expect(client.download({ ...entry, sha256: "ab".repeat(31) })).rejects.toMatchObject({ code: "INVALID_SOURCE" });
+      expect(raw.downloadPrivateFile).not.toHaveBeenCalled();
+
+      // Without WebCrypto the claim cannot be checked, so the bytes are not returned unchecked.
+      const webCrypto = globalThis.crypto;
+      vi.stubGlobal("crypto", { getRandomValues: <T extends ArrayBufferView>(array: T) => webCrypto.getRandomValues(array) });
+      await expect(client.download({ ...entry, sha256 })).rejects.toMatchObject({ code: "DOWNLOAD_FAILED", message: expect.stringContaining("WebCrypto") });
+    } finally { client.close(); }
+  });
+
   it("pauses at verified quotes and continues after explicit payment", async () => {
     const walletPayment: PaymentProvider = {
       pay: vi.fn(async (_network, quotes) => ({
@@ -1256,6 +1286,38 @@ for (const withSubmission of [false, true]) it(`journals malformed wallet eviden
     await expect(client.upload(new Uint8Array(100))).rejects.toBeInstanceOf(UploadError);
     expect(evidence).toContainEqual(expect.objectContaining(receipt));
     expect(provider.pay).toHaveBeenCalledTimes(1);
+  } finally { client.close(); }
+});
+
+for (const outcome of ["kept", "failed"] as const) it(`has the wallet wait until an upload's broadcast is journaled (write ${outcome})`, async () => {
+  const receipt = { transactionHash: `0x${"cd".repeat(32)}`, totalAmount: "42" };
+  const order: string[] = [];
+  let finishWrite!: () => void;
+  const provider: PaymentProvider = { pay: vi.fn(async (_network, _quotes, context) => {
+    const waiting = context.submitted({ ...receipt, wait: async () => ({ status: "confirmed", receipt }) });
+    order.push("broadcast reported");
+    setTimeout(() => { order.push("write settled"); finishWrite(); }, 0);
+    await waiting;
+    order.push("wallet resumed");
+    return receipt;
+  }) };
+  const client = await AutonomiClient.connect(endpoint, { payment: provider });
+  state.networks[0]!.uploadRecords.mockImplementation(async (...args: unknown[]) => {
+    const pay = args[3] as (network: unknown, quotes: unknown, persist: (value: unknown) => Promise<void>) => Promise<unknown>;
+    let writes = 0;
+    await pay(state.hello.payment, recoveryQuotes, async () => {
+      // Only the broadcast's write is held; the receipt's is not.
+      if (writes++ > 0) return;
+      await new Promise<void>((resolve) => { finishWrite = resolve; });
+      if (outcome === "failed") throw new Error("storage full");
+    });
+    return successfulUpload;
+  });
+  try {
+    const upload = client.upload(new Uint8Array(100));
+    // The journal's failure, not the wallet's, fails the payment, as the core does too.
+    await (outcome === "kept" ? expect(upload).resolves.toMatchObject({ storageCostAtto: "42" }) : expect(upload).rejects.toBeInstanceOf(UploadError));
+    expect(order).toEqual(["broadcast reported", "write settled", "wallet resumed"]);
   } finally { client.close(); }
 });
 

@@ -93,7 +93,7 @@ export async function pointerAddress(ownerSeed: Uint8Array, options: ManifestOpt
 const JOURNAL_VERSION = 1;
 /** Largest checkpoint accepted for recovery; the core's own part is at most 4 MiB. */
 const MAX_CHECKPOINT_CHARS = 16 * 1024 * 1024;
-/** As Rust's page-callback timeout: an unresponsive persistence adapter cannot stall a paid write. */
+/** As Rust's page-callback timeout: an unresponsive persistence adapter cannot stall a paid write or its wallet. */
 const CHECKPOINT_TIMEOUT_MS = 30_000;
 /** Bytes passed to one String.fromCharCode call while base64-encoding. */
 const BASE64_BLOCK_BYTES = 0x8000;
@@ -182,7 +182,8 @@ export async function writePointer(
     try {
       receipt = { value: await payment.pay(network, intent.quotes, {
         report: context.report, ...(signal ? { signal } : {}),
-        submitted: (submission) => { if (retainSubmission(intent, submission)) void writer.write(intent).catch(() => undefined); },
+        // The wallet waits, at most the checkpoint deadline, until the broadcast is journaled; a failed write never fails it.
+        submitted: (submission) => retainSubmission(intent, submission) ? writer.write(intent).catch(() => undefined) : writer.idle(),
       }) };
     } catch (error) { failure = error; }
     // Once money may have been spent, continue to proof creation and storage even if cancelled or persistence fails.

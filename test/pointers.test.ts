@@ -55,6 +55,31 @@ describe("pointer payment recovery", () => {
     expect(f.release).toHaveBeenCalledOnce();
   });
 
+  for (const outcome of ["kept", "failed"] as const) it(`has the wallet wait until its broadcast is journaled (write ${outcome})`, async () => {
+    const f = fixture();
+    let finishWrite!: () => void;
+    const held = new Promise<void>((resolve) => { finishWrite = resolve; });
+    const order: string[] = [];
+    f.options.onCheckpoint = async (value: string) => {
+      const journal = JSON.parse(value) as { submissions: unknown[]; paid?: unknown };
+      if (journal.submissions.length > 0 && !journal.paid) {
+        await held;
+        if (outcome === "failed") throw new Error("storage full");
+      }
+      f.checkpoints.push(value);
+    };
+    f.payment.pay = vi.fn(async (_n, _q, context) => {
+      const waiting = context.submitted({ ...receipt, wait: confirmed });
+      order.push("broadcast reported");
+      setTimeout(() => { order.push("write settled"); finishWrite(); }, 0);
+      await waiting;
+      order.push("wallet resumed");
+      return receipt;
+    });
+    await expect(writePointer(f.raw, network, "createPointer", f.options, f.context)).resolves.toMatchObject({ pointer });
+    expect(order).toEqual(["broadcast reported", "write settled", "wallet resumed"]);
+  });
+
   it("hands Rust a single-hash or keyed receipt as the wallet returned it", async () => {
     const f = fixture();
     proof.mockClear();

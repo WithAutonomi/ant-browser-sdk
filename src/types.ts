@@ -139,8 +139,12 @@ export interface PendingPayment {
 
 export interface PaymentContext {
   report(message: string, progress?: ProgressDetails): void;
-  /** Call immediately after broadcast, including if cancellation happened during submission. */
-  submitted(submission: PaymentSubmission): void;
+  /**
+   * Call immediately after broadcast, including if cancellation happened during submission.
+   * Await it before observing the receipt: it settles once the SDK has journaled the broadcast,
+   * or after at most 30 seconds, and never rejects.
+   */
+  submitted(submission: PaymentSubmission): void | Promise<void>;
   /** Cancel before submission; submitted storage payments must still return their receipt. */
   readonly signal?: AbortSignal;
 }

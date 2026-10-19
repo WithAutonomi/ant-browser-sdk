@@ -9,7 +9,7 @@ import {
 } from "./internal/protocol.js";
 import { AutonomiError, UploadError, wrapError } from "./errors.js";
 import { createPublicFileReader, pipeSettled, type PublicFileReader } from "./file-reader.js";
-import { abortable, isAbort, throwIfAborted } from "./internal/abort.js";
+import { abortable, isAbort, settledWithin, throwIfAborted } from "./internal/abort.js";
 import { getBindings, initializeClientWasm, type RawNetworkClient } from "./internal/runtime.js";
 import { isPlayableMedia, MediaBridge, primePlayback } from "./internal/media.js";
 import { assertStagingSupported, type WorkerWasmSource } from "./internal/staging.js";
@@ -27,7 +27,7 @@ import {
   corePaymentNetwork, paymentNetworkFromCore, assertPaymentChainId, type CorePaymentNetwork,
 } from "./internal/payment-network.js";
 import { discardUnsavedFile, requestSaveFileHandle, saveDownload, type PickedFileHandle } from "./save.js";
-import { fileName, isManifestEntry, manifestEntrySource, type ManifestEntry } from "./manifest.js";
+import { checkSha256, fileName, isManifestEntry, manifestEntrySource, recordedSha256, type ManifestEntry } from "./manifest.js";
 import type {
   MerklePaymentRequest, MerklePaymentReceipt,
   ClientOptions,
@@ -68,6 +68,9 @@ interface RawDownloadResult {
 
 /** Saved-file name when neither the caller nor the source names one. */
 const DEFAULT_SAVE_NAME = "autonomi-file";
+
+/** As Rust's page-callback timeout: the longest a wallet waits for its broadcast to be journaled. */
+const SUBMISSION_JOURNAL_TIMEOUT_MS = 30_000;
 
 interface OperationScope {
   id: string;
@@ -426,8 +429,9 @@ export class AutonomiClient {
           report, signal: operation.signal,
           submitted: (submission) => {
             // Journal broadcast evidence before validating provider metadata.
+            let write: Promise<void> | undefined;
             if (persistSubmission) {
-              const write = persistSubmission({ transactionHash: submission.transactionHash,
+              write = persistSubmission({ transactionHash: submission.transactionHash,
                 totalAmount: submission.totalAmount, walletAddress: submission.walletAddress });
               void write.catch(() => undefined);
               journalWrites.push(write);
@@ -435,6 +439,8 @@ export class AutonomiClient {
             const tracked = trackPayment(state, network, quotes, submission);
             submitted.push(tracked);
             try { onPaymentSubmitted?.(tracked.handle); } catch { /* Receipt observation must survive UI failures. */ }
+            // The wallet waits, bounded, until the broadcast is journaled; a failed write never fails it.
+            return write && settledWithin(write, SUBMISSION_JOURNAL_TIMEOUT_MS);
           },
         })).then(async (receipt) => {
           // A malformed receipt may still identify a transaction that spent funds.
@@ -478,8 +484,9 @@ export class AutonomiClient {
           },
           submitted: (submission) => {
             // Journal broadcast evidence before validating provider metadata.
+            let write: Promise<void> | undefined;
             if (persistSubmission) {
-              const write = persistSubmission({ transactionHash: submission.transactionHash,
+              write = persistSubmission({ transactionHash: submission.transactionHash,
                 totalAmount: submission.totalAmount, walletAddress: submission.walletAddress });
               void write.catch(() => undefined);
               journalWrites.push(write);
@@ -487,6 +494,7 @@ export class AutonomiClient {
             const tracked = trackPayment(state, network, [], submission, request);
             submitted.push(tracked);
             try { onPaymentSubmitted?.(tracked.handle); } catch { /* Preserve settlement observation. */ }
+            return write && settledWithin(write, SUBMISSION_JOURNAL_TIMEOUT_MS);
           },
         })).then(async (receipt) => {
           // A malformed receipt may still identify a transaction that spent funds.
@@ -591,6 +599,7 @@ export class AutonomiClient {
   ): Promise<DownloadResult | PrivateDownloadResult> {
     // A manifest entry reads as its embedded DataMap or its public address.
     const file = isManifestEntry(source) ? manifestEntrySource(source) : source;
+    const sha256 = isManifestEntry(source) ? recordedSha256(source) : undefined;
     const operation = this.#startOperation(options);
     const report = this.#reporter("download", options.onProgress, operation);
     try {
@@ -618,12 +627,14 @@ export class AutonomiClient {
         operation.signal,
       )) as RawDownloadResult;
       throwIfAborted(operation.signal);
-      report(`Downloaded ${raw.file.name}`, { phase: "complete", completed: raw.content.byteLength, total: raw.content.byteLength, unit: "bytes" });
       // The core returns a JS-owned buffer. Blob takes its own snapshot; avoid
       // another file-sized intermediate copy. Copy only shared-buffer inputs.
       const blobBytes = raw.content.buffer instanceof ArrayBuffer
         ? new Uint8Array(raw.content.buffer, raw.content.byteOffset, raw.content.byteLength)
         : new Uint8Array(raw.content);
+      // Before the Blob snapshot exists, so WebCrypto's copy does not raise the peak.
+      if (sha256 !== undefined) await abortable(checkSha256(blobBytes, sha256, raw.file.name), operation.signal);
+      report(`Downloaded ${raw.file.name}`, { phase: "complete", completed: raw.content.byteLength, total: raw.content.byteLength, unit: "bytes" });
       const downloaded = {
         bytes: raw.content,
         blob: new Blob([blobBytes], {
@@ -669,7 +680,8 @@ export class AutonomiClient {
         ? undefined
         : await requestSaveFileHandle(suggestedName, operation.signal);
       const fileHandle = options.fileHandle ?? picked;
-      const download = await this.download(file, {
+      // The entry itself, so its sha256 is checked before anything is saved.
+      const download = await this.download(source, {
         ...options,
         parentOperationId: operation.id,
         signal: operation.signal,

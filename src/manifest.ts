@@ -19,7 +19,7 @@ export interface ManifestEntry {
   readonly size?: number;
   /** Plaintext size derived by the core when the entry embeds a root DataMap. */
   readonly knownSize?: number;
-  /** Hex SHA-256 of the plaintext as the creator recorded it. Surfaced only; the SDK does not check it. */
+  /** Hex SHA-256 of the plaintext as the creator recorded it. `download()` checks it; streaming reads cannot. */
   readonly sha256?: string;
   readonly kind: "embedded" | "public";
   /** Hex content address: the public DataMap address of the file. */
@@ -117,6 +117,28 @@ export function manifestEntrySource(entry: ManifestEntry): string | PrivateFileR
     return { dataMap: entry.dataMap, name: fileName(entry) };
   }
   return entry.address;
+}
+
+/** An entry's recorded SHA-256 as lowercase hex, refusing a malformed one before anything is fetched. */
+export function recordedSha256(entry: ManifestEntry): string | undefined {
+  if (entry.sha256 === undefined) return undefined;
+  if (typeof entry.sha256 !== "string" || !/^[0-9a-f]{64}$/iu.test(entry.sha256)) {
+    throw new AutonomiError("INVALID_SOURCE", `Manifest entry ${entry.name} has a malformed sha256`);
+  }
+  return entry.sha256.toLowerCase();
+}
+
+/**
+ * Hold downloaded bytes to the SHA-256 their manifest entry records, as the CLI does when
+ * extracting. WebCrypto hashes them: the bytes are already whole here, and the core's
+ * browser build exports no SHA-256.
+ */
+export async function checkSha256(bytes: BufferSource, expected: string, name: string): Promise<void> {
+  const subtle = globalThis.crypto?.subtle;
+  // Refuse rather than return bytes that were never held to the claim.
+  if (!subtle) throw new Error("WebCrypto, needed to check the manifest entry's sha256, is unavailable outside a secure context");
+  const actual = Array.from(new Uint8Array(await subtle.digest("SHA-256", bytes)), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  if (actual !== expected) throw new Error(`${name} does not match its manifest entry's sha256: expected ${expected}, got ${actual}`);
 }
 
 /** The last path component, which is what a saved file should be called. */

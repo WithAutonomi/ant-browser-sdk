@@ -489,7 +489,7 @@ const payment: PaymentProvider = {
         totalAmount: submission.totalAmount,
       } };
     });
-    context.submitted(submission);
+    await context.submitted(submission);
     const settlement = await submission.wait();
     if (settlement.status === "failed") throw new Error(settlement.reason);
     return settlement.receipt;
@@ -509,7 +509,9 @@ check it immediately before submitting. After submitting storage payment, keep
 observing its receipt and resolve with that receipt even if the signal aborts;
 the SDK stops the upload waiting promptly and records the later receipt for
 recovery. Call `context.submitted()` immediately after broadcast, even if cancellation
-occurred while the wallet was submitting. The observer must reject on an unknown
+occurred while the wallet was submitting, and await it before observing the receipt.
+It settles once the SDK has journaled the broadcast, or after at most 30 seconds,
+and never rejects. The observer must reject on an unknown
 outcome (such as an RPC timeout) and return `failed` only for a definitive failure.
 Successful repricing may return a different confirmed transaction hash.
 
@@ -739,8 +741,12 @@ nothing. `knownSize`, when present, is the plaintext size the core derives from
 an embedded root DataMap; public entries and shrunk maps omit it. Downloads and
 readers verify the actual content through the core. `sha256`, when present, is
 the hex SHA-256 of the plaintext as the manifest's creator recorded it; the ant
-CLI records one for every file it uploads. The SDK surfaces it but does not check
-it, unlike the CLI's extraction; hash the downloaded bytes to check the claim.
+CLI records one for every file it uploads. As the CLI does when extracting,
+`download()` and `downloadAndSave()` check it against the bytes before returning
+or saving them, and fail with `DOWNLOAD_FAILED` on a mismatch. The check uses
+WebCrypto, which browsers offer only in secure contexts; without it such an entry
+fails to download rather than arriving unchecked. `streamAndSave()`, `openFile()`
+and `createMediaSource()` never hold the whole file, so they do not check it.
 
 The bundled core reads the finalized ADR-0006 v1 encoding from `ant-client`
 main. Links and files created by the earlier draft builds using the

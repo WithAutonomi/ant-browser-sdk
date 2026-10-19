@@ -52,11 +52,17 @@ also exposes the torrent info hashes its creator recorded, as hex, which the
 SDK only surfaces. Failures carry the `INVALID_SOURCE` code.
 
 `sha256` is the creator's whole-file hash of the plaintext (ant-client
-ADR-0006). The CLI checks it when extracting; the SDK only surfaces it, as it
-does the torrent hashes. Downloads and readers are verified by content address,
-which is what Autonomi relies on, and a ranged reader never holds the whole file
-to hash. An application that wants the creator's claim checked hashes the bytes
-it downloads.
+ADR-0006), which the CLI checks when extracting. `download()` and
+`downloadAndSave()` check it too, before returning or saving the bytes, and
+fail with `DOWNLOAD_FAILED` on a mismatch; a malformed `sha256` is refused with
+`INVALID_SOURCE` before anything is fetched. The bytes are already whole there,
+and the core's browser build exports no SHA-256, so WebCrypto hashes them,
+before the result's Blob copies them so the check does not raise peak memory.
+This is a check of the creator's claim, not of integrity, which the core still
+verifies by content address. Without WebCrypto, outside a secure context, such
+an entry fails to download rather than arriving unchecked. `streamAndSave()`,
+`openFile()` and `createMediaSource()` never hold the whole file and WebCrypto
+cannot hash incrementally, so they do not check it.
 
 The core derives an embedded entry's address by hashing its published DataMap
 form, so a root map and its shrunk map identify the same file. `knownSize` is
@@ -116,7 +122,10 @@ access.
   `INVALID_SOURCE`.
 - The ant-client golden v1 fixture with a creator's `sha256` decodes with it
   as hex; `createManifest` records a `sha256` through to the decoded bytes and
-  link, and rejects a malformed one.
+  link, and rejects a malformed one. `download()` returns an entry's bytes only
+  when they match its `sha256`; `downloadAndSave()` writes nothing on a
+  mismatch; a malformed `sha256` is refused before any fetch, and a missing
+  WebCrypto fails the download.
 - Client tests: an embedded entry routes to the private download and reader
   with the entry's file name and no public DataMap fetch; a public entry
   routes to the public download; an embedded entry without DataMap bytes is

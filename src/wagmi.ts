@@ -159,7 +159,8 @@ export function createWagmiPaymentProvider<config extends Config>(
           throw error;
         }
       });
-      try { context.submitted(submission); } catch { /* Continue observing the transaction. */ }
+      // Wait until the broadcast is journaled; its failure must not interrupt observation.
+      try { await context.submitted(submission); } catch { /* Continue observing the transaction. */ }
       const receipt = await confirmedPayment(submission);
       const confirmedTransactionHash = receipt.transactionHash;
       try { if (!context.signal?.aborted) context.report(`Payment confirmed in ${confirmedTransactionHash}`); } catch { /* The receipt is already confirmed. */ }
