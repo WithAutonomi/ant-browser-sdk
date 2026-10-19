@@ -37,7 +37,6 @@ export const browserfilereader_name: (a: number) => [number, number];
 export const browserfilereader_pipeTo: (a: number, b: any, c: number) => any;
 export const browserfilereader_readRange: (a: number, b: number, c: number) => any;
 export const browserfilereader_size: (a: number) => number;
-export const browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
 export const __wbg_browsernetworkclient_free: (a: number, b: number) => void;
 export const browsernetworkclient_close: (a: number) => void;
 export const browsernetworkclient_connect: (a: number, b: number) => any;
@@ -59,6 +58,7 @@ export const browsernetworkclient_uploadRecords: (a: number, b: any, c: any, d: 
 export const browsernetworkclient_uploadStagedPublicFile: (a: number, b: any, c: any, d: any, e: any, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => any;
 export const pointerAddress: (a: number, b: number) => [number, number, number, number];
 export const recoverPointerPayment: (a: number, b: number, c: any) => [number, number, number];
+export const browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
 export const BrotliDecoderCreateInstance: (a: number, b: number, c: number) => number;
 export const BrotliDecoderDecompress: (a: number, b: number, c: number, d: number) => number;
 export const BrotliDecoderDecompressPrealloc: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => void;

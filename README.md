@@ -836,9 +836,10 @@ transaction hashes are kept as evidence so recovery can observe them again.
 override, only through its observation-only `recover()` method. Ethers and Wagmi
 adapters support this. A paid proof needs no wallet; it is stored even if
 persisting the recovered proof fails. Storers accept a paid proof only while its
-quotes are under a day old: past that, `resumePointer()` fails with "paid proof
-expired", and that state cannot be stored without paying again. Recovery never
-signs a new state, refreshes quotes or calls `pay()`. If a crash hid the
+quotes are under a day old; an older one cannot be stored without paying again.
+`resumePointer()` then fails with the storer's error, which also says the proof
+holds a quote older than storers accept when this device's clock agrees. Recovery
+never signs a new state, refreshes quotes or calls `pay()`. If a crash hid the
 transaction hash, reconcile the original wallet externally; an empty journal is
 not proof that no transaction was submitted. Do not retry a fresh write while
 payment is unresolved.

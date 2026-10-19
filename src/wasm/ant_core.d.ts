@@ -143,6 +143,9 @@ export class BrowserNetworkClient {
      * Nothing is paid unless `pay_for_quotes` is called. A write that fails
      * before calling it says "payment was not submitted"; any later failure
      * may have paid, and is recovered from what the callbacks were handed.
+     * Without `onPrepared` and `onSubmission` there is nothing to recover
+     * from: a page lost between the broadcast and its receipt pays again on
+     * retry.
      */
     createPointer(owner_seed: Uint8Array, target: string, kind: string, payment_network: any, pay_for_quotes: Function, options?: any | null): Promise<any>;
     /**
@@ -217,7 +220,7 @@ export class BrowserNetworkClient {
      * [`recover_pointer_payment`] rebuilt. Pays nothing.
      *
      * Storers accept a proof only while its quotes are under a day old; a
-     * refusal of an older proof says it expired.
+     * failure with an older proof, by this device's clock, says so.
      */
     storePaidPointer(record: Uint8Array, proof: Uint8Array, payment_network: any): Promise<any>;
     /**
@@ -418,7 +421,6 @@ export interface InitOutput {
     readonly browserfilereader_pipeTo: (a: number, b: any, c: number) => any;
     readonly browserfilereader_readRange: (a: number, b: number, c: number) => any;
     readonly browserfilereader_size: (a: number) => number;
-    readonly browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
     readonly __wbg_browsernetworkclient_free: (a: number, b: number) => void;
     readonly browsernetworkclient_close: (a: number) => void;
     readonly browsernetworkclient_connect: (a: number, b: number) => any;
@@ -440,6 +442,7 @@ export interface InitOutput {
     readonly browsernetworkclient_uploadStagedPublicFile: (a: number, b: any, c: any, d: any, e: any, f: number, g: number, h: number, i: number, j: number, k: number, l: number) => any;
     readonly pointerAddress: (a: number, b: number) => [number, number, number, number];
     readonly recoverPointerPayment: (a: number, b: number, c: any) => [number, number, number];
+    readonly browsernetworkclient_reconcileFailedUploadPayment: (a: number, b: number, c: number, d: any, e: any) => any;
     readonly BrotliDecoderCreateInstance: (a: number, b: number, c: number) => number;
     readonly BrotliDecoderDecompress: (a: number, b: number, c: number, d: number) => number;
     readonly BrotliDecoderDecompressPrealloc: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => void;
