@@ -100,6 +100,47 @@ describe("MediaBridge service-worker registration", () => {
     expect(listeners.size).toBe(0);
   });
 
+  it("does nothing more once its worker controls the page", async () => {
+    const worker = serviceWorker(defaultWorkerUrl);
+    const sdkRegistration = registration(rootScopeUrl, worker);
+    const container = serviceWorkerContainer({ registrations: [sdkRegistration], ready: sdkRegistration, controller: worker });
+    stubBrowser(container);
+    const bridge = new MediaBridge();
+    await bridge.prepare({});
+    await bridge.attach(fileReader(), {});
+    await bridge.prepare({});
+    expect(container.getRegistrations).toHaveBeenCalledOnce();
+    bridge.close();
+  });
+
+  // Firefox stops a worker that has had no new event for 30 s, even mid-answer.
+  it("messages the worker every 10 s while a media source is open, and only then", async () => {
+    vi.useFakeTimers();
+    try {
+      const postMessage = vi.fn();
+      const worker = { scriptURL: defaultWorkerUrl, postMessage } as unknown as ServiceWorker;
+      const sdkRegistration = registration(rootScopeUrl, worker);
+      stubBrowser(serviceWorkerContainer({ registrations: [sdkRegistration], ready: sdkRegistration, controller: worker }));
+      const bridge = new MediaBridge();
+      const first = await bridge.attach(fileReader(), {});
+      const second = await bridge.attach(fileReader(), {});
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(postMessage).toHaveBeenCalledTimes(3);
+      expect(postMessage).toHaveBeenCalledWith({ type: "autonomi-stream-awake" });
+      first.close();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(postMessage).toHaveBeenCalledTimes(4);
+      second.close();
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(postMessage).toHaveBeenCalledTimes(4);
+      await bridge.attach(fileReader(), {});
+      bridge.close();
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(postMessage).toHaveBeenCalledTimes(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 function stubBrowser(container: ServiceWorkerContainer): void {

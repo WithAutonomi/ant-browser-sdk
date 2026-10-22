@@ -1125,14 +1125,79 @@ describe("terminal operation events", () => {
     }
   });
 
+  it("installs the media worker while the reader opens, and primes before the worker is ready", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    const raw = state.networks.at(-1)!;
+    const readRange = vi.fn(async () => new Uint8Array());
+    let opened!: (reader: unknown) => void;
+    raw.openPublicFile.mockReturnValue(new Promise((resolve) => { opened = resolve; }));
+    const worker = { scriptURL: "https://app.example/autonomi-stream-sw.js" } as ServiceWorker;
+    const registration = { scope: "https://app.example/", active: worker, installing: null, waiting: null, update: vi.fn(), unregister: vi.fn() } as unknown as ServiceWorkerRegistration;
+    let registrations!: (value: ServiceWorkerRegistration[]) => void;
+    const getRegistrations = vi.fn(() => new Promise<ServiceWorkerRegistration[]>((resolve) => { registrations = resolve; }));
+    vi.stubGlobal("isSecureContext", true);
+    vi.stubGlobal("location", { href: "https://app.example/player", origin: "https://app.example" });
+    vi.stubGlobal("navigator", { serviceWorker: {
+      getRegistrations, getRegistration: vi.fn(async () => registration),
+      register: vi.fn(async () => registration), ready: Promise.resolve(registration), controller: worker,
+      addEventListener: vi.fn(), removeEventListener: vi.fn(),
+    } });
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+    try {
+      const creating = client.createMediaSource(file.address);
+      await settle();
+      // Both started: neither the worker nor the reader waits for the other.
+      expect(getRegistrations).toHaveBeenCalledOnce();
+      expect(raw.openPublicFile).toHaveBeenCalledWith(expect.anything(), expect.any(Function), { streaming: false });
+      opened({ size: 50_000_000, name: "movie.mp4", contentType: "video/mp4", readRange, close: vi.fn(), free: vi.fn() });
+      await settle();
+      // The head and tail are being read while the worker is still installing.
+      expect(readRange.mock.calls).toEqual([
+        [0, SDK_LIMITS.mediaPrimeHeadBytes],
+        [50_000_000 - SDK_LIMITS.mediaPrimeTailBytes, SDK_LIMITS.mediaPrimeTailBytes],
+      ]);
+      registrations([registration]);
+      const source = await creating;
+      expect(source.url).toContain("https://app.example/__autonomi_stream/");
+      source.close();
+    } finally {
+      vi.unstubAllGlobals();
+      client.close();
+    }
+  });
+
+  it("reports a failed media worker once the reader has opened, and closes the reader", async () => {
+    const client = await AutonomiClient.connect(endpoint);
+    const raw = state.networks.at(-1)!;
+    const close = vi.fn();
+    let opened!: (reader: unknown) => void;
+    raw.openPublicFile.mockReturnValue(new Promise((resolve) => { opened = resolve; }));
+    // No service worker support: the worker fails at once, while the reader is opening.
+    vi.stubGlobal("isSecureContext", true);
+    vi.stubGlobal("navigator", {});
+    try {
+      let settled = false;
+      const creating = client.createMediaSource(file.address).finally(() => { settled = true; });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      // The open-file step ends before the media step that started it.
+      expect(settled).toBe(false);
+      opened({ size: 50_000_000, name: "movie.mp4", contentType: "video/mp4", readRange: vi.fn(async () => new Uint8Array()), close, free: vi.fn() });
+      await expect(creating).rejects.toMatchObject({ code: "MEDIA_FAILED" });
+      expect(close).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllGlobals();
+      client.close();
+    }
+  });
+
   it("ends both media setup and its open-file child when opening fails", async () => {
     const events: import("../src/types.js").ProgressEvent[] = [];
     const onProgress = (event: import("../src/types.js").ProgressEvent) => events.push(event);
     const client = await AutonomiClient.connect(endpoint, { onProgress });
     events.length = 0;
     await expect(client.createMediaSource(file, { onProgress })).rejects.toMatchObject({ code: "OPEN_FILE_FAILED" });
-    // Playback reads sequentially, so media opens a streaming reader that reads ahead.
-    expect(state.networks.at(-1)!.openPublicFile).toHaveBeenCalledWith(expect.anything(), expect.any(Function), { streaming: true });
+    // Media opens a plain reader: streaming mode delayed the first frame (ADR-0003).
+    expect(state.networks.at(-1)!.openPublicFile).toHaveBeenCalledWith(expect.anything(), expect.any(Function), { streaming: false });
     const terminal = events.filter((event) => event.status !== "running");
     expect(terminal.map((event) => event.operation)).toEqual(["open-file", "media"]);
     expect(terminal[0]!.parentOperationId).toBe(terminal[1]!.operationId);
