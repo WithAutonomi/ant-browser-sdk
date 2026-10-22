@@ -1,11 +1,19 @@
 const STREAM_MARKER = "/__autonomi_stream/";
 // Keep standalone-worker limits aligned with SDK_LIMITS; test/limits.test.ts checks them.
 const STREAM_BLOCK_BYTES = 1024 * 1024;
-const RANGE_REQUEST_TIMEOUT_MS = 45_000;
+// A block can wait on a record the client must first find, and the shared core
+// retries a missing record after 15 and again after 45 seconds, so a shorter
+// wait gave up on blocks that were still coming.
+const RANGE_REQUEST_TIMEOUT_MS = 120_000;
 const MAX_STREAM_FILE_BYTES = Number.MAX_SAFE_INTEGER;
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
+// While a media source is open its page messages this worker every 10 s, only
+// so that Firefox keeps it running: Firefox stops a worker that has had no new
+// event for 30 s, even one still answering a request. Receiving the message is
+// all it takes.
+self.addEventListener("message", () => {});
 
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
@@ -52,6 +60,10 @@ async function handleStreamRequest(event, url) {
     "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(name)}`,
     "Content-Length": String(responseLength),
     "Content-Type": contentType,
+    // The type comes from the file's own metadata. Never let the bytes be taken
+    // for another type, or run as a page on this origin if opened directly.
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "sandbox; default-src 'none'",
   });
   if (partial) headers.set("Content-Range", `bytes ${start}-${end}/${size}`);
   if (event.request.method === "HEAD") {

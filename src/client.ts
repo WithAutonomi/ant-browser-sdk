@@ -891,22 +891,33 @@ export class AutonomiClient {
     try {
       this.#assertOpen();
       report("Opening an Autonomi random-access media reader");
-      // Playback reads sequentially from wherever it starts or seeks to.
-      reader = await this.#openReader(file, {
+      this.#media ??= new MediaBridge();
+      // Nothing waits on anything it need not: the service worker installs while
+      // the reader opens, and the head and tail are read the moment it is open.
+      const worker = this.#media.prepare({ ...options, signal: operation.signal });
+      // Awaited after the reader, so a failure surfaces in the same order as
+      // when one waited for the other.
+      worker.catch(() => undefined);
+      // The reader opens without streaming mode. That mode starts fetching ahead,
+      // and the file's last record, alongside the first block a player waits
+      // for, which on the live network delayed the first frame (ADR-0003); a
+      // plain reader still reads ahead once playback's reads follow each other.
+      const opened = await this.#openReader(file, {
         ...(options.onProgress ? { onProgress: options.onProgress } : {}),
         parentOperationId: operation.id,
         signal: operation.signal,
-      }, true);
-      this.#media ??= new MediaBridge();
-      source = await this.#media.attach(reader, {
+      }, false);
+      reader = opened;
+      if (options.primePlayback ?? isPlayableMedia(opened)) {
+        report(`Priming playback of ${opened.name}`, { phase: "media" });
+        // Not awaited: the reads only warm the reader's cache for the player.
+        void primePlayback(opened);
+      }
+      await worker;
+      source = await this.#media.attach(opened, {
         ...options,
         signal: operation.signal,
       });
-      if (options.primePlayback ?? isPlayableMedia(reader)) {
-        report(`Priming playback of ${source.file.name}`, { phase: "media" });
-        // Not awaited: the source is usable now and the reads only warm its cache.
-        void primePlayback(reader);
-      }
       report(`Media source ready for ${source.file.name}`, { phase: "complete" });
       return source;
     } catch (error) {

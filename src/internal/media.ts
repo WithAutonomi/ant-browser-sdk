@@ -10,6 +10,16 @@ interface MediaSession {
   source: MediaSource;
 }
 
+/**
+ * Firefox stops a service worker that has had no new event for 30 seconds, even
+ * one still answering a range request, at most 30 seconds later. Every message
+ * from the page is a new event, so the page sends one this often while any of
+ * its media sources is open.
+ */
+const KEEP_AWAKE_MS = 10_000;
+/** What the page sends the worker to keep it running; the worker need only receive it. */
+const KEEP_AWAKE_MESSAGE = { type: "autonomi-stream-awake" } as const;
+
 /** File extensions treated as playable media when the content type says nothing. */
 const MEDIA_EXTENSION = /\.(mp4|m4v|m4a|webm|ogv|ogg|oga|mov|mp3|wav|flac|aac|mkv)$/i;
 
@@ -38,14 +48,16 @@ export class MediaBridge {
   #workerUrl?: string;
   #scope?: string;
   #messageListenerAttached = false;
+  #keepAwake: ReturnType<typeof setInterval> | undefined = undefined;
 
   constructor() {}
 
-  async attach(reader: PublicFileReader, options: MediaOptions): Promise<MediaSource> {
+  /**
+   * Install the media service worker and wait until it controls the page.
+   * Independent of any file, so a caller can run it while the file opens.
+   */
+  async prepare(options: Pick<MediaOptions, "serviceWorkerUrl" | "scope" | "signal">): Promise<void> {
     throwIfAborted(options.signal);
-    if (!Number.isSafeInteger(reader.size) || reader.size < SDK_LIMITS.minFileBytes || reader.size > SDK_LIMITS.mediaMaxFileBytes) {
-      throw new AutonomiError("MEDIA_FAILED", `Media file size must be from ${SDK_LIMITS.minFileBytes} through ${SDK_LIMITS.mediaMaxFileBytes} bytes`);
-    }
     const { features } = getBrowserCapabilities();
     if (!features.secureContext || !features.serviceWorker) {
       throw new AutonomiError("MEDIA_FAILED", "Media streaming requires a secure context (HTTPS; localhost is allowed) with service-worker support");
@@ -55,8 +67,20 @@ export class MediaBridge {
       location.href,
     ).href;
     const scope = normalizeScope(options.scope ?? "/");
+    // Once this worker controls the page there is nothing left to do.
+    if (this.#workerUrl === workerUrl && this.#scope === scope && navigator.serviceWorker.controller?.scriptURL === workerUrl) return;
     await this.#ensureWorker(workerUrl, scope, options.signal);
     throwIfAborted(options.signal);
+  }
+
+  async attach(reader: PublicFileReader, options: MediaOptions): Promise<MediaSource> {
+    throwIfAborted(options.signal);
+    if (!Number.isSafeInteger(reader.size) || reader.size < SDK_LIMITS.minFileBytes || reader.size > SDK_LIMITS.mediaMaxFileBytes) {
+      throw new AutonomiError("MEDIA_FAILED", `Media file size must be from ${SDK_LIMITS.minFileBytes} through ${SDK_LIMITS.mediaMaxFileBytes} bytes`);
+    }
+    // Already done when the caller prepared the worker; checking again is cheap.
+    await this.prepare(options);
+    const scope = normalizeScope(options.scope ?? "/");
     if (!this.#messageListenerAttached) {
       navigator.serviceWorker.addEventListener("message", this.#onMessage);
       this.#messageListenerAttached = true;
@@ -81,10 +105,12 @@ export class MediaBridge {
         if (closed) return;
         closed = true;
         this.#sessions.delete(sessionId);
+        this.#updateKeepAwake();
         reader.close();
       },
     };
     this.#sessions.set(sessionId, { reader, source });
+    this.#updateKeepAwake();
     return source;
   }
 
@@ -97,6 +123,7 @@ export class MediaBridge {
       }
     }
     this.#sessions.clear();
+    this.#updateKeepAwake();
     if (this.#messageListenerAttached) {
       navigator.serviceWorker.removeEventListener("message", this.#onMessage);
       this.#messageListenerAttached = false;
@@ -187,6 +214,18 @@ export class MediaBridge {
       return;
     }
     await waitForController(workerUrl, signal);
+  }
+
+  // Messages the worker while any media source is open, and only then.
+  #updateKeepAwake(): void {
+    if (this.#sessions.size > 0 && this.#keepAwake === undefined) {
+      this.#keepAwake = setInterval(() => {
+        navigator.serviceWorker.controller?.postMessage(KEEP_AWAKE_MESSAGE);
+      }, KEEP_AWAKE_MS);
+    } else if (this.#sessions.size === 0 && this.#keepAwake !== undefined) {
+      clearInterval(this.#keepAwake);
+      this.#keepAwake = undefined;
+    }
   }
 
   #assertWorkerLocation(workerUrl: string, scope: string): void {
