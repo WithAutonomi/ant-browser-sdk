@@ -89,7 +89,10 @@ storage were used.
 - A payment adapter deliberately threw after a real confirmed transaction. The
   checkpoint retained broadcast evidence, and `resumePointer` recovered through
   Ethers receipt observation and stored the original signed state. The payment
-  submission count stayed **exactly one**.
+  submission count stayed **exactly one**. Superseded: since `a4b6a53` the write
+  confirms such a broadcast on the same page itself; the
+  [2026-10-20 audit](2026-10-20-sha256-check-and-journal-wait.md) covers that
+  and recovery from a lost page.
 - Cancellation of a supplied streaming destination rejected with AbortError,
   aborted it once and released its writer lock.
 - The actual all-in-one export button downloaded a valid `.ant` file and displayed

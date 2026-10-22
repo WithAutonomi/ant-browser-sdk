@@ -1,0 +1,16 @@
+{
+  "cancelled": 0,
+  "entries": [
+    {
+      "name": "folder/private.bin",
+      "status": {
+        "error": "SHA-256 mismatch: the manifest records 0b9a1202e187d81f055e61e0658e40d3a37030c8e222b140183b3adc6529af42, the downloaded file hashes to ab9a1202e187d81f055e61e0658e40d3a37030c8e222b140183b3adc6529af42",
+        "status": "failed"
+      }
+    }
+  ],
+  "failed": 1,
+  "output": "/private/tmp/claude-501/-Users-mick-RustroverProjects-ant-client/85270b78-be92-44ed-ac92-ef9a6b6b79d0/scratchpad/devnet-20261020/native/out-private-wrong-sha256",
+  "written": 0
+}
+Error: 1 entr(y/ies) failed to download
