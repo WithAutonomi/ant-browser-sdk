@@ -1,0 +1,15 @@
+{
+  "cancelled": 0,
+  "entries": [
+    {
+      "name": "folder/private.bin",
+      "status": {
+        "bytes": 13056,
+        "status": "written"
+      }
+    }
+  ],
+  "failed": 0,
+  "output": "/private/tmp/claude-501/-Users-mick-RustroverProjects-ant-client/85270b78-be92-44ed-ac92-ef9a6b6b79d0/scratchpad/devnet-20261020/native/out-private",
+  "written": 1
+}

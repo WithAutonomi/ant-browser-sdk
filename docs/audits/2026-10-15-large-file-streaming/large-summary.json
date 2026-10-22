@@ -1,0 +1,98 @@
+{
+  "browser": "151.0.7922.34",
+  "sdkBase": "29ab1758e1188fc445b82465949dcc655345935b",
+  "sdkRevision": "456dbb7b6b6ccbcce0603bbae2fd7b1664b68975",
+  "wasm": "225a6768589ecbb6a0c77d70df329f343b22776f",
+  "node": "26129a2611cac08f9f53a557f91fb8806b40a1cc",
+  "wasmSha256": "9298d1564f1809f97f06b3bacee3a674040ff74c6af1aa3366d1f0ba542a8352",
+  "result": {
+    "size": 4303347835,
+    "ranges": [
+      {
+        "visibility": "public",
+        "start": 0,
+        "bytes": 16
+      },
+      {
+        "visibility": "public",
+        "start": 1000000001,
+        "bytes": 16
+      },
+      {
+        "visibility": "public",
+        "start": 4294967288,
+        "bytes": 16
+      },
+      {
+        "visibility": "public",
+        "start": 4303347819,
+        "bytes": 16
+      },
+      {
+        "visibility": "private",
+        "start": 0,
+        "bytes": 16
+      },
+      {
+        "visibility": "private",
+        "start": 1000000001,
+        "bytes": 16
+      },
+      {
+        "visibility": "private",
+        "start": 4294967288,
+        "bytes": 16
+      },
+      {
+        "visibility": "private",
+        "start": 4303347819,
+        "bytes": 16
+      }
+    ],
+    "budgets": [
+      {
+        "visibility": "public",
+        "code": "DOWNLOAD_FAILED",
+        "message": "Public file download failed: file exceeds the download memory budget; use openPublicFile/openPrivateFile and reader.pipeTo(writable) to stream to disk"
+      },
+      {
+        "visibility": "private",
+        "code": "DOWNLOAD_FAILED",
+        "message": "Private file download failed: file exceeds the download memory budget; use openPublicFile/openPrivateFile and reader.pipeTo(writable) to stream to disk"
+      }
+    ],
+    "cancellation": [
+      {
+        "method": "signal",
+        "unlocked": true,
+        "aborted": true
+      },
+      {
+        "method": "close",
+        "unlocked": true,
+        "aborted": true
+      }
+    ],
+    "disk": {
+      "bytesWritten": 4303347835,
+      "hash": "1b382a68936c50a2be8f4caa7f579c90cf649544a46f07ce5adeeffc20f5a3cd",
+      "storedSize": 4303347835,
+      "seconds": 91.96030000007153,
+      "progressCalls": 1028,
+      "lastProgress": 4303347835
+    },
+    "privatePipe": {
+      "bytesWritten": 16,
+      "hash": "808b5770416f3e23c40032cdde085915ab1d2bad36b59bffc377bfa7ab1ee39d"
+    },
+    "media": {
+      "status": 206,
+      "contentRange": "bytes 4294967288-4294967303/4303347835",
+      "bytes": 16
+    }
+  },
+  "errors": [],
+  "hashes": [
+    "9298d1564f1809f97f06b3bacee3a674040ff74c6af1aa3366d1f0ba542a8352"
+  ]
+}

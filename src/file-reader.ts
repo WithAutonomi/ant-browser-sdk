@@ -1,11 +1,22 @@
 import { AutonomiError, wrapError } from "./errors.js";
 import { abortable, abortReason, isAbort, throwIfAborted } from "./internal/abort.js";
 import type { RawFileReader } from "./internal/runtime.js";
-import type { ReadOptions, StreamOptions } from "./types.js";
+import type { PipeOptions, PipeResult, ReadOptions, StreamOptions } from "./types.js";
 import { SDK_LIMITS } from "./limits.js";
 
 /** @internal Only the SDK may wrap a WASM reader. Not exported by the package. */
 export let createPublicFileReader: (raw: RawFileReader, address: string) => PublicFileReader;
+
+/** Destinations a pipe has written to, settled once the pipe released them; true if closed. */
+const settlements = new WeakMap<WritableStream<Uint8Array>, Promise<boolean>>();
+
+/**
+ * @internal When a pipe has taken a destination, settles after the pipe releases it:
+ * true once closed (and so possibly committed), false once aborted or failed.
+ */
+export function pipeSettled(destination: WritableStream<Uint8Array>): Promise<boolean> | undefined {
+  return settlements.get(destination);
+}
 
 /** Bounded random-access reader backed by direct WebRTC record fetches. */
 export class PublicFileReader {
@@ -17,6 +28,9 @@ export class PublicFileReader {
 
   #raw: RawFileReader;
   #closed = false;
+  #active = 0;
+  #freed = false;
+  #pipes = new Set<AbortController>();
 
   private constructor(raw: RawFileReader, address: string) {
     this.#raw = raw;
@@ -52,10 +66,41 @@ export class PublicFileReader {
       );
     }
     try {
-      return await abortable(this.#raw.readRange(start, length), options.signal);
+      return await abortable(this.#call(() => this.#raw.readRange(start, length)), options.signal);
     } catch (error) {
       if (isAbort(error, options.signal)) throw error;
       throw wrapError("OPEN_FILE_FAILED", "Could not read the public file range", error);
+    }
+  }
+
+  /**
+   * Write a verified range with the core's bounded, concurrent download pipeline.
+   * Closes the destination on success and aborts it on transfer failure. Invalid
+   * options leave it untouched. Cancellation during close may happen after the
+   * destination has committed. The reader remains reusable until close().
+   * Failed reads reject with OPEN_FILE_FAILED; a failed destination write or
+   * close rejects with SAVE_FAILED.
+   */
+  async pipeTo(destination: WritableStream<Uint8Array>, options: PipeOptions = {}): Promise<PipeResult> {
+    this.#assertOpen();
+    const signal = options.signal;
+    throwIfAborted(signal);
+    if (typeof WritableStream !== "function" || !(destination instanceof WritableStream)) throw new AutonomiError("OPEN_FILE_FAILED", "The destination must be a WritableStream");
+    if (destination.locked) throw new AutonomiError("OPEN_FILE_FAILED", "The destination stream is locked");
+    const controller = new AbortController();
+    const abort = (): void => controller.abort(abortReason(signal!));
+    signal?.addEventListener("abort", abort, { once: true });
+    this.#pipes.add(controller);
+    const target = forwardTo(destination);
+    try {
+      return await this.#call(() => this.#raw.pipeTo(target.stream, { ...options, signal: controller.signal }));
+    } catch (error) {
+      if (isAbort(error, controller.signal)) throw error;
+      if (target.failed) throw wrapError("SAVE_FAILED", "Could not write to the destination", target.failure);
+      throw wrapError("OPEN_FILE_FAILED", "Could not stream the file to its destination", error);
+    } finally {
+      signal?.removeEventListener("abort", abort);
+      this.#pipes.delete(controller);
     }
   }
 
@@ -93,6 +138,7 @@ export class PublicFileReader {
         if (!options.signal) return;
         const abort = (): void => {
           aborted = true;
+          removeAbortListener();
           controller.error(abortReason(options.signal!));
         };
         options.signal.addEventListener("abort", abort, { once: true });
@@ -129,7 +175,7 @@ export class PublicFileReader {
           if (!aborted) controller.error(error);
         }
       },
-      cancel: () => removeAbortListener(),
+      cancel: () => { aborted = true; removeAbortListener(); },
     });
   }
 
@@ -137,9 +183,31 @@ export class PublicFileReader {
   close(): void {
     if (this.#closed) return;
     this.#closed = true;
+    for (const pipe of this.#pipes) {
+      pipe.abort(new DOMException("The file reader was closed", "AbortError"));
+    }
     try {
       this.#raw.close();
     } finally {
+      this.#freeWhenIdle();
+    }
+  }
+
+  // A cancelled range can still be settling in WASM. Never free a reader while
+  // a raw method holds it, including when close() interrupts a pending pipe.
+  async #call<T>(run: () => Promise<T>): Promise<T> {
+    this.#active++;
+    try {
+      return await run();
+    } finally {
+      this.#active--;
+      this.#freeWhenIdle();
+    }
+  }
+
+  #freeWhenIdle(): void {
+    if (this.#closed && this.#active === 0 && !this.#freed) {
+      this.#freed = true;
       this.#raw.free();
     }
   }
@@ -149,4 +217,62 @@ export class PublicFileReader {
       throw new AutonomiError("CLIENT_CLOSED", "Public file reader is closed");
     }
   }
+}
+
+/**
+ * A stream forwarding each operation to the caller's destination, so a failure
+ * the destination raised is told apart from one in the read pipeline. Takes the
+ * destination's writer on first use, leaving it untouched by an invalid call,
+ * and releases it once closed or aborted. Each write still awaits the destination.
+ */
+function forwardTo(destination: WritableStream<Uint8Array>): {
+  readonly stream: WritableStream<Uint8Array>;
+  readonly failed: boolean;
+  readonly failure: unknown;
+} {
+  let writer: WritableStreamDefaultWriter<Uint8Array> | undefined;
+  let settle!: (closed: boolean) => void;
+  let failed = false;
+  let failure: unknown;
+  const take = (): WritableStreamDefaultWriter<Uint8Array> => {
+    if (!writer) {
+      writer = destination.getWriter();
+      settlements.set(destination, new Promise<boolean>((resolve) => { settle = resolve; }));
+    }
+    return writer;
+  };
+  const release = (closed: boolean): void => {
+    writer?.releaseLock();
+    settle?.(closed);
+  };
+  const forward = async (operation: (writer: WritableStreamDefaultWriter<Uint8Array>) => Promise<void>): Promise<void> => {
+    try {
+      await operation(take());
+    } catch (error) {
+      failed = true;
+      failure = error;
+      // This stream now errors, and aborting an errored stream skips its sink: release here.
+      release(false);
+      throw error;
+    }
+  };
+  const stream = new WritableStream<Uint8Array>({
+    write: (chunk) => forward((target) => target.write(chunk)),
+    close: async () => {
+      await forward((target) => target.close());
+      release(true);
+    },
+    abort: async (reason) => {
+      try {
+        await take().abort(reason);
+      } catch {
+        // The pipe has already failed; keep its error.
+      } finally { release(false); }
+    },
+  });
+  return {
+    stream,
+    get failed() { return failed; },
+    get failure() { return failure; },
+  };
 }

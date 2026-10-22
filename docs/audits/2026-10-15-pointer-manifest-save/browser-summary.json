@@ -1,0 +1,85 @@
+{
+  "browser": "151.0.7922.34",
+  "wasm": {
+    "repository": "https://github.com/WithAutonomi/ant-client",
+    "revision": "8316468b7f5f813457f195bccb16a452426d5f35",
+    "dirty": false,
+    "target": "wasm32-unknown-unknown",
+    "features": [
+      "browser-wasm"
+    ],
+    "defaultFeatures": false,
+    "cargoLockSha256": "64a762b99db03f64e20bdb6699e5e576417dedbd6172049834c64fd27a068314",
+    "wasmSha256": "6b2e4499fafaca8502be7b8a4447cfae78cf044b2b181e1527fb3d21b07edfd9",
+    "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)",
+    "wasmPack": "wasm-pack 0.15.0",
+    "noticesSha256": "96342e4398d82820d5e1fcd89b05910ff621765a78ed1edf8537ee9ef9f13845",
+    "rustStdCopyrightSha256": "5647be074c8edf7339fd863055923a8fc80bc5610a8d4661ec3b767b9d392c27",
+    "noticesGeneratorSha256": "fbae032f6ae379d81311ceeabb2d23cd9d40af1a69ca0b422a50b632d7b31bd7",
+    "noticesConfigSha256": "1d5154cdb0705f6eed668288a0e31f31f273dace0a404f97c091c3d2bdd72cf3"
+  },
+  "node": "26129a2611cac08f9f53a557f91fb8806b40a1cc",
+  "result": [
+    {
+      "visibility": "public",
+      "bytes": 13056,
+      "hash": "ddea49284d5219f1e7ce825bacd9926a3dcfe68f5bb3d90b3597bcaf1ead76e0",
+      "linkRecommended": true,
+      "manifestBytes": 116
+    },
+    {
+      "visibility": "private",
+      "bytes": 13056,
+      "hash": "ddea49284d5219f1e7ce825bacd9926a3dcfe68f5bb3d90b3597bcaf1ead76e0",
+      "linkRecommended": true,
+      "manifestBytes": 300
+    },
+    {
+      "pointers": {
+        "address": "66315ec5b564bc1cd8e5c8e00930184396480aa59c7fd64a62bff316b600588f",
+        "created": "0",
+        "updated": "1",
+        "transferred": "18446744073709551615",
+        "finality": {
+          "address": "66315ec5b564bc1cd8e5c8e00930184396480aa59c7fd64a62bff316b600588f",
+          "group": 7,
+          "answered": 7,
+          "status": "final",
+          "states": [
+            {
+              "stateId": "d708222bd7cd2a1d2ca02eaf5c0d02767c6ddce894279303e904c62c9bea01a5",
+              "kind": "pointer",
+              "kindTag": 1,
+              "target": "170ce0eefec9925845b6d9b75bad36f45504b315b08a15ab68ac07ead647028f",
+              "holders": 7,
+              "transferredTo": "170ce0eefec9925845b6d9b75bad36f45504b315b08a15ab68ac07ead647028f"
+            }
+          ],
+          "majority": {
+            "stateId": "d708222bd7cd2a1d2ca02eaf5c0d02767c6ddce894279303e904c62c9bea01a5",
+            "kind": "pointer",
+            "kindTag": 1,
+            "target": "170ce0eefec9925845b6d9b75bad36f45504b315b08a15ab68ac07ead647028f",
+            "holders": 7,
+            "transferredTo": "170ce0eefec9925845b6d9b75bad36f45504b315b08a15ab68ac07ead647028f"
+          }
+        },
+        "paidRetry": "d708222bd7cd2a1d2ca02eaf5c0d02767c6ddce894279303e904c62c9bea01a5",
+        "recovered": "8f56bdf3eacfeec70a51d7299332fae2c0dc7c470f44f7a8c8116c2c88695f14",
+        "payCount": 1
+      }
+    },
+    {
+      "streamCancellation": {
+        "cancelled": true,
+        "aborts": 1,
+        "locked": false
+      }
+    }
+  ],
+  "pageErrors": [],
+  "wasmHashes": [
+    "6b2e4499fafaca8502be7b8a4447cfae78cf044b2b181e1527fb3d21b07edfd9"
+  ],
+  "sdkRevision": "461dc2f8f17080eb8100edd8fa5063e1df1ae7a8"
+}

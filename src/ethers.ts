@@ -228,8 +228,8 @@ async function submitPayment(
       throw error;
     }
   });
-  // A UI callback must not interrupt observation after funds have been broadcast.
-  try { context.submitted(submission); } catch { /* Continue observing the transaction. */ }
+  // Wait until the broadcast is journaled; a UI callback must not interrupt observation after funds have been broadcast.
+  try { await context.submitted(submission); } catch { /* Continue observing the transaction. */ }
   const receipt = await confirmedPayment(submission);
   const transactionHash = receipt.transactionHash;
   try { if (!context.signal?.aborted) context.report(`Payment confirmed in ${transactionHash}`); } catch { /* The receipt is already confirmed. */ }
