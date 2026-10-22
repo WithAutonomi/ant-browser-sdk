@@ -957,7 +957,8 @@ source.close();
 
 For audio and video content types, and common media extensions, creating the
 source also reads the first `SDK_LIMITS.mediaPrimeHeadBytes` (1 MiB) and the
-last `SDK_LIMITS.mediaPrimeTailBytes` (64 KiB) at once, in the background. A
+last `SDK_LIMITS.mediaPrimeTailBytes` (64 KiB) at once, in the background, as
+soon as its reader is open and while the service worker is still installing. A
 player reads the header, then seeks to the index MP4 files keep at the end,
 and only then plays; with both already in the reader's cache, playback starts
 as soon as the element is attached instead of after two sequential network
@@ -970,17 +971,26 @@ page-owned authenticated reader; it does not connect to Autonomi nodes itself.
 The page and client must therefore remain open while the media URL is in use.
 Multiple clients can serve independent media sources on the same page.
 
-A media source's reader streams: from wherever playback starts or seeks to, the
-shared core fetches up to four records of the next 32 MiB in parallel. Playback
-therefore does not wait for each record's discovery. It also fetches the file's
-last record when playback starts, because MP4 and WebM usually keep their index
-there. It keeps at most about 24 of the file's records cached, releasing those
-behind playback. Readers from `openFile()` read ahead only once a read
-continues a previous read, so a single header read does not fetch the window.
+A media source's reader is an ordinary random-access reader, like one from
+`openFile()`: it reads ahead once a read continues a previous one, so playback
+fetches the following records while it plays, but the first block a player
+waits for has the connections to itself. The core's streaming mode, which
+fetches up to four records of the next 32 MiB and the file's last record as soon
+as playback starts, delayed the first frame on the live network, so media
+sources no longer use it; priming reads the head and the tail instead. See
+[ADR-0003](docs/adr/ADR-0003-adaptive-browser-downloads.md).
+
+While a media source is open, the page messages the service worker every 10
+seconds. Firefox stops a worker that has had no new event for 30 seconds, even
+one still answering a request, which otherwise cut off a block that took longer
+or a response the player read for that long. The worker waits up to two minutes
+for a block, longer than the core's retries of a missing record, after 15 and 45
+seconds.
 
 If the application already has a root-scoped service worker, merge the
 `autonomi-file-range` fetch and message-handling logic from the packaged worker
-into it and pass that worker's URL:
+into it, including its `message` listener, which the keep-awake messages need,
+and pass that worker's URL:
 
 ```ts
 const source = await client.createMediaSource(address, {
@@ -1133,11 +1143,11 @@ console.log(SDK_LIMITS.maxFileBytes, SDK_LIMITS.maxRangeBytes);
 
 The limits and capability reports are immutable. Unsupported input sizes are
 rejected before copying upload byte arrays or staging Blobs. Reads learn the
-verified size from the core; media setup checks it before registering a worker
-or creating a URL. Uploads retain the upstream 1 GB cap. Buffered downloads need
-sufficient memory and default to a 1 GB output budget; disk streams need
-destination capacity, and upload staging needs quota for at least one encrypted
-record.
+verified size from the core; media setup checks it before creating a URL. Its
+service worker installs while the reader opens. Uploads retain the upstream 1 GB
+cap. Buffered downloads need sufficient memory and default to a 1 GB output
+budget; disk streams need destination capacity, and upload staging needs quota
+for at least one encrypted record.
 
 `getBrowserCapabilities()` safely runs outside a browser and makes no network
 requests, allocations of workers, or permission prompts. `features` reports each

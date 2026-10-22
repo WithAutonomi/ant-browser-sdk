@@ -1,0 +1,478 @@
+{
+  "startedAt": "2026-10-22T15:12:34.351Z",
+  "browser": "151.0.7922.34",
+  "variants": [
+    {
+      "name": "baseline",
+      "url": "http://127.0.0.1:39830"
+    },
+    {
+      "name": "candidate",
+      "url": "http://127.0.0.1:39831"
+    }
+  ],
+  "runs": 5,
+  "scriptSha256": "78b1f3be7b8b1573e35be54fb3a368427a527fa47e5951ac0012fdb876689e93",
+  "samples": [
+    {
+      "round": 1,
+      "variant": "baseline",
+      "waiting": 2,
+      "sourceReadyMs": 17.400000005960464,
+      "firstFrameMs": 6077.39999999702,
+      "readsBeforeFirstFrame": [
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 9,
+          "ms": 5961
+        },
+        {
+          "start": 54837665,
+          "length": 65536,
+          "at": 9,
+          "ms": -1
+        },
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 21,
+          "ms": 5949
+        },
+        {
+          "start": 1048576,
+          "length": 1048576,
+          "at": 5971,
+          "ms": 27
+        },
+        {
+          "start": 2097152,
+          "length": 1048576,
+          "at": 6005,
+          "ms": 29
+        },
+        {
+          "start": 3145728,
+          "length": 1048576,
+          "at": 6044,
+          "ms": -1
+        }
+      ],
+      "playedIn10s": 9.958324,
+      "seekMs": 3345.699999997021,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "0c01cd4377a4b4846ae989691317738b909a83ce95e81ea62ce1833391a794a8"
+      ]
+    },
+    {
+      "round": 1,
+      "variant": "candidate",
+      "waiting": 2,
+      "sourceReadyMs": 17.299999997019768,
+      "firstFrameMs": 7189.299999991059,
+      "readsBeforeFirstFrame": [
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 3,
+          "ms": 7127
+        },
+        {
+          "start": 54837665,
+          "length": 65536,
+          "at": 3,
+          "ms": 2203
+        },
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 19,
+          "ms": 7111
+        },
+        {
+          "start": 1048576,
+          "length": 1048576,
+          "at": 7132,
+          "ms": 31
+        },
+        {
+          "start": 2097152,
+          "length": 1048576,
+          "at": 7166,
+          "ms": 28
+        }
+      ],
+      "playedIn10s": 9.990967999999999,
+      "seekMs": 9631.49999999702,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "0c01cd4377a4b4846ae989691317738b909a83ce95e81ea62ce1833391a794a8"
+      ]
+    },
+    {
+      "round": 2,
+      "variant": "candidate",
+      "waiting": 2,
+      "sourceReadyMs": 17,
+      "firstFrameMs": 4464.79999999404,
+      "readsBeforeFirstFrame": [
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 3,
+          "ms": 4404
+        },
+        {
+          "start": 54837665,
+          "length": 65536,
+          "at": 3,
+          "ms": 2884
+        },
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 19,
+          "ms": 4388
+        },
+        {
+          "start": 1048576,
+          "length": 1048576,
+          "at": 4408,
+          "ms": 30
+        },
+        {
+          "start": 2097152,
+          "length": 1048576,
+          "at": 4440,
+          "ms": 28
+        }
+      ],
+      "playedIn10s": 9.986528999999999,
+      "seekMs": 2636.7000000029802,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "0c01cd4377a4b4846ae989691317738b909a83ce95e81ea62ce1833391a794a8"
+      ]
+    },
+    {
+      "round": 2,
+      "variant": "baseline",
+      "waiting": 2,
+      "sourceReadyMs": 17.400000005960464,
+      "firstFrameMs": 11030.900000002981,
+      "readsBeforeFirstFrame": [
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 10,
+          "ms": 10965
+        },
+        {
+          "start": 54837665,
+          "length": 65536,
+          "at": 10,
+          "ms": 3919
+        },
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 21,
+          "ms": 10954
+        },
+        {
+          "start": 1048576,
+          "length": 1048576,
+          "at": 10975,
+          "ms": 29
+        },
+        {
+          "start": 2097152,
+          "length": 1048576,
+          "at": 11006,
+          "ms": 29
+        }
+      ],
+      "playedIn10s": 9.986566,
+      "seekMs": 1559.199999994038,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "0c01cd4377a4b4846ae989691317738b909a83ce95e81ea62ce1833391a794a8"
+      ]
+    },
+    {
+      "round": 3,
+      "variant": "baseline",
+      "waiting": 2,
+      "sourceReadyMs": 21.399999991059303,
+      "firstFrameMs": 5830.199999997019,
+      "readsBeforeFirstFrame": [
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 12,
+          "ms": 5763
+        },
+        {
+          "start": 54837665,
+          "length": 65536,
+          "at": 12,
+          "ms": 3238
+        },
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 25,
+          "ms": 5750
+        },
+        {
+          "start": 1048576,
+          "length": 1048576,
+          "at": 5776,
+          "ms": 27
+        },
+        {
+          "start": 2097152,
+          "length": 1048576,
+          "at": 5805,
+          "ms": 29
+        }
+      ],
+      "playedIn10s": 9.989638999999999,
+      "seekMs": 7418.4000000059605,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "0c01cd4377a4b4846ae989691317738b909a83ce95e81ea62ce1833391a794a8"
+      ]
+    },
+    {
+      "round": 3,
+      "variant": "candidate",
+      "waiting": 2,
+      "sourceReadyMs": 23.200000002980232,
+      "firstFrameMs": 13271.29999999106,
+      "readsBeforeFirstFrame": [
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 6,
+          "ms": 13208
+        },
+        {
+          "start": 54837665,
+          "length": 65536,
+          "at": 6,
+          "ms": 3499
+        },
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 25,
+          "ms": 13189
+        },
+        {
+          "start": 1048576,
+          "length": 1048576,
+          "at": 13215,
+          "ms": 29
+        },
+        {
+          "start": 2097152,
+          "length": 1048576,
+          "at": 13245,
+          "ms": 26
+        }
+      ],
+      "playedIn10s": 9.984762,
+      "seekMs": 7879,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "0c01cd4377a4b4846ae989691317738b909a83ce95e81ea62ce1833391a794a8"
+      ]
+    },
+    {
+      "round": 4,
+      "variant": "candidate",
+      "waiting": 2,
+      "sourceReadyMs": 23,
+      "firstFrameMs": 5232.700000000001,
+      "readsBeforeFirstFrame": [
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 6,
+          "ms": 5210
+        },
+        {
+          "start": 54837665,
+          "length": 65536,
+          "at": 6,
+          "ms": 2794
+        },
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 25,
+          "ms": 5190
+        },
+        {
+          "start": 1048576,
+          "length": 1048576,
+          "at": 5216,
+          "ms": 31
+        }
+      ],
+      "playedIn10s": 9.959088,
+      "seekMs": 2456.400000002981,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "0c01cd4377a4b4846ae989691317738b909a83ce95e81ea62ce1833391a794a8"
+      ]
+    },
+    {
+      "round": 4,
+      "variant": "baseline",
+      "waiting": 2,
+      "sourceReadyMs": 18.700000002980232,
+      "firstFrameMs": 9135.399999994039,
+      "readsBeforeFirstFrame": [
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 10,
+          "ms": 9068
+        },
+        {
+          "start": 54837665,
+          "length": 65536,
+          "at": 11,
+          "ms": 3538
+        },
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 22,
+          "ms": 9056
+        },
+        {
+          "start": 1048576,
+          "length": 1048576,
+          "at": 9079,
+          "ms": 29
+        },
+        {
+          "start": 2097152,
+          "length": 1048576,
+          "at": 9113,
+          "ms": 27
+        }
+      ],
+      "playedIn10s": 9.985812000000001,
+      "seekMs": 4147.199999988079,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "0c01cd4377a4b4846ae989691317738b909a83ce95e81ea62ce1833391a794a8"
+      ]
+    },
+    {
+      "round": 5,
+      "variant": "baseline",
+      "waiting": 2,
+      "sourceReadyMs": 21.399999991059303,
+      "firstFrameMs": 7326.799999999999,
+      "readsBeforeFirstFrame": [
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 10,
+          "ms": 7256
+        },
+        {
+          "start": 54837665,
+          "length": 65536,
+          "at": 11,
+          "ms": 4314
+        },
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 26,
+          "ms": 7240
+        },
+        {
+          "start": 1048576,
+          "length": 1048576,
+          "at": 7271,
+          "ms": 29
+        },
+        {
+          "start": 2097152,
+          "length": 1048576,
+          "at": 7302,
+          "ms": 28
+        }
+      ],
+      "playedIn10s": 9.982589999999998,
+      "seekMs": 4634.300000008941,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "0c01cd4377a4b4846ae989691317738b909a83ce95e81ea62ce1833391a794a8"
+      ]
+    },
+    {
+      "round": 5,
+      "variant": "candidate",
+      "waiting": 2,
+      "sourceReadyMs": 19.5,
+      "firstFrameMs": 5565.6,
+      "readsBeforeFirstFrame": [
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 4,
+          "ms": 5507
+        },
+        {
+          "start": 54837665,
+          "length": 65536,
+          "at": 4,
+          "ms": 1274
+        },
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 21,
+          "ms": 5489
+        },
+        {
+          "start": 1048576,
+          "length": 1048576,
+          "at": 5511,
+          "ms": 29
+        },
+        {
+          "start": 2097152,
+          "length": 1048576,
+          "at": 5542,
+          "ms": 27
+        }
+      ],
+      "playedIn10s": 9.993248000000001,
+      "seekMs": 4231.5999999940395,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "0c01cd4377a4b4846ae989691317738b909a83ce95e81ea62ce1833391a794a8"
+      ]
+    }
+  ]
+}

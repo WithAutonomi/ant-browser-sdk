@@ -30,6 +30,13 @@ it("keeps standalone media-worker limits aligned with the exported SDK limits", 
   expect(range.status).toBe(206);
   expect(range.headers.get("content-range")).toBe(`bytes ${start}-${end}/${size}`);
   expect(range.headers.get("content-length")).toBe("16");
+  // The type comes from the file's metadata; the bytes never run as a page here.
+  expect(range.headers.get("x-content-type-options")).toBe("nosniff");
+  expect(range.headers.get("content-security-policy")).toBe("sandbox; default-src 'none'");
+  // The page's keep-awake messages need a listener to be events at all.
+  expect(handlers.has("message")).toBe(true);
+  // Outlasts the shared core's retries of a missing record, after 15 and 45 s.
+  expect(runInContext("RANGE_REQUEST_TIMEOUT_MS", context)).toBeGreaterThan(45_000 + 15_000);
 });
 
 it("enforces the advertised range limit and stream default before calling the core", async () => {

@@ -1,0 +1,11 @@
+{
+  "<scratch>/site-baseline/sdk/client.js": "1b62355d096b83ab69e70b5f85670a16957646cd8ae2d114a4ee0fe590161d8b",
+  "<scratch>/site-baseline/sdk/internal/media.js": "59f151a25423dc74065bb9243df47f5fb862d4786bf56bf7b82928d0e10e2581",
+  "<scratch>/site-baseline/autonomi-stream-sw.js": "7862bcd999b201383224313a675c512299399a1a10d3c428468617033d359683",
+  "<scratch>/site-candidate/sdk/client.js": "8fce06261e2eb86e5fba64a7df1ca66dce73c085ae26a81725909cb2ad63bb33",
+  "<scratch>/site-candidate/sdk/internal/media.js": "b3fc5174f1d5af8ed0696278639edc93c52a243fbb3b8cd535f98f489686d6e4",
+  "<scratch>/site-candidate/autonomi-stream-sw.js": "d92e3d61913e6433103e54ee82aaf4910395ca74c5759e95ab342239a5e0ea06",
+  "<scratch>/site-candidate/sdk/wasm/ant_core_bg.wasm": "0c01cd4377a4b4846ae989691317738b909a83ce95e81ea62ce1833391a794a8",
+  "<scratch>/site-candidate/video.ant": "cea3ab028b454d6ff00e26119e3f46f0a57f3bcbbf9b9794c67fbc37d1aba7f4",
+  "<scratch>/site-baseline/harness.js": "33d49a9672c2f3e206f4ffb5552e429fba4955e71e0cf98307d9f98f5c0208ce"
+}
