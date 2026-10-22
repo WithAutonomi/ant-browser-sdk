@@ -1,17 +1,17 @@
 {
   "repository": "https://github.com/WithAutonomi/ant-client",
-  "revision": "404fa3440c7529d2ab0e10ef200d960d619c0fd4",
+  "revision": "8b19c1499360ebd8166a1ef3dd65b88db914dd7f",
   "dirty": false,
   "target": "wasm32-unknown-unknown",
   "features": [
     "browser-wasm"
   ],
   "defaultFeatures": false,
-  "cargoLockSha256": "d3682d218f167a7e216cacbe9fe189b926ff7ed685bba95a3c02b0e6d85ee373",
-  "wasmSha256": "e28ec0cda529ed404f0f22fb260aedbe6d9278e85484fd3e28658669bff08497",
+  "cargoLockSha256": "68a8483073d0e6681bfa47abe84e811a4e782379e459e0cb80625567a76d4478",
+  "wasmSha256": "0c01cd4377a4b4846ae989691317738b909a83ce95e81ea62ce1833391a794a8",
   "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)",
   "wasmPack": "wasm-pack 0.15.0",
-  "noticesSha256": "60ff80092cfb004811f2b4bc3292f12e56bd9a60b3960007ae8ff5236e3485e0",
+  "noticesSha256": "2c7c966b1bc09d09d0632018663ce2170abfd9a00cefdc8901824251deab421c",
   "rustStdCopyrightSha256": "5647be074c8edf7339fd863055923a8fc80bc5610a8d4661ec3b767b9d392c27",
   "noticesGeneratorSha256": "fbae032f6ae379d81311ceeabb2d23cd9d40af1a69ca0b422a50b632d7b31bd7",
   "noticesConfigSha256": "1d5154cdb0705f6eed668288a0e31f31f273dace0a404f97c091c3d2bdd72cf3"

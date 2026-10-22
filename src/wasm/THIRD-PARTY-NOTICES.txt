@@ -1032,7 +1032,7 @@ saorsa-pqc 0.5.2
 saorsa-transport 0.38.1
     Licence: MIT OR Apache-2.0
     Redistributed under: MIT
-    Source: https://static.crates.io/crates/saorsa-transport/saorsa-transport-0.38.1.crate
+    Source: https://github.com/WithAutonomi/saorsa-transport at commit 520dd3ef7540b1743e644ecdd8a74f2b58ec43a9
     Texts: [142], [143], [144], [145]
 scopeguard 1.2.0
     Licence: MIT OR Apache-2.0
