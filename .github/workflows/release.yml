@@ -1,10 +1,14 @@
 name: Release
 
-# Pushing a `v<package.json version>` tag on main publishes that version to npm.
-# Running the workflow manually performs every release check and packs the tarball
-# without publishing it.
+# Merging a change to main that sets an untagged `package.json` version publishes
+# that version to npm and tags the merge commit `v<version>`; pushes to main whose
+# version is already tagged release nothing. Pushing a `v<version>` tag on main
+# publishes that version too. Running the workflow manually performs every release
+# check and packs the tarball without publishing it.
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
   workflow_dispatch:
@@ -17,22 +21,19 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  package:
-    name: Verify and pack
+  decide:
+    name: Determine the release
     runs-on: ubuntu-latest
     outputs:
       name: ${{ steps.meta.outputs.name }}
       version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
       dist_tag: ${{ steps.meta.outputs.dist_tag }}
-      tarball: ${{ steps.pack.outputs.tarball }}
+      publish: ${{ steps.meta.outputs.publish }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
 
       - name: Determine version and dist-tag
         id: meta
@@ -40,17 +41,32 @@ jobs:
         run: |
           name="$(node -p 'require("./package.json").name')"
           version="$(node -p 'require("./package.json").version')"
+          tag="v${version}"
+          echo "name=${name}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
 
+          publish=false
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
-            if [ "$GITHUB_REF_NAME" != "v${version}" ]; then
-              echo "::error title=Tag does not match package.json::Tag ${GITHUB_REF_NAME} does not match package.json version ${version}. Tag the release as v${version}."
+            if [ "$GITHUB_REF_NAME" != "$tag" ]; then
+              echo "::error title=Tag does not match package.json::Tag ${GITHUB_REF_NAME} does not match package.json version ${version}. Tag the release as ${tag}."
               exit 1
             fi
             if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
               echo "::error title=Tag is not on main::${GITHUB_REF_NAME} points at ${GITHUB_SHA}, which is not on main."
               exit 1
             fi
+            publish=true
+          elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            # A push to main releases its version once: the release tags it.
+            if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+              echo "${tag} is already tagged; nothing to release."
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            publish=true
           fi
+          echo "publish=${publish}" >> "$GITHUB_OUTPUT"
 
           # Same dist-tag policy as @withautonomi/ant: the first dot-separated pre-release
           # identifier decides, and an unrecognised one fails rather than moving `latest`.
@@ -71,10 +87,28 @@ jobs:
             esac
           fi
 
-          echo "name=${name}" >> "$GITHUB_OUTPUT"
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "dist_tag=${dist_tag}" >> "$GITHUB_OUTPUT"
-          echo "Releasing ${name}@${version} to dist-tag ${dist_tag}"
+          if [ "$publish" = true ]; then
+            echo "Releasing ${name}@${version} to dist-tag ${dist_tag}"
+          else
+            echo "Checking ${name}@${version} without publishing"
+          fi
+
+  package:
+    name: Verify and pack
+    needs: decide
+    if: needs.decide.outputs.publish == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      tarball: ${{ steps.pack.outputs.tarball }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
 
       - run: npm ci
 
@@ -112,19 +146,20 @@ jobs:
 
   publish:
     name: Publish to npm
-    needs: package
-    if: github.event_name == 'push'
+    needs: [decide, package]
+    if: needs.decide.outputs.publish == 'true'
     runs-on: ubuntu-latest
     environment: npm
     permissions:
-      # Create the GitHub release.
+      # Create the GitHub release, and its tag after a merge to main.
       contents: write
       # npm provenance and trusted publishing exchange this token with the registry.
       id-token: write
     env:
-      NAME: ${{ needs.package.outputs.name }}
-      VERSION: ${{ needs.package.outputs.version }}
-      DIST_TAG: ${{ needs.package.outputs.dist_tag }}
+      NAME: ${{ needs.decide.outputs.name }}
+      VERSION: ${{ needs.decide.outputs.version }}
+      TAG: ${{ needs.decide.outputs.tag }}
+      DIST_TAG: ${{ needs.decide.outputs.dist_tag }}
       TARBALL_NAME: ${{ needs.package.outputs.tarball }}
     steps:
       - uses: actions/download-artifact@v4
@@ -180,17 +215,24 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "::notice title=Release exists::GitHub release ${GITHUB_REF_NAME} already exists; skipping."
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::notice title=Release exists::GitHub release ${TAG} already exists; skipping."
             exit 0
           fi
           prerelease=()
           if [ "$DIST_TAG" != "latest" ]; then
             prerelease=(--prerelease)
           fi
-          gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP/package/$TARBALL_NAME" \
+          # A pushed tag already exists; after a merge, the release creates the tag
+          # on the merge commit. Tags made with this token start no other workflow.
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            target=(--verify-tag)
+          else
+            target=(--target "$GITHUB_SHA")
+          fi
+          gh release create "$TAG" "$RUNNER_TEMP/package/$TARBALL_NAME" \
             --repo "$GITHUB_REPOSITORY" \
-            --verify-tag \
+            "${target[@]}" \
             --generate-notes \
             "${prerelease[@]}"
 

@@ -20,8 +20,8 @@ binary and notices checksums. Run
 `npm run build:examples` and `npm pack --dry-run` to check the shipped assets, and
 `npm run verify:wasm` to check the WASM release requirements.
 
-Maintainers release by pushing a `v<version>` tag on main; see "Releasing to npm"
-in the [README](README.md#releasing-to-npm).
+Maintainers release by merging a change that sets a new `package.json` version to
+main; see "Releasing to npm" in the [README](README.md#releasing-to-npm).
 
 ## Architecture decisions
 

@@ -1282,17 +1282,16 @@ recorded hashes and the binary is a clean build of a commit on `ant-client` main
 ### Releasing to npm
 
 The [release workflow](.github/workflows/release.yml) publishes
-`@withautonomi/ant-browser-sdk` when a `v<version>` tag is pushed:
+`@withautonomi/ant-browser-sdk` when a change that sets a new `version` in
+`package.json` (for example with `npm version 0.2.0 --no-git-tag-version`) is
+merged to main, and tags the merge commit `v<version>`. A push to main whose
+version is already tagged releases nothing. Pushing a `v<version>` tag on main
+also publishes that version, for example to release a commit already merged.
 
-1. Merge a change that sets `version` in `package.json` (for example with
-   `npm version 0.2.0 --no-git-tag-version`).
-2. Tag that commit on main and push the tag:
-   `git tag v0.2.0 && git push origin v0.2.0`.
-
-The workflow requires the tag to match `package.json` and to be on main, verifies
-the WASM provenance, runs `npm run check`, builds the examples, and packs the
-tarball. It publishes that tarball with npm provenance and attaches it to a GitHub
-release. Stable versions go to the `latest` dist-tag; `-beta.N` and `-rc.N`
+The workflow requires a pushed tag to match `package.json` and to be on main,
+verifies the WASM provenance, runs `npm run check`, builds the examples, and packs
+the tarball. It publishes that tarball with npm provenance and attaches it to a
+GitHub release. Stable versions go to the `latest` dist-tag; `-beta.N` and `-rc.N`
 versions go to `beta` and `rc`, and cannot be the package's first publish.
 Re-running a release skips steps that already completed. Run the workflow
 manually to perform every check without publishing.
