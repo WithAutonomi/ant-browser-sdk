@@ -158,11 +158,14 @@ controls the page. Errors surface in the same order as before.
 
 Against the live network, ten alternating rounds in fresh Chromium contexts
 with the same 54.9 MB video gave a median first frame of 6.6 s against
-9.1 s, faster in 7 of 10 pairs; one baseline sample failed to load. Seeking
-to the middle after ten seconds of playback slowed, median 6.5 s against
-3.4 s: by then streaming mode had already fetched the window holding the
-middle. The trade favours a fast start. A core change that serves the
-first requested range before streaming mode's read-ahead would keep both.
+9.1 s, faster in 7 of 10 pairs; one baseline sample failed to load. Two
+later batches kept the plain reader ahead by less, 7.8 s against 9.7 s and
+then 8.8 s against 9.2 s: the first frame mostly waits for the first
+record's own fetch, which varied from 4 to 11 s, so the competing fetches
+cost less than the first batch suggested. Seeking to the middle after ten
+seconds of playback was slower in the first batch, median 6.5 s against
+3.4 s, and faster in a later one, 2.8 s against 5.1 s, so no seek
+difference is claimed.
 
 The page also messages the worker every 10 s while a media source is open,
 because Firefox stops a worker that has had no new event for 30 s even while
