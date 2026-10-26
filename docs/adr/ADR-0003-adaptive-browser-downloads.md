@@ -165,7 +165,13 @@ record's own fetch, which varied from 4 to 11 s, so the competing fetches
 cost less than the first batch suggested. Seeking to the middle after ten
 seconds of playback was slower in the first batch, median 6.5 s against
 3.4 s, and faster in a later one, 2.8 s against 5.1 s, so no seek
-difference is claimed.
+difference is claimed. A fourth batch, with the `ccd4106` core, showed no
+first-frame gain either, 6.1 s against 5.6 s over 12 rounds, so none is
+claimed for the reader mode. The plain reader is kept because it does no
+worse, fetches less ahead of the player, and is what try.autonomi.com's
+player uses: with this change the SDK started the video as soon as that
+player, a median 4.5 s against 4.1 s over 20 rounds, doing the same network
+work.
 
 The page also messages the worker every 10 s while a media source is open,
 because Firefox stops a worker that has had no new event for 30 s even while
@@ -173,4 +179,5 @@ it answers a request. The worker waits up to 120 s for a block, beyond the
 core's retries of a missing record after 15 and 45 s, and marks its
 responses `nosniff` and sandboxed, since their type comes from the file's
 metadata. No core or wire change. Evidence is in the
-[2026-10-22 audit](../audits/2026-10-22-media-first-frame.md).
+[2026-10-22 audit](../audits/2026-10-22-media-first-frame.md) and the
+[2026-10-26 comparison with try.autonomi.com](../audits/2026-10-26-sdk-vs-try-streaming.md).

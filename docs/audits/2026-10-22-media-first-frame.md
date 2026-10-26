@@ -86,6 +86,13 @@ results were not kept. A trace of the core read on 2026-10-26 (ant-client
 holder, a median 1.4 s, and its handshake, 0.6 s, which neither reader mode
 changes.
 
+A fourth batch on 2026-10-26, with both builds rebuilt on the `ccd4106` core,
+showed no gain: median first frame 6.1 s with the plain reader against 5.6 s
+in streaming mode, sooner in 6 of 12 rounds. In the same run, and in a traced
+one, the SDK with this change started the video as soon as try's own player,
+a median 4.5 s against 4.1 s over 20 rounds, doing the same network work
+([audit](2026-10-26-sdk-vs-try-streaming.md)).
+
 The same comparison in try's own page, with the same core, gave a median
 first frame of 5.0 s with a plain reader against 8.4 s in streaming mode,
 three rounds each.
@@ -122,5 +129,7 @@ played past half a second, with the new response headers present.
 
 Ten recorded samples per build, and the later batches' medians only, from one
 machine and network; Chromium only for live timings, one video. Live node load
-and versions are unknown. The plain reader led the first frame in every batch,
-by 0.4 to 2.5 s at the median; no seek difference is claimed.
+and versions are unknown. The plain reader led the first frame in the first
+three batches, by 0.4 to 2.5 s at the median, and not in the fourth, so no
+first-frame gain from the reader mode is claimed, and no seek difference. The
+change does start playback as soon as try.autonomi.com's player does.
