@@ -1662,6 +1662,10 @@ it("closing before the wallet is invoked stops a pointer write without payment",
   expect(raw.closed).toBe(true);
   await expect(pending).rejects.toMatchObject({ name: "AbortError", checkpoint: undefined });
   release();
+  // Closing rejected the write and freed its handle at once; only the
+  // checkpoint it paused on lands now. Let everything chained to that run
+  // first, so a wallet call made once it lands would be seen.
+  await new Promise(resolve => setTimeout(resolve, 0));
   expect(payment.pay).not.toHaveBeenCalled();
   await vi.waitFor(() => expect(raw.freed).toBe(true));
 });
