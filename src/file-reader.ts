@@ -7,17 +7,6 @@ import { SDK_LIMITS } from "./limits.js";
 /** @internal Only the SDK may wrap a WASM reader. Not exported by the package. */
 export let createPublicFileReader: (raw: RawFileReader, address: string) => PublicFileReader;
 
-/** Destinations a pipe has written to, settled once the pipe released them; true if closed. */
-const settlements = new WeakMap<WritableStream<Uint8Array>, Promise<boolean>>();
-
-/**
- * @internal When a pipe has taken a destination, settles after the pipe releases it:
- * true once closed (and so possibly committed), false once aborted or failed.
- */
-export function pipeSettled(destination: WritableStream<Uint8Array>): Promise<boolean> | undefined {
-  return settlements.get(destination);
-}
-
 /** Bounded random-access reader backed by direct WebRTC record fetches. */
 export class PublicFileReader {
   /** DataMap address; empty for a private file, which has no network DataMap. */
@@ -231,19 +220,14 @@ function forwardTo(destination: WritableStream<Uint8Array>): {
   readonly failure: unknown;
 } {
   let writer: WritableStreamDefaultWriter<Uint8Array> | undefined;
-  let settle!: (closed: boolean) => void;
   let failed = false;
   let failure: unknown;
   const take = (): WritableStreamDefaultWriter<Uint8Array> => {
-    if (!writer) {
-      writer = destination.getWriter();
-      settlements.set(destination, new Promise<boolean>((resolve) => { settle = resolve; }));
-    }
+    writer ??= destination.getWriter();
     return writer;
   };
-  const release = (closed: boolean): void => {
+  const release = (): void => {
     writer?.releaseLock();
-    settle?.(closed);
   };
   const forward = async (operation: (writer: WritableStreamDefaultWriter<Uint8Array>) => Promise<void>): Promise<void> => {
     try {
@@ -252,7 +236,7 @@ function forwardTo(destination: WritableStream<Uint8Array>): {
       failed = true;
       failure = error;
       // This stream now errors, and aborting an errored stream skips its sink: release here.
-      release(false);
+      release();
       throw error;
     }
   };
@@ -260,14 +244,14 @@ function forwardTo(destination: WritableStream<Uint8Array>): {
     write: (chunk) => forward((target) => target.write(chunk)),
     close: async () => {
       await forward((target) => target.close());
-      release(true);
+      release();
     },
     abort: async (reason) => {
       try {
         await take().abort(reason);
       } catch {
         // The pipe has already failed; keep its error.
-      } finally { release(false); }
+      } finally { release(); }
     },
   });
   return {

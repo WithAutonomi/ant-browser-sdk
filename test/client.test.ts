@@ -1551,7 +1551,9 @@ describe("streamAndSave", () => {
     client.close();
   });
 
-  it("removes the empty file its own picker created when the save fails before writing", async () => {
+  // The SDK cannot tell a file its picker created from an existing empty file
+  // the user chose, so a failed save deletes neither.
+  it("leaves the picked file in place when the save fails before writing", async () => {
     for (const size of [0, 5]) {
       const client = await AutonomiClient.connect(endpoint);
       state.networks.at(-1)!.openPublicFile.mockRejectedValue(new Error("no route to the DataMap"));
@@ -1559,16 +1561,13 @@ describe("streamAndSave", () => {
       vi.stubGlobal("window", { showSaveFilePicker: async () => ({ name: "movie.mp4", getFile: async () => ({ size }), remove,
         createWritable: async () => new WritableStream() }) });
       await expect(client.streamAndSave(file)).rejects.toMatchObject({ code: "OPEN_FILE_FAILED" });
-      if (size === 0) await vi.waitFor(() => expect(remove).toHaveBeenCalledOnce());
-      else {
-        await new Promise(resolve => setTimeout(resolve, 0));
-        expect(remove).not.toHaveBeenCalled();
-      }
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(remove).not.toHaveBeenCalled();
       client.close();
     }
   });
 
-  it("removes an empty picked file after a transfer failure once the destination is released", async () => {
+  it("aborts the picked file's writable after a transfer failure and leaves the file in place", async () => {
     const client = await AutonomiClient.connect(endpoint);
     const reader = rawReader();
     reader.pipeTo.mockImplementation(async (destination: WritableStream<Uint8Array>) => {
@@ -1584,20 +1583,22 @@ describe("streamAndSave", () => {
     vi.stubGlobal("window", { showSaveFilePicker: async () => ({ name: "movie.mp4", getFile: async () => ({ size: 0 }), remove,
       createWritable: async () => new WritableStream({ abort }) }) });
     await expect(client.streamAndSave(file)).rejects.toMatchObject({ code: "OPEN_FILE_FAILED" });
-    await vi.waitFor(() => expect(remove).toHaveBeenCalledOnce());
-    expect(abort).toHaveBeenCalledOnce();
+    await vi.waitFor(() => expect(abort).toHaveBeenCalledOnce());
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(remove).not.toHaveBeenCalled();
     client.close();
   });
 });
 
-it("removes an empty picked file when a buffered download fails", async () => {
+it("leaves an empty picked file in place when a buffered download fails", async () => {
   const remove = vi.fn(async () => undefined);
   vi.stubGlobal("window", { showSaveFilePicker: async () => ({ name: "archive.bin", getFile: async () => ({ size: 0 }), remove,
     createWritable: vi.fn() }) });
   const client = await AutonomiClient.connect(endpoint);
   state.networks[0]!.downloadPublicFile.mockRejectedValue(new Error("record unavailable"));
   await expect(client.downloadAndSave(file)).rejects.toMatchObject({ code: "DOWNLOAD_FAILED" });
-  await vi.waitFor(() => expect(remove).toHaveBeenCalledOnce());
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(remove).not.toHaveBeenCalled();
   client.close();
 });
 

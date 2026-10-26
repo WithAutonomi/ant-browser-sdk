@@ -904,10 +904,11 @@ may arrive after the file has committed. It returns byte count and BLAKE3 withou
 a whole-file Blob. Without a supplied destination or browser save picker, it
 rejects with `SAVE_FAILED`. Read and verification failures reject with
 `OPEN_FILE_FAILED`; destination write failures, such as a full disk, with
-`SAVE_FAILED`. If a save that opened the picker fails before the file is written,
-the empty file the picker created is removed where the browser supports
-`FileSystemHandle.remove()`; `downloadAndSave()` does the same. `downloadAndSave()`
-retains its buffered return value and ordinary browser-download fallback.
+`SAVE_FAILED`. A failed save leaves the file chosen in the save picker in place,
+possibly empty: the SDK cannot tell a file the picker created from an existing
+file the user chose, so it deletes neither; `downloadAndSave()` does the same.
+`downloadAndSave()` retains its buffered return value and ordinary
+browser-download fallback.
 
 ## Random-access reads
 

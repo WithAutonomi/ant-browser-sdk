@@ -8,7 +8,7 @@ import {
   type CoreHelloInfo, type CoreLookupResult, type CoreNetworkNode, type CorePublicFile, type CoreRecordBatchResult,
 } from "./internal/protocol.js";
 import { AutonomiError, UploadError, wrapError } from "./errors.js";
-import { createPublicFileReader, pipeSettled, type PublicFileReader } from "./file-reader.js";
+import { createPublicFileReader, type PublicFileReader } from "./file-reader.js";
 import { abortable, isAbort, settledWithin, throwIfAborted } from "./internal/abort.js";
 import { getBindings, initializeClientWasm, type RawNetworkClient } from "./internal/runtime.js";
 import { isPlayableMedia, MediaBridge, primePlayback } from "./internal/media.js";
@@ -26,7 +26,7 @@ import { snapshot } from "./internal/snapshot.js";
 import {
   corePaymentNetwork, paymentNetworkFromCore, assertPaymentChainId, type CorePaymentNetwork,
 } from "./internal/payment-network.js";
-import { discardUnsavedFile, requestSaveFileHandle, saveDownload, type PickedFileHandle } from "./save.js";
+import { requestSaveFileHandle, saveDownload } from "./save.js";
 import { checkSha256, fileName, isManifestEntry, manifestEntrySource, recordedSha256, type ManifestEntry } from "./manifest.js";
 import type {
   MerklePaymentRequest, MerklePaymentReceipt,
@@ -671,12 +671,11 @@ export class AutonomiClient {
     const file = isManifestEntry(source) ? manifestEntrySource(source) : source;
     const operation = this.#startOperation(options);
     const report = this.#reporter("download-and-save", options.onProgress, operation);
-    let picked: PickedFileHandle | undefined;
     try {
       this.#assertOpen();
       report("Choosing a download destination", { phase: "saving" });
       const suggestedName = options.suggestedName ?? this.#knownFile(file)?.name;
-      picked = (options.fileHandle || options.useFilePicker === false)
+      const picked = (options.fileHandle || options.useFilePicker === false)
         ? undefined
         : await requestSaveFileHandle(suggestedName, operation.signal);
       const fileHandle = options.fileHandle ?? picked;
@@ -700,8 +699,6 @@ export class AutonomiClient {
       report(`Saved ${download.file.name}`, { phase: "complete" });
       return { download, save };
     } catch (error) {
-      // saveDownload has settled its writable, so an empty picked file was never committed.
-      if (picked) void discardUnsavedFile(picked);
       operation.fail(error);
       throw error;
     } finally {
@@ -718,8 +715,6 @@ export class AutonomiClient {
     const report = this.#reporter("stream-and-save", options.onProgress, operation);
     let reader: PublicFileReader | undefined;
     let destination: WritableStream<Uint8Array> | undefined;
-    let picked: PickedFileHandle | undefined;
-    let written = 0;
     try {
       this.#assertOpen();
       throwIfAborted(operation.signal);
@@ -729,6 +724,7 @@ export class AutonomiClient {
       const file = isManifestEntry(source) ? manifestEntrySource(source) : source;
       const name = options.suggestedName || (isManifestEntry(source) ? fileName(source) : this.#knownFile(file)?.name) || DEFAULT_SAVE_NAME;
       report("Choosing a streaming destination", { phase: "saving" });
+      let picked: FileSystemFileHandle | undefined;
       // Invoke the picker before any network await, while user activation is available.
       if (!options.destination && !options.fileHandle) {
         picked = await requestSaveFileHandle(name, operation.signal);
@@ -747,7 +743,6 @@ export class AutonomiClient {
       const result = await reader.pipeTo(destination!, {
         signal: operation.signal,
         onProgress: (completed, total) => {
-          written = completed;
           report(`Saved ${completed} of ${total} bytes`, { phase: "saving", completed, total, unit: "bytes" });
         },
       });
@@ -756,11 +751,7 @@ export class AutonomiClient {
       return { ...result, name: savedName, method: handle ? "file-picker" : "stream" };
     } catch (error) {
       // pipeTo owns its writer during transfer. Abort an acquired but not yet handed-off stream too.
-      const aborted = destination && !destination.locked ? destination.abort(error).catch(() => undefined) : undefined;
-      // The core closes, and so may commit, only after every byte is written; until then the picked file holds nothing of ours.
-      if (picked && (!reader || written < reader.size)) {
-        void discardUnsavedFile(picked, Promise.all([aborted, destination && pipeSettled(destination)]).then(() => false));
-      }
+      if (destination && !destination.locked) void destination.abort(error).catch(() => undefined);
       const failure = isAbort(error, operation.signal) ? error : wrapError("SAVE_FAILED", "Could not stream and save the file", error);
       operation.fail(failure);
       throw failure;
