@@ -1,0 +1,16 @@
+{
+  "entries": [
+    {
+      "address": "f44656ba0311d6b253c7239225fdc0bdb284b33e54de0f94085d25c962e82d7b",
+      "kind": "public",
+      "known_size": null,
+      "name": "folder/public.bin",
+      "path": "folder/public.bin",
+      "sha256": "0c039d69659382d116bc946a8c5f6c3794cf0ee414c6c6bbde99cfe2ac0b5fc6",
+      "size": null
+    }
+  ],
+  "name": "exports",
+  "torrent": null,
+  "total_size": null
+}

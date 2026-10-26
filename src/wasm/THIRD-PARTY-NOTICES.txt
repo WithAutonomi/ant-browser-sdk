@@ -233,10 +233,10 @@ ant-merkle 1.5.1
     Redistributed under: MIT
     Source: https://static.crates.io/crates/ant-merkle/ant-merkle-1.5.1.crate
     Texts: [12]
-ant-protocol 5.0.0
+ant-protocol 5.0.1
     Licence: MIT OR Apache-2.0
     Redistributed under: MIT
-    Source: https://static.crates.io/crates/ant-protocol/ant-protocol-5.0.0.crate
+    Source: https://static.crates.io/crates/ant-protocol/ant-protocol-5.0.1.crate
     Texts: [13], [14]
 anyhow 1.0.102
     Licence: MIT OR Apache-2.0
@@ -1019,20 +1019,20 @@ safe_arch 0.7.4
     Redistributed under: Apache-2.0
     Source: https://static.crates.io/crates/safe_arch/safe_arch-0.7.4.crate
     Texts: [32], [139], [140]
-saorsa-core 0.29.1
+saorsa-core 0.29.2
     Licence: MIT OR Apache-2.0
     Redistributed under: MIT
-    Source: https://static.crates.io/crates/saorsa-core/saorsa-core-0.29.1.crate
+    Source: https://static.crates.io/crates/saorsa-core/saorsa-core-0.29.2.crate
     Texts: [73], [74]
 saorsa-pqc 0.5.2
     Licence: MIT OR Apache-2.0
     Redistributed under: Apache-2.0
     Source: https://static.crates.io/crates/saorsa-pqc/saorsa-pqc-0.5.2.crate
     Texts: [141] (see NOTES)
-saorsa-transport 0.38.1
+saorsa-transport 0.38.2
     Licence: MIT OR Apache-2.0
     Redistributed under: MIT
-    Source: https://github.com/WithAutonomi/saorsa-transport at commit 520dd3ef7540b1743e644ecdd8a74f2b58ec43a9
+    Source: https://static.crates.io/crates/saorsa-transport/saorsa-transport-0.38.2.crate
     Texts: [142], [143], [144], [145]
 scopeguard 1.2.0
     Licence: MIT OR Apache-2.0
@@ -2462,7 +2462,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 --------------------------------------------------------------------------------
-[13] Shipped by: ant-protocol 5.0.0 (LICENSE-APACHE)
+[13] Shipped by: ant-protocol 5.0.1 (LICENSE-APACHE)
 --------------------------------------------------------------------------------
 
                               Apache License
@@ -2657,7 +2657,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 --------------------------------------------------------------------------------
-[14] Shipped by: ant-protocol 5.0.0 (LICENSE-MIT)
+[14] Shipped by: ant-protocol 5.0.1 (LICENSE-MIT)
 --------------------------------------------------------------------------------
 
 MIT License
@@ -6253,7 +6253,7 @@ IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 
 --------------------------------------------------------------------------------
-[73] Shipped by: evmlib 0.10.0 (LICENSE-APACHE), saorsa-core 0.29.1 (LICENSE-APACHE), self_encryption 0.36.2 (LICENSE-APACHE)
+[73] Shipped by: evmlib 0.10.0 (LICENSE-APACHE), saorsa-core 0.29.2 (LICENSE-APACHE), self_encryption 0.36.2 (LICENSE-APACHE)
 --------------------------------------------------------------------------------
 
                               Apache License
@@ -6448,7 +6448,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 --------------------------------------------------------------------------------
-[74] Shipped by: evmlib 0.10.0 (LICENSE-MIT), saorsa-core 0.29.1 (LICENSE-MIT), self_encryption 0.36.2 (LICENSE-MIT)
+[74] Shipped by: evmlib 0.10.0 (LICENSE-MIT), saorsa-core 0.29.2 (LICENSE-MIT), self_encryption 0.36.2 (LICENSE-MIT)
 --------------------------------------------------------------------------------
 
 MIT License
@@ -11280,7 +11280,7 @@ Permission is granted to anyone to use this software for any purpose, including 
    limitations under the License.
 
 --------------------------------------------------------------------------------
-[142] Shipped by: saorsa-transport 0.38.1 (LICENSE-APACHE)
+[142] Shipped by: saorsa-transport 0.38.2 (LICENSE-APACHE)
 --------------------------------------------------------------------------------
 
                                  Apache License
@@ -11486,7 +11486,7 @@ Permission is granted to anyone to use this software for any purpose, including 
    limitations under the License.
 
 --------------------------------------------------------------------------------
-[143] Shipped by: saorsa-transport 0.38.1 (LICENSE-MIT)
+[143] Shipped by: saorsa-transport 0.38.2 (LICENSE-MIT)
 --------------------------------------------------------------------------------
 
 Copyright (c) 2018 The quinn Developers
@@ -11498,7 +11498,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 --------------------------------------------------------------------------------
-[144] Shipped by: saorsa-transport 0.38.1 (src/congestion/bbr2/COPYING)
+[144] Shipped by: saorsa-transport 0.38.2 (src/congestion/bbr2/COPYING)
 --------------------------------------------------------------------------------
 
 Copyright (C) 2018-2019, Cloudflare, Inc.
@@ -11526,7 +11526,7 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 --------------------------------------------------------------------------------
-[145] Shipped by: saorsa-transport 0.38.1 (src/congestion/bbr2/LICENSE)
+[145] Shipped by: saorsa-transport 0.38.2 (src/congestion/bbr2/LICENSE)
 --------------------------------------------------------------------------------
 
 // Copyright 2015 The Chromium Authors. All rights reserved.
