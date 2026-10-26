@@ -3,8 +3,9 @@ name: Release
 # Merging a change to main that sets an untagged `package.json` version publishes
 # that version to npm and tags the merge commit `v<version>`; pushes to main whose
 # version is already tagged release nothing. Pushing a `v<version>` tag on main
-# publishes that version too. Running the workflow manually performs every release
-# check and packs the tarball without publishing it.
+# publishes that version too. Running the workflow manually, on a branch or a tag,
+# performs every release check and packs the tarball without publishing it.
+# scripts/release-decision.sh decides which of these a run is.
 on:
   push:
     branches:
@@ -37,63 +38,7 @@ jobs:
 
       - name: Determine version and dist-tag
         id: meta
-        shell: bash
-        run: |
-          name="$(node -p 'require("./package.json").name')"
-          version="$(node -p 'require("./package.json").version')"
-          tag="v${version}"
-          echo "name=${name}" >> "$GITHUB_OUTPUT"
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
-          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
-
-          publish=false
-          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
-            if [ "$GITHUB_REF_NAME" != "$tag" ]; then
-              echo "::error title=Tag does not match package.json::Tag ${GITHUB_REF_NAME} does not match package.json version ${version}. Tag the release as ${tag}."
-              exit 1
-            fi
-            if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
-              echo "::error title=Tag is not on main::${GITHUB_REF_NAME} points at ${GITHUB_SHA}, which is not on main."
-              exit 1
-            fi
-            publish=true
-          elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            # A push to main releases its version once: the release tags it.
-            if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
-              echo "${tag} is already tagged; nothing to release."
-              echo "publish=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            publish=true
-          fi
-          echo "publish=${publish}" >> "$GITHUB_OUTPUT"
-
-          # Same dist-tag policy as @withautonomi/ant: the first dot-separated pre-release
-          # identifier decides, and an unrecognised one fails rather than moving `latest`.
-          pre=""
-          if [ "$version" != "${version%%-*}" ]; then
-            pre="${version#*-}"
-          fi
-          if [ -z "$pre" ]; then
-            dist_tag="latest"
-          else
-            case "${pre%%.*}" in
-              beta) dist_tag="beta" ;;
-              rc) dist_tag="rc" ;;
-              *)
-                echo "::error title=Unrecognised pre-release::Version ${version} has pre-release identifier '${pre%%.*}', which maps to no npm dist-tag."
-                exit 1
-                ;;
-            esac
-          fi
-
-          echo "dist_tag=${dist_tag}" >> "$GITHUB_OUTPUT"
-          if [ "$publish" = true ]; then
-            echo "Releasing ${name}@${version} to dist-tag ${dist_tag}"
-          else
-            echo "Checking ${name}@${version} without publishing"
-          fi
-
+        run: bash scripts/release-decision.sh
   package:
     name: Verify and pack
     needs: decide
@@ -147,7 +92,8 @@ jobs:
   publish:
     name: Publish to npm
     needs: [decide, package]
-    if: needs.decide.outputs.publish == 'true'
+    # The decision publishes only for a push; checked here too, since a manual run must never publish.
+    if: github.event_name == 'push' && needs.decide.outputs.publish == 'true'
     runs-on: ubuntu-latest
     environment: npm
     permissions:
