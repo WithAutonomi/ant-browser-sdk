@@ -145,6 +145,15 @@ it("exports canonical mixed manifests and links through production WASM", async 
   await expect(pointerAddress(new Uint8Array(31))).rejects.toMatchObject({ code: "INVALID_SOURCE" });
 });
 
+it("leaves a Buffer owner seed unchanged when computing a pointer address", async () => {
+  const seed = Buffer.alloc(32, 7);
+  expect(await pointerAddress(seed)).toBe(await pointerAddress(new Uint8Array(32).fill(7)));
+  expect(seed.every(n => n === 7)).toBe(true);
+  const short = Buffer.alloc(31, 7);
+  await expect(pointerAddress(short)).rejects.toMatchObject({ code: "INVALID_SOURCE" });
+  expect(short.every(n => n === 7)).toBe(true);
+});
+
 it("rejects unsafe paths, collisions, malformed maps and hashes, torrent identities and imprecise size hints", async () => {
   await wasm();
   const entry = { kind: "public" as const, address: ADDRESS };

@@ -55,6 +55,18 @@ describe("pointer payment recovery", () => {
     expect(f.release).toHaveBeenCalledOnce();
   });
 
+  for (const outcome of ["stored", "failed"] as const) it(`leaves a Buffer owner seed unchanged when a write is ${outcome}`, async () => {
+    const f = fixture();
+    // A Buffer's slice() shares its bytes, so only a true copy may be zeroed.
+    const ownerSeed = Buffer.alloc(32, 19);
+    if (outcome === "failed") f.mocks.createPointer.mockRejectedValueOnce(new Error("no close group"));
+    const write = writePointer(f.raw, network, "createPointer", { ...f.options, ownerSeed }, f.context);
+    if (outcome === "failed") await expect(write).rejects.toBeInstanceOf(PointerError);
+    else await write;
+    expect(ownerSeed.every(n => n === 19)).toBe(true);
+    expect(f.mocks.createPointer.mock.calls[0]![0].every((n: number) => n === 0)).toBe(true);
+  });
+
   for (const outcome of ["kept", "failed"] as const) it(`has the wallet wait until its broadcast is journaled (write ${outcome})`, async () => {
     const f = fixture();
     let finishWrite!: () => void;

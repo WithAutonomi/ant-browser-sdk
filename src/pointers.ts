@@ -76,9 +76,18 @@ export class PointerError extends AutonomiError {
   }
 }
 
+/**
+ * A copy of the caller's seed for the SDK to zero once it is done. Never a
+ * view: a Node `Buffer`'s `slice()` shares its bytes, so zeroing that would
+ * clear the caller's seed too.
+ */
+function copySeed(seed: Uint8Array): Uint8Array {
+  return new Uint8Array(seed);
+}
+
 /** Compute an address offline without exposing the derived secret key. */
 export async function pointerAddress(ownerSeed: Uint8Array, options: ManifestOptions = {}): Promise<string> {
-  const seed = ownerSeed.slice();
+  const seed = copySeed(ownerSeed);
   try {
     throwIfAborted(options.signal);
     await abortable(initializeClientWasm(options.wasm), options.signal);
@@ -147,7 +156,7 @@ export async function writePointer(
 ): Promise<PointerWriteResult> {
   if (typeof options.onCheckpoint !== "function") throw new AutonomiError("INVALID_SOURCE", "Pointer writes require durable onCheckpoint persistence");
   if (!options.payment) throw new AutonomiError("PAYMENT_REQUIRED", "Pointer writes require a PaymentProvider");
-  const seed = options.ownerSeed.slice();
+  const seed = copySeed(options.ownerSeed);
   const payment = options.payment;
   const signal = options.signal;
   const writer = new CheckpointWriter(options.onCheckpoint);
