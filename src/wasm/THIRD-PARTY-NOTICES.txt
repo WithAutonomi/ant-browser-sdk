@@ -1238,9 +1238,9 @@ tinyvec_macros 0.1.1
     Redistributed under: MIT
     Source: https://static.crates.io/crates/tinyvec_macros/tinyvec_macros-0.1.1.crate
     Texts: [168], [169], [170]
-tokio 1.52.3
+tokio 1.53.3
     Licence: MIT
-    Source: https://static.crates.io/crates/tokio/tokio-1.52.3.crate
+    Source: https://static.crates.io/crates/tokio/tokio-1.53.3.crate
     Texts: [171]
 tokio-macros 2.7.0
     Licence: MIT
@@ -12409,7 +12409,7 @@ freely, subject to the following restrictions:
 
 
 --------------------------------------------------------------------------------
-[171] Shipped by: tokio 1.52.3 (LICENSE), tokio-stream 0.1.18 (LICENSE), tokio-util 0.7.18 (LICENSE)
+[171] Shipped by: tokio 1.53.3 (LICENSE), tokio-stream 0.1.18 (LICENSE), tokio-util 0.7.18 (LICENSE)
 --------------------------------------------------------------------------------
 
 MIT License
