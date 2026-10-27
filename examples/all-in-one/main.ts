@@ -1,5 +1,5 @@
 import {
-  AutonomiClient, type ClientOptions, type MediaSource, type PrivateFileReference, type UploadOptions,
+  AutonomiClient, createManifest, getBrowserCapabilities, type ClientOptions, type MediaSource, type PrivateFileReference, type UploadOptions,
 } from "@withautonomi/ant-browser-sdk";
 import { createEthersPaymentProvider } from "@withautonomi/ant-browser-sdk/ethers";
 import "../shared/style.css";
@@ -18,6 +18,8 @@ const connectButton = element<HTMLButtonElement>("connect");
 const uploadButton = element<HTMLButtonElement>("upload");
 const saveDataMapButton = element<HTMLButtonElement>("save-datamap");
 const downloadButton = element<HTMLButtonElement>("download");
+const diskDownloadButton = element<HTMLButtonElement>("download-to-disk");
+const cancelDownloadButton = element<HTMLButtonElement>("cancel-download");
 const streamButton = element<HTMLButtonElement>("stream");
 const media = element<HTMLVideoElement>("media");
 
@@ -25,10 +27,14 @@ let client: AutonomiClient | undefined;
 let mediaSource: MediaSource | undefined;
 // A private file is read through its DataMap; the page keeps it only in memory.
 let privateFile: PrivateFileReference | undefined;
+let diskDownload: AbortController | undefined;
+const canStreamToDisk = getBrowserCapabilities().operations.streamAndSave.available;
+if (!canStreamToDisk) diskDownloadButton.title = "Direct disk downloads require the File System Access API";
 
 connectButton.addEventListener("click", async () => {
   setBusy(connectButton, true);
   try {
+    diskDownload?.abort();
     client?.close();
     const options: ClientOptions = {
       onProgress: ({ operation, message }) => write(`[${operation}] ${message}`),
@@ -38,6 +44,7 @@ connectButton.addEventListener("click", async () => {
     connection.value = `Connected to ${client.connection.bootstrap.peerId.slice(0, 16)}…`;
     uploadButton.disabled = false;
     downloadButton.disabled = false;
+    diskDownloadButton.disabled = !canStreamToDisk;
     streamButton.disabled = false;
   } catch (error) {
     connection.value = "Connection failed";
@@ -88,6 +95,22 @@ saveDataMapButton.addEventListener("click", () => {
   URL.revokeObjectURL(link.href);
 });
 
+element<HTMLButtonElement>("export-manifest").addEventListener("click", async () => {
+  try {
+    const target = readTarget();
+    const exported = await createManifest({ entries: [typeof target === "string"
+      ? { kind: "public", address: target, path: "public-file" }
+      : { kind: "embedded", dataMap: target.dataMap, path: target.name ?? "private-file" }] });
+    element<HTMLTextAreaElement>("share-link").value = exported.link;
+    const anchor = document.createElement("a");
+    anchor.href = URL.createObjectURL(new Blob([exported.bytes.slice()], { type: "application/octet-stream" }));
+    anchor.download = "files.ant";
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(anchor.href), 60_000);
+    write(exported.linkRecommended ? "Exported manifest and share link" : "Exported manifest; the file is recommended for this long share link");
+  } catch (error) { writeError(error); }
+});
+
 dataMapInput.addEventListener("change", async () => {
   const selected = dataMapInput.files?.[0];
   if (!selected) return;
@@ -105,6 +128,35 @@ address.addEventListener("input", () => {
 function readTarget(): string | PrivateFileReference {
   return privateFile ?? address.value.trim();
 }
+
+diskDownloadButton.addEventListener("click", async () => {
+  if (!client || !canStreamToDisk) return;
+  const downloadingClient = client;
+  const target = readTarget();
+  const controller = new AbortController();
+  diskDownload = controller;
+  diskDownloadButton.disabled = true;
+  cancelDownloadButton.disabled = false;
+  try {
+    const result = await downloadingClient.streamAndSave(target, {
+      suggestedName: privateFile?.name ?? "autonomi-file",
+      signal: controller.signal,
+      onProgress: (event) => { if (event.unit === "bytes") write(`Saved ${event.completed}/${event.total} bytes`); },
+    });
+    write(`Verified and saved ${result.bytesWritten} bytes to ${result.name}; BLAKE3 ${result.hash}`);
+  } catch (error) {
+    writeError(error);
+  } finally {
+    // Reconnecting aborts this download, and a newer one may own the controls by now.
+    if (diskDownload === controller) {
+      diskDownload = undefined;
+      diskDownloadButton.disabled = !client || !canStreamToDisk;
+      cancelDownloadButton.disabled = true;
+    }
+  }
+});
+cancelDownloadButton.addEventListener("click", () => diskDownload?.abort());
+window.addEventListener("beforeunload", () => diskDownload?.abort());
 
 downloadButton.addEventListener("click", async () => {
   if (!client) return;

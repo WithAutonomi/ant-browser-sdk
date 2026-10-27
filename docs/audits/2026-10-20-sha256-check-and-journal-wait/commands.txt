@@ -1,0 +1,23 @@
+Node worktree: /Users/mick/RustroverProjects/ant-node-sdk-devnet-20261015 (clean 26129a2611cac08f9f53a557f91fb8806b40a1cc)
+RUSTUP_TOOLCHAIN=1.99.0 cargo build --bin ant-devnet
+./target/debug/ant-devnet --nodes 7 --bootstrap-count 3 --base-port 0 --webrtc-direct --webrtc-direct-base-port 0 --serve-port 39970 --enable-evm --data-dir <scratch>/data --manifest <scratch>/devnet.json
+
+ant-client worktree: /Users/mick/RustroverProjects/ant-client-pr230-bab6beb-sdk (clean, detached at 404fa3440c7529d2ab0e10ef200d960d619c0fd4)
+RUSTUP_TOOLCHAIN=1.99.0 cargo build --release --bin ant
+
+SDK worktree: /Users/mick/RustroverProjects/ant-browser-sdk-pr7-bab6beb (clean 317a634b2fedddc8322c6fbf04b85ab73bbdbfc7)
+npm run build
+npx vite --config examples/all-in-one/vite.config.ts --host 127.0.0.1 --port 39971 --strictPort
+node <scratch>/browser.mjs <scratch>/evidence
+node <scratch>/demo.mjs <scratch>/evidence
+# The CLI ran under a throwaway HOME so nothing reached the user's data directory.
+HOME=<scratch>/cli-home ant --json manifest show <file>.ant
+HOME=<scratch>/cli-home ant --json --devnet-manifest <scratch>/devnet.json --allow-loopback manifest download <file>.ant -o <scratch>/native/out-<file>
+#   for public, private, public-wrong-sha256 and private-wrong-sha256
+npm run check
+npm run build:examples
+npm pack --dry-run --json
+python3 scripts/adr-governance.py
+python3 .github/scripts/test_check_pr.py
+# verify:wasm used GITHUB_TOKEN obtained from gh auth token without logging it.
+npm run verify:wasm

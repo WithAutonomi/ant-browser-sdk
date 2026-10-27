@@ -1,0 +1,448 @@
+{
+  "startedAt": "2026-10-22T15:18:43.796Z",
+  "browser": "151.0.7922.34",
+  "variants": [
+    {
+      "name": "candidate",
+      "url": "http://127.0.0.1:39831"
+    },
+    {
+      "name": "baseline",
+      "url": "http://127.0.0.1:39830"
+    }
+  ],
+  "runs": 5,
+  "scriptSha256": "78b1f3be7b8b1573e35be54fb3a368427a527fa47e5951ac0012fdb876689e93",
+  "samples": [
+    {
+      "round": 1,
+      "variant": "candidate",
+      "waiting": 2,
+      "sourceReadyMs": 20.299999997019768,
+      "firstFrameMs": 6709.10000000298,
+      "readsBeforeFirstFrame": [
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 4,
+          "ms": 6589
+        },
+        {
+          "start": 54837665,
+          "length": 65536,
+          "at": 4,
+          "ms": -1
+        },
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 22,
+          "ms": 6570
+        },
+        {
+          "start": 1048576,
+          "length": 1048576,
+          "at": 6593,
+          "ms": 30
+        },
+        {
+          "start": 2097152,
+          "length": 1048576,
+          "at": 6624,
+          "ms": 28
+        },
+        {
+          "start": 3145728,
+          "length": 1048576,
+          "at": 6653,
+          "ms": -1
+        }
+      ],
+      "playedIn10s": 9.958454,
+      "seekMs": 14960.79999999702,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "0c01cd4377a4b4846ae989691317738b909a83ce95e81ea62ce1833391a794a8"
+      ]
+    },
+    {
+      "round": 1,
+      "variant": "baseline",
+      "waiting": 2,
+      "sourceReadyMs": 17.599999994039536,
+      "firstFrameMs": 10609.799999991059,
+      "readsBeforeFirstFrame": [
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 8,
+          "ms": 10546
+        },
+        {
+          "start": 54837665,
+          "length": 65536,
+          "at": 8,
+          "ms": 8222
+        },
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 21,
+          "ms": 10533
+        },
+        {
+          "start": 1048576,
+          "length": 1048576,
+          "at": 10555,
+          "ms": 27
+        },
+        {
+          "start": 2097152,
+          "length": 1048576,
+          "at": 10584,
+          "ms": 27
+        }
+      ],
+      "playedIn10s": 9.989044999999999,
+      "seekMs": 8765.899999994042,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "0c01cd4377a4b4846ae989691317738b909a83ce95e81ea62ce1833391a794a8"
+      ]
+    },
+    {
+      "round": 2,
+      "variant": "baseline",
+      "status": "failed",
+      "error": "page.evaluate: NotSupportedError: Failed to load because no supported source was found.",
+      "pageErrors": [],
+      "wasm": [
+        "0c01cd4377a4b4846ae989691317738b909a83ce95e81ea62ce1833391a794a8"
+      ]
+    },
+    {
+      "round": 2,
+      "variant": "candidate",
+      "waiting": 2,
+      "sourceReadyMs": 16.299999997019768,
+      "firstFrameMs": 9634.09999999404,
+      "readsBeforeFirstFrame": [
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 3,
+          "ms": 9571
+        },
+        {
+          "start": 54837665,
+          "length": 65536,
+          "at": 3,
+          "ms": 9337
+        },
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 18,
+          "ms": 9556
+        },
+        {
+          "start": 1048576,
+          "length": 1048576,
+          "at": 9576,
+          "ms": 31
+        },
+        {
+          "start": 2097152,
+          "length": 1048576,
+          "at": 9609,
+          "ms": 30
+        }
+      ],
+      "playedIn10s": 9.980536,
+      "seekMs": 11478.299999994037,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "0c01cd4377a4b4846ae989691317738b909a83ce95e81ea62ce1833391a794a8"
+      ]
+    },
+    {
+      "round": 3,
+      "variant": "candidate",
+      "waiting": 2,
+      "sourceReadyMs": 20.400000005960464,
+      "firstFrameMs": 6483.800000002981,
+      "readsBeforeFirstFrame": [
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 4,
+          "ms": 6423
+        },
+        {
+          "start": 54837665,
+          "length": 65536,
+          "at": 4,
+          "ms": 3557
+        },
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 23,
+          "ms": 6405
+        },
+        {
+          "start": 1048576,
+          "length": 1048576,
+          "at": 6428,
+          "ms": 28
+        },
+        {
+          "start": 2097152,
+          "length": 1048576,
+          "at": 6458,
+          "ms": 25
+        }
+      ],
+      "playedIn10s": 9.987957999999999,
+      "seekMs": 4106.79999999404,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "0c01cd4377a4b4846ae989691317738b909a83ce95e81ea62ce1833391a794a8"
+      ]
+    },
+    {
+      "round": 3,
+      "variant": "baseline",
+      "waiting": 2,
+      "sourceReadyMs": 22.299999997019768,
+      "firstFrameMs": 11295.70000000894,
+      "readsBeforeFirstFrame": [
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 12,
+          "ms": 11227
+        },
+        {
+          "start": 54837665,
+          "length": 65536,
+          "at": 13,
+          "ms": 2954
+        },
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 26,
+          "ms": 11213
+        },
+        {
+          "start": 1048576,
+          "length": 1048576,
+          "at": 11240,
+          "ms": 28
+        },
+        {
+          "start": 2097152,
+          "length": 1048576,
+          "at": 11270,
+          "ms": 29
+        }
+      ],
+      "playedIn10s": 9.986059000000001,
+      "seekMs": 65,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "0c01cd4377a4b4846ae989691317738b909a83ce95e81ea62ce1833391a794a8"
+      ]
+    },
+    {
+      "round": 4,
+      "variant": "baseline",
+      "waiting": 2,
+      "sourceReadyMs": 22.299999997019768,
+      "firstFrameMs": 8426.20000000596,
+      "readsBeforeFirstFrame": [
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 12,
+          "ms": 8359
+        },
+        {
+          "start": 54837665,
+          "length": 65536,
+          "at": 12,
+          "ms": 4328
+        },
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 26,
+          "ms": 8344
+        },
+        {
+          "start": 1048576,
+          "length": 1048576,
+          "at": 8372,
+          "ms": 27
+        },
+        {
+          "start": 2097152,
+          "length": 1048576,
+          "at": 8401,
+          "ms": 26
+        }
+      ],
+      "playedIn10s": 9.987123,
+      "seekMs": 3379.800000002979,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "0c01cd4377a4b4846ae989691317738b909a83ce95e81ea62ce1833391a794a8"
+      ]
+    },
+    {
+      "round": 4,
+      "variant": "candidate",
+      "waiting": 2,
+      "sourceReadyMs": 22.600000008940697,
+      "firstFrameMs": 7738.20000000298,
+      "readsBeforeFirstFrame": [
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 6,
+          "ms": 7674
+        },
+        {
+          "start": 54837665,
+          "length": 65536,
+          "at": 6,
+          "ms": 2597
+        },
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 25,
+          "ms": 7655
+        },
+        {
+          "start": 1048576,
+          "length": 1048576,
+          "at": 7680,
+          "ms": 31
+        },
+        {
+          "start": 2097152,
+          "length": 1048576,
+          "at": 7713,
+          "ms": 28
+        }
+      ],
+      "playedIn10s": 9.988992,
+      "seekMs": 5214.9999999970205,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "0c01cd4377a4b4846ae989691317738b909a83ce95e81ea62ce1833391a794a8"
+      ]
+    },
+    {
+      "round": 5,
+      "variant": "candidate",
+      "waiting": 2,
+      "sourceReadyMs": 21.799999997019768,
+      "firstFrameMs": 5396.5,
+      "readsBeforeFirstFrame": [
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 4,
+          "ms": 5335
+        },
+        {
+          "start": 54837665,
+          "length": 65536,
+          "at": 4,
+          "ms": 2784
+        },
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 24,
+          "ms": 5315
+        },
+        {
+          "start": 1048576,
+          "length": 1048576,
+          "at": 5340,
+          "ms": 29
+        },
+        {
+          "start": 2097152,
+          "length": 1048576,
+          "at": 5371,
+          "ms": 27
+        }
+      ],
+      "playedIn10s": 9.989819,
+      "seekMs": 7699.20000000596,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "0c01cd4377a4b4846ae989691317738b909a83ce95e81ea62ce1833391a794a8"
+      ]
+    },
+    {
+      "round": 5,
+      "variant": "baseline",
+      "waiting": 2,
+      "sourceReadyMs": 21.599999994039536,
+      "firstFrameMs": 9580.70000000298,
+      "readsBeforeFirstFrame": [
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 12,
+          "ms": 9491
+        },
+        {
+          "start": 54837665,
+          "length": 65536,
+          "at": 12,
+          "ms": 6105
+        },
+        {
+          "start": 0,
+          "length": 1048576,
+          "at": 25,
+          "ms": 9477
+        },
+        {
+          "start": 1048576,
+          "length": 1048576,
+          "at": 9522,
+          "ms": 31
+        },
+        {
+          "start": 2097152,
+          "length": 1048576,
+          "at": 9570,
+          "ms": 28
+        }
+      ],
+      "playedIn10s": 9.997207000000001,
+      "seekMs": 2686.4000000059605,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "0c01cd4377a4b4846ae989691317738b909a83ce95e81ea62ce1833391a794a8"
+      ]
+    }
+  ]
+}

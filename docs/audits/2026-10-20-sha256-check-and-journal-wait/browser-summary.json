@@ -1,0 +1,181 @@
+{
+  "browser": "151.0.7922.34",
+  "sdkRevision": "317a634b2fedddc8322c6fbf04b85ab73bbdbfc7",
+  "wasm": {
+    "repository": "https://github.com/WithAutonomi/ant-client",
+    "revision": "404fa3440c7529d2ab0e10ef200d960d619c0fd4",
+    "dirty": false,
+    "target": "wasm32-unknown-unknown",
+    "features": [
+      "browser-wasm"
+    ],
+    "defaultFeatures": false,
+    "cargoLockSha256": "d3682d218f167a7e216cacbe9fe189b926ff7ed685bba95a3c02b0e6d85ee373",
+    "wasmSha256": "e28ec0cda529ed404f0f22fb260aedbe6d9278e85484fd3e28658669bff08497",
+    "rustc": "rustc 1.99.0 (b940084d7 2026-09-28)",
+    "wasmPack": "wasm-pack 0.15.0",
+    "noticesSha256": "60ff80092cfb004811f2b4bc3292f12e56bd9a60b3960007ae8ff5236e3485e0",
+    "rustStdCopyrightSha256": "5647be074c8edf7339fd863055923a8fc80bc5610a8d4661ec3b767b9d392c27",
+    "noticesGeneratorSha256": "fbae032f6ae379d81311ceeabb2d23cd9d40af1a69ca0b422a50b632d7b31bd7",
+    "noticesConfigSha256": "1d5154cdb0705f6eed668288a0e31f31f273dace0a404f97c091c3d2bdd72cf3"
+  },
+  "node": "26129a2611cac08f9f53a557f91fb8806b40a1cc",
+  "sha256s": {
+    "public": "904a3873e93109e3c3f84856be8a082da63c28dedba1f03688b6b71e95fcbac2",
+    "private": "ab9a1202e187d81f055e61e0658e40d3a37030c8e222b140183b3adc6529af42"
+  },
+  "wrongSha256s": {
+    "public": "004a3873e93109e3c3f84856be8a082da63c28dedba1f03688b6b71e95fcbac2",
+    "private": "0b9a1202e187d81f055e61e0658e40d3a37030c8e222b140183b3adc6529af42"
+  },
+  "prefixes": {
+    "public": "c65f816209f5c871eebcf59336dcc6bb",
+    "private": "0b514109838fdc7ec1b285e428414357"
+  },
+  "result": [
+    {
+      "visibility": "public",
+      "bytes": 13056,
+      "hash": "fe4211228c6cdfee62aace2752530eb725c50d0071d944b3c1c35f254b784d5b",
+      "sha256": "904a3873e93109e3c3f84856be8a082da63c28dedba1f03688b6b71e95fcbac2",
+      "linkRecommended": true,
+      "manifestBytes": 157,
+      "download": {
+        "bytes": 13056,
+        "matchesClaim": true
+      },
+      "downloadMismatch": {
+        "code": "DOWNLOAD_FAILED"
+      },
+      "downloadAndSave": {
+        "method": "file-picker"
+      },
+      "downloadAndSaveMismatch": {
+        "code": "DOWNLOAD_FAILED",
+        "writables": 0,
+        "refusedFileLeft": false
+      },
+      "streamAndSaveIgnoresClaim": {
+        "bytesWritten": 13056
+      }
+    },
+    {
+      "visibility": "private",
+      "bytes": 13056,
+      "hash": "4b891d822ea88a54a34238945c77a09bf2e992936c0b84eae9603858103340f8",
+      "sha256": "ab9a1202e187d81f055e61e0658e40d3a37030c8e222b140183b3adc6529af42",
+      "linkRecommended": true,
+      "manifestBytes": 335,
+      "download": {
+        "bytes": 13056,
+        "matchesClaim": true
+      },
+      "downloadMismatch": {
+        "code": "DOWNLOAD_FAILED"
+      },
+      "downloadAndSave": {
+        "method": "file-picker"
+      },
+      "downloadAndSaveMismatch": {
+        "code": "DOWNLOAD_FAILED",
+        "writables": 0,
+        "refusedFileLeft": false
+      },
+      "streamAndSaveIgnoresClaim": {
+        "bytesWritten": 13056
+      }
+    },
+    {
+      "pointers": {
+        "fileAddress": "56d383f4a837fd7e5dd79f9d6be821852e59b45f38e396ba8d184fb9e1a09798",
+        "address": "20928dcf861fad8a2e8f90ee1faffbc1a0d3725f0e58370ffe91752de85026de",
+        "created": "0",
+        "updated": "1",
+        "transferred": "18446744073709551615",
+        "finality": {
+          "address": "20928dcf861fad8a2e8f90ee1faffbc1a0d3725f0e58370ffe91752de85026de",
+          "group": 7,
+          "answered": 7,
+          "status": "final",
+          "states": [
+            {
+              "stateId": "ab532131ceac59b2e24e7a886dde0ab12c104f25a2515d85734ae1b17380bc3b",
+              "kind": "pointer",
+              "kindTag": 1,
+              "target": "c9bb4399fe00c8e820f375a7f9d15c155a72a09bd5ac52c3cde62b464dec23df",
+              "holders": 7,
+              "transferredTo": "c9bb4399fe00c8e820f375a7f9d15c155a72a09bd5ac52c3cde62b464dec23df"
+            }
+          ],
+          "majority": {
+            "stateId": "ab532131ceac59b2e24e7a886dde0ab12c104f25a2515d85734ae1b17380bc3b",
+            "kind": "pointer",
+            "kindTag": 1,
+            "target": "c9bb4399fe00c8e820f375a7f9d15c155a72a09bd5ac52c3cde62b464dec23df",
+            "holders": 7,
+            "transferredTo": "c9bb4399fe00c8e820f375a7f9d15c155a72a09bd5ac52c3cde62b464dec23df"
+          }
+        },
+        "paidRetry": "ab532131ceac59b2e24e7a886dde0ab12c104f25a2515d85734ae1b17380bc3b",
+        "samePageConfirmed": "74637e69046a3f832461069540f51ce9e1185939b5d70fa55b929cb69c5815cb",
+        "payCount": 1
+      }
+    },
+    {
+      "streamCancellation": {
+        "cancelled": true,
+        "aborts": 1,
+        "locked": false
+      }
+    },
+    {
+      "journalWaits": {
+        "upload public": [
+          {
+            "checkpointsWithoutHash": 0,
+            "transactionHash": "0x6d9c2092c79bf5e82b8f1295f12af0ee9b020c40c6b44961532e1de862a39d03",
+            "broadcastMs": 1756,
+            "journalPersistedMs": 3264,
+            "submittedSettledMs": 3265,
+            "walletReturnedMs": 3282
+          }
+        ],
+        "upload private": [
+          {
+            "checkpointsWithoutHash": 0,
+            "transactionHash": "0x4f0dab76ade583b05b9af6cca0d9acca1b53bf8de8a768e0ddf92ce8c0cb6c07",
+            "broadcastMs": 14334,
+            "journalPersistedMs": 15842,
+            "submittedSettledMs": 15842,
+            "walletReturnedMs": 15855
+          }
+        ],
+        "pointer create": [
+          {
+            "checkpointsWithoutHash": 0,
+            "transactionHash": "0xfb240476ffa5cf170a4e9b13c964c0a98ce47a9f00e6524102c17e70c008756c",
+            "broadcastMs": 28333,
+            "journalPersistedMs": 29840,
+            "submittedSettledMs": 29840,
+            "walletReturnedMs": 29854
+          }
+        ]
+      }
+    },
+    {
+      "lostPageRecovery": {
+        "address": "b97428a33f15d1bd8c292f040a59007f1b0479720b5ee43c8d52c9b947ba83b2",
+        "transactionHash": "0x795560b1e630348f9310f12b1bd29f96631ad03d8dd9c266a2ad1c547c6caece",
+        "lostPagePayments": 1,
+        "recoveryPagePayments": 0,
+        "stateId": "f188607bf1d6fd601db273cb1da9e629e99ba00ca17919c76ccc50e63a957e70"
+      }
+    }
+  ],
+  "pageErrors": [],
+  "wasmHashes": [
+    "e28ec0cda529ed404f0f22fb260aedbe6d9278e85484fd3e28658669bff08497",
+    "e28ec0cda529ed404f0f22fb260aedbe6d9278e85484fd3e28658669bff08497",
+    "e28ec0cda529ed404f0f22fb260aedbe6d9278e85484fd3e28658669bff08497"
+  ]
+}

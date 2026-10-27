@@ -1,3 +1,5 @@
+import { writePointer, resumePointer, type Pointer, type PointerTarget, type PointerFinality, type PointerWriteOptions, type PointerTransferOptions, type PointerWriteResult, type PointerRecoveryOptions } from "./pointers.js";
+import type { StreamSaveOptions, StreamSaveResult } from "./types.js";
 import { getNetworkDefaults, snapshotNetworkProfile, type NetworkConnectionOptions, type NetworkProfile } from "./network-profile.js";
 import { saveUploadCheckpoint } from "./internal/record-store.js";
 import { assertFileSize, SDK_LIMITS } from "./limits.js";
@@ -7,7 +9,7 @@ import {
 } from "./internal/protocol.js";
 import { AutonomiError, UploadError, wrapError } from "./errors.js";
 import { createPublicFileReader, type PublicFileReader } from "./file-reader.js";
-import { abortable, isAbort, throwIfAborted } from "./internal/abort.js";
+import { abortable, isAbort, settledWithin, throwIfAborted } from "./internal/abort.js";
 import { getBindings, initializeClientWasm, type RawNetworkClient } from "./internal/runtime.js";
 import { isPlayableMedia, MediaBridge, primePlayback } from "./internal/media.js";
 import { assertStagingSupported, type WorkerWasmSource } from "./internal/staging.js";
@@ -25,7 +27,7 @@ import {
   corePaymentNetwork, paymentNetworkFromCore, assertPaymentChainId, type CorePaymentNetwork,
 } from "./internal/payment-network.js";
 import { requestSaveFileHandle, saveDownload } from "./save.js";
-import { isManifestEntry, manifestEntrySource, type ManifestEntry } from "./manifest.js";
+import { checkSha256, fileName, isManifestEntry, manifestEntrySource, recordedSha256, type ManifestEntry } from "./manifest.js";
 import type {
   MerklePaymentRequest, MerklePaymentReceipt,
   ClientOptions,
@@ -64,6 +66,12 @@ interface RawDownloadResult {
   dataMapNode?: CoreNetworkNode;
 }
 
+/** Saved-file name when neither the caller nor the source names one. */
+const DEFAULT_SAVE_NAME = "autonomi-file";
+
+/** As Rust's page-callback timeout: the longest a wallet waits for its broadcast to be journaled. */
+const SUBMISSION_JOURNAL_TIMEOUT_MS = 30_000;
+
 interface OperationScope {
   id: string;
   reporters: Reporter[];
@@ -85,6 +93,12 @@ export class AutonomiClient {
   #listeners = new Set<ProgressListener>();
   #operations = new Set<AbortController>();
   #closed = false;
+  /** Raw calls borrowing the WASM handle; it is freed only once none remain. */
+  #networkLeases = 0;
+  /** Writes whose payment may be submitted; the transport stays open for them. */
+  #transportHolds = 0;
+  #transportClosed = false;
+  #networkFreed = false;
   #media?: MediaBridge;
   #workerWasm: WorkerWasmSource | undefined;
 
@@ -245,7 +259,7 @@ export class AutonomiClient {
       this.#assertOpen();
       report(`Finding nodes closest to ${target}`);
       const result = (await abortable(
-        this.#network.findClosest(target, report),
+        this.#withNetwork((network) => network.findClosest(target, report)),
         operation.signal,
       )) as CoreLookupResult;
       report("Closest-node lookup complete", { phase: "complete" });
@@ -341,11 +355,11 @@ export class AutonomiClient {
       // A windowed checkpoint keeps naming its window after reconciliation.
       const windowed = unwrapWindowCheckpoint(checkpoint);
       const envelope = (value: string): string => windowed ? wrapWindowCheckpoint(value, windowed.window) : value;
-      return envelope(await this.#network.reconcileFailedUploadPayment(
+      return envelope(await this.#withNetwork((network) => network.reconcileFailedUploadPayment(
         windowed?.checkpoint ?? checkpoint,
         (attempt, scope) => options.verifyFailure(attempt, scope),
         value => options.onCheckpoint(envelope(value)),
-      ));
+      )));
     } catch (error) {
       throw wrapError("PAYMENT_FAILED", "Could not reconcile failed storage payment", error);
     }
@@ -415,8 +429,9 @@ export class AutonomiClient {
           report, signal: operation.signal,
           submitted: (submission) => {
             // Journal broadcast evidence before validating provider metadata.
+            let write: Promise<void> | undefined;
             if (persistSubmission) {
-              const write = persistSubmission({ transactionHash: submission.transactionHash,
+              write = persistSubmission({ transactionHash: submission.transactionHash,
                 totalAmount: submission.totalAmount, walletAddress: submission.walletAddress });
               void write.catch(() => undefined);
               journalWrites.push(write);
@@ -424,6 +439,8 @@ export class AutonomiClient {
             const tracked = trackPayment(state, network, quotes, submission);
             submitted.push(tracked);
             try { onPaymentSubmitted?.(tracked.handle); } catch { /* Receipt observation must survive UI failures. */ }
+            // The wallet waits, bounded, until the broadcast is journaled; a failed write never fails it.
+            return write && settledWithin(write, SUBMISSION_JOURNAL_TIMEOUT_MS);
           },
         })).then(async (receipt) => {
           // A malformed receipt may still identify a transaction that spent funds.
@@ -467,8 +484,9 @@ export class AutonomiClient {
           },
           submitted: (submission) => {
             // Journal broadcast evidence before validating provider metadata.
+            let write: Promise<void> | undefined;
             if (persistSubmission) {
-              const write = persistSubmission({ transactionHash: submission.transactionHash,
+              write = persistSubmission({ transactionHash: submission.transactionHash,
                 totalAmount: submission.totalAmount, walletAddress: submission.walletAddress });
               void write.catch(() => undefined);
               journalWrites.push(write);
@@ -476,6 +494,7 @@ export class AutonomiClient {
             const tracked = trackPayment(state, network, [], submission, request);
             submitted.push(tracked);
             try { onPaymentSubmitted?.(tracked.handle); } catch { /* Preserve settlement observation. */ }
+            return write && settledWithin(write, SUBMISSION_JOURNAL_TIMEOUT_MS);
           },
         })).then(async (receipt) => {
           // A malformed receipt may still identify a transaction that spent funds.
@@ -524,7 +543,6 @@ export class AutonomiClient {
       if (resuming) await reconcilePayments(state, operation.signal);
       if (!state.result) {
         report(`Preparing storage for ${state.name}`, { phase: "preparing" });
-        const network = this.#network;
         const uploadBatch: RecordBatchUploader = async (batch, load, window) => {
           const checkpoint = async (value: string) => {
             state.coreCheckpoint = value;
@@ -532,10 +550,10 @@ export class AutonomiClient {
             if (state.onCheckpoint) await state.onCheckpoint(persisted);
             else { await saveUploadCheckpoint(state.handle.id, persisted); state.checkpointStoredLocally = true; }
           };
-          return await network.uploadRecords(
+          return await this.#withNetwork((network) => network.uploadRecords(
             batch, corePaymentNetwork(state.network), load, payForQuotes, report, state.coreCheckpoint, checkpoint,
             state.paymentMode ?? "auto", payForMerkle,
-          ) as CoreRecordBatchResult;
+          )) as CoreRecordBatchResult;
         };
         const uploading = state.cursor
           ? uploadFileInWindows(state, uploadBatch, { report, signal: operation.signal, wasm: this.#workerWasm })
@@ -581,6 +599,7 @@ export class AutonomiClient {
   ): Promise<DownloadResult | PrivateDownloadResult> {
     // A manifest entry reads as its embedded DataMap or its public address.
     const file = isManifestEntry(source) ? manifestEntrySource(source) : source;
+    const sha256 = isManifestEntry(source) ? recordedSha256(source) : undefined;
     const operation = this.#startOperation(options);
     const report = this.#reporter("download", options.onProgress, operation);
     try {
@@ -595,16 +614,27 @@ export class AutonomiClient {
       }
       throwIfAborted(operation.signal);
       const cap = concurrency === "auto" ? undefined : concurrency;
+      // Buffered results hold the whole file; the default keeps an unbounded file from exhausting the tab.
+      const maxMemoryBytes = options.maxMemoryBytes ?? SDK_LIMITS.defaultDownloadMemoryBytes;
+      if (!Number.isSafeInteger(maxMemoryBytes) || maxMemoryBytes < 0) {
+        throw new AutonomiError("DOWNLOAD_FAILED", "maxMemoryBytes must be a non-negative safe integer");
+      }
+      const downloadOptions = { maxMemoryBytes, signal: operation.signal };
       const raw = (await abortable(
-        isPrivateFile(file)
-          ? this.#network.downloadPrivateFile(corePrivateFile(file), cap, report)
-          : this.#network.downloadPublicFile(typeof file === "string" ? file : coreFileReference(file), cap, report),
+        this.#withNetwork((network) => isPrivateFile(file)
+          ? network.downloadPrivateFile(corePrivateFile(file), cap, report, downloadOptions)
+          : network.downloadPublicFile(typeof file === "string" ? file : coreFileReference(file), cap, report, downloadOptions)),
         operation.signal,
       )) as RawDownloadResult;
       throwIfAborted(operation.signal);
+      // The core returns a JS-owned buffer. Blob takes its own snapshot; avoid
+      // another file-sized intermediate copy. Copy only shared-buffer inputs.
+      const blobBytes = raw.content.buffer instanceof ArrayBuffer
+        ? new Uint8Array(raw.content.buffer, raw.content.byteOffset, raw.content.byteLength)
+        : new Uint8Array(raw.content);
+      // Before the Blob snapshot exists, so WebCrypto's copy does not raise the peak.
+      if (sha256 !== undefined) await abortable(checkSha256(blobBytes, sha256, raw.file.name), operation.signal);
       report(`Downloaded ${raw.file.name}`, { phase: "complete", completed: raw.content.byteLength, total: raw.content.byteLength, unit: "bytes" });
-      const blobBytes = new Uint8Array(raw.content.byteLength);
-      blobBytes.set(raw.content);
       const downloaded = {
         bytes: raw.content,
         blob: new Blob([blobBytes], {
@@ -644,19 +674,13 @@ export class AutonomiClient {
     try {
       this.#assertOpen();
       report("Choosing a download destination", { phase: "saving" });
-      const knownFile =
-        typeof file === "string"
-          ? this.files.find(
-              (candidate) => normalizeAddress(candidate.address) === normalizeAddress(file),
-            )
-          : file;
-      const suggestedName = options.suggestedName ?? knownFile?.name;
-      const fileHandle =
-        options.fileHandle ??
-        (options.useFilePicker === false
-          ? undefined
-          : await requestSaveFileHandle(suggestedName, operation.signal));
-      const download = await this.download(file, {
+      const suggestedName = options.suggestedName ?? this.#knownFile(file)?.name;
+      const picked = (options.fileHandle || options.useFilePicker === false)
+        ? undefined
+        : await requestSaveFileHandle(suggestedName, operation.signal);
+      const fileHandle = options.fileHandle ?? picked;
+      // The entry itself, so its sha256 is checked before anything is saved.
+      const download = await this.download(source, {
         ...options,
         parentOperationId: operation.id,
         signal: operation.signal,
@@ -682,6 +706,120 @@ export class AutonomiClient {
     }
   }
 
+  /** Stream a complete verified file to disk or a supplied stream, with bounded memory. */
+  async streamAndSave(
+    source: string | PublicFile | PrivateFileReference | ManifestEntry,
+    options: StreamSaveOptions = {},
+  ): Promise<StreamSaveResult> {
+    const operation = this.#startOperation(options);
+    const report = this.#reporter("stream-and-save", options.onProgress, operation);
+    let reader: PublicFileReader | undefined;
+    let destination: WritableStream<Uint8Array> | undefined;
+    try {
+      this.#assertOpen();
+      throwIfAborted(operation.signal);
+      if (options.destination && options.fileHandle) throw new AutonomiError("INVALID_SOURCE", "Supply either destination or fileHandle");
+      if (options.destination?.locked) throw new AutonomiError("INVALID_SOURCE", "The destination stream is locked");
+      // A manifest entry reads as its embedded DataMap or public address and saves under its own name.
+      const file = isManifestEntry(source) ? manifestEntrySource(source) : source;
+      const name = options.suggestedName || (isManifestEntry(source) ? fileName(source) : this.#knownFile(file)?.name) || DEFAULT_SAVE_NAME;
+      report("Choosing a streaming destination", { phase: "saving" });
+      let picked: FileSystemFileHandle | undefined;
+      // Invoke the picker before any network await, while user activation is available.
+      if (!options.destination && !options.fileHandle) {
+        picked = await requestSaveFileHandle(name, operation.signal);
+        if (!picked) {
+          throw new AutonomiError("SAVE_FAILED", "Streaming saves require a destination WritableStream, a fileHandle, or a browser save picker opened from a user action");
+        }
+      }
+      const handle = options.fileHandle ?? picked;
+      destination = options.destination;
+      reader = await this.#openReader(file, {
+        signal: operation.signal, parentOperationId: operation.id, ...(options.onProgress ? { onProgress: options.onProgress } : {}),
+      }, false);
+      if (handle) destination = await abortable(handle.createWritable(), operation.signal, undefined,
+        (late) => { void late.abort(operation.signal.reason).catch(() => undefined); });
+      throwIfAborted(operation.signal);
+      const result = await reader.pipeTo(destination!, {
+        signal: operation.signal,
+        onProgress: (completed, total) => {
+          report(`Saved ${completed} of ${total} bytes`, { phase: "saving", completed, total, unit: "bytes" });
+        },
+      });
+      const savedName = handle?.name || name;
+      report(`Saved ${savedName}`, { phase: "complete" });
+      return { ...result, name: savedName, method: handle ? "file-picker" : "stream" };
+    } catch (error) {
+      // pipeTo owns its writer during transfer. Abort an acquired but not yet handed-off stream too.
+      if (destination && !destination.locked) void destination.abort(error).catch(() => undefined);
+      const failure = isAbort(error, operation.signal) ? error : wrapError("SAVE_FAILED", "Could not stream and save the file", error);
+      operation.fail(failure);
+      throw failure;
+    } finally {
+      reader?.close();
+      operation.finish();
+    }
+  }
+
+  getPointer(address: string, options: OperationOptions = {}): Promise<Pointer | null> {
+    return this.#pointerOperation(options, (network) => network.getPointer(address) as Promise<Pointer | null>, true);
+  }
+
+  resolvePointer(address: string, options: OperationOptions = {}): Promise<PointerTarget> {
+    return this.#pointerOperation(options, (network) => network.resolvePointer(address) as Promise<PointerTarget>, true);
+  }
+
+  pointerFinality(address: string, options: OperationOptions = {}): Promise<PointerFinality> {
+    return this.#pointerOperation(options, (network) => network.pointerFinality(address) as Promise<PointerFinality>, true);
+  }
+
+  createPointer(options: PointerWriteOptions): Promise<PointerWriteResult> {
+    return this.#writePointer("createPointer", options);
+  }
+
+  updatePointer(options: PointerWriteOptions): Promise<PointerWriteResult> {
+    return this.#writePointer("updatePointer", options);
+  }
+
+  /** Permanently transfer control. A successful write still requires a finality check. */
+  transferPointer(options: PointerTransferOptions): Promise<PointerWriteResult> {
+    return this.#writePointer("transferPointer", options);
+  }
+
+  /** Reuse the original payment and signed state; never submits another payment. */
+  resumePointer(checkpoint: string, options: PointerRecoveryOptions): Promise<Pointer> {
+    return this.#pointerOperation(options, (network, signal, report) => resumePointer(network, this.#connection.paymentNetwork,
+      checkpoint, { ...options, signal, payment: options.payment ?? this.#payment }, report));
+  }
+
+  #writePointer(
+    method: "createPointer" | "updatePointer" | "transferPointer",
+    options: PointerWriteOptions | PointerTransferOptions,
+  ): Promise<PointerWriteResult> {
+    return this.#pointerOperation(options, (network, signal, report) => writePointer(network, this.#connection.paymentNetwork, method,
+      { ...options, signal, payment: options.payment ?? this.#payment }, { report, holdTransport: () => this.#holdTransport() }));
+  }
+
+  async #pointerOperation<T>(
+    options: OperationOptions,
+    run: (network: RawNetworkClient, signal: AbortSignal, report: Reporter) => Promise<T>,
+    cancellable = false,
+  ): Promise<T> {
+    const operation = this.#startOperation(options);
+    const report = this.#reporter("pointer", options.onProgress, operation, false);
+    try {
+      this.#assertOpen();
+      throwIfAborted(operation.signal);
+      const pending = this.#withNetwork((network) => run(network, operation.signal, report));
+      const result = await (cancellable ? abortable(pending, operation.signal) : pending);
+      return snapshot(result);
+    } catch (error) {
+      const failure = isAbort(error, operation.signal) ? error : wrapError("POINTER_FAILED", "Pointer operation failed", error);
+      operation.fail(failure);
+      throw failure;
+    } finally { operation.finish(); }
+  }
+
   /** Open a bounded random-access reader without reconstructing the whole file. */
   openFile(
     file: string | PublicFile | PrivateFileReference | ManifestEntry,
@@ -703,9 +841,9 @@ export class AutonomiClient {
       this.#assertOpen();
       throwIfAborted(operation.signal);
       raw = await abortable(
-        isPrivateFile(file)
-          ? this.#network.openPrivateFile(corePrivateFile(file), report, { streaming })
-          : this.#network.openPublicFile(typeof file === "string" ? file : coreFileReference(file), report, { streaming }),
+        this.#withNetwork((network) => isPrivateFile(file)
+          ? network.openPrivateFile(corePrivateFile(file), report, { streaming })
+          : network.openPublicFile(typeof file === "string" ? file : coreFileReference(file), report, { streaming })),
         operation.signal,
         undefined,
         closeReader,
@@ -744,22 +882,33 @@ export class AutonomiClient {
     try {
       this.#assertOpen();
       report("Opening an Autonomi random-access media reader");
-      // Playback reads sequentially from wherever it starts or seeks to.
-      reader = await this.#openReader(file, {
+      this.#media ??= new MediaBridge();
+      // Nothing waits on anything it need not: the service worker installs while
+      // the reader opens, and the head and tail are read the moment it is open.
+      const worker = this.#media.prepare({ ...options, signal: operation.signal });
+      // Awaited after the reader, so a failure surfaces in the same order as
+      // when one waited for the other.
+      worker.catch(() => undefined);
+      // The reader opens without streaming mode. That mode starts fetching ahead,
+      // and the file's last record, alongside the first block a player waits
+      // for, which on the live network delayed the first frame (ADR-0003); a
+      // plain reader still reads ahead once playback's reads follow each other.
+      const opened = await this.#openReader(file, {
         ...(options.onProgress ? { onProgress: options.onProgress } : {}),
         parentOperationId: operation.id,
         signal: operation.signal,
-      }, true);
-      this.#media ??= new MediaBridge();
-      source = await this.#media.attach(reader, {
+      }, false);
+      reader = opened;
+      if (options.primePlayback ?? isPlayableMedia(opened)) {
+        report(`Priming playback of ${opened.name}`, { phase: "media" });
+        // Not awaited: the reads only warm the reader's cache for the player.
+        void primePlayback(opened);
+      }
+      await worker;
+      source = await this.#media.attach(opened, {
         ...options,
         signal: operation.signal,
       });
-      if (options.primePlayback ?? isPlayableMedia(reader)) {
-        report(`Priming playback of ${source.file.name}`, { phase: "media" });
-        // Not awaited: the source is usable now and the reads only warm its cache.
-        void primePlayback(reader);
-      }
       report(`Media source ready for ${source.file.name}`, { phase: "complete" });
       return source;
     } catch (error) {
@@ -788,13 +937,68 @@ export class AutonomiClient {
     } catch {
       // Continue closing the network if a media reader cleanup failed.
     } finally {
-      closeNetwork(this.#network);
+      this.#releaseNetwork();
       if (this.#operations.size === 0) this.#listeners.clear();
     }
   }
 
   #assertOpen(): void {
     if (this.#closed) throw new AutonomiError("CLIENT_CLOSED", "Autonomi client is closed");
+  }
+
+  /**
+   * Borrow the WASM network handle for one raw call. A cancelled operation may
+   * return before its Rust future settles; close() frees the handle only after.
+   */
+  async #withNetwork<T>(call: (network: RawNetworkClient) => Promise<T>): Promise<T> {
+    this.#assertOpen();
+    this.#networkLeases++;
+    try {
+      return await call(this.#network);
+    } finally {
+      this.#networkLeases--;
+      this.#releaseNetwork();
+    }
+  }
+
+  /** Keep the transport open while a possibly submitted payment is stored. Returns the release. */
+  #holdTransport(): () => void {
+    this.#transportHolds++;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.#transportHolds--;
+      this.#releaseNetwork();
+    };
+  }
+
+  /** After close(): shut the transport once no paid write needs it, then free once nothing borrows the handle. */
+  #releaseNetwork(): void {
+    if (!this.#closed) return;
+    if (!this.#transportClosed && this.#transportHolds === 0) {
+      this.#transportClosed = true;
+      try {
+        this.#network.close();
+      } catch {
+        // Continue releasing the WASM allocation even if transport shutdown failed.
+      }
+    }
+    if (this.#transportClosed && this.#networkLeases === 0 && !this.#networkFreed) {
+      this.#networkFreed = true;
+      try {
+        this.#network.free();
+      } catch {
+        // Closing is idempotent and best effort.
+      }
+    }
+  }
+
+  /** Metadata this client already holds for a source, used to name a saved file. */
+  #knownFile(file: string | PublicFile | PrivateFileReference): { readonly name?: string | undefined } | undefined {
+    return typeof file === "string"
+      ? this.files.find((candidate) => normalizeAddress(candidate.address) === normalizeAddress(file))
+      : file;
   }
 
   #reporter(
@@ -804,6 +1008,7 @@ export class AutonomiClient {
     cancellable = true,
   ): Reporter {
     const phases = {
+      "stream-and-save": "saving", pointer: "opening",
       connect: "connecting", lookup: "lookup", upload: "preparing",
       download: "downloading", "open-file": "opening", media: "media", "download-and-save": "downloading", save: "saving",
     } as const;

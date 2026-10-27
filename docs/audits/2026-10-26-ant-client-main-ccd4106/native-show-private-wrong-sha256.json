@@ -1,0 +1,16 @@
+{
+  "entries": [
+    {
+      "address": "97673636151ecf5ce7659d9e310745f856bf3229413d0892c0f383df6b3342c3",
+      "kind": "embedded",
+      "known_size": 13056,
+      "name": "folder/private.bin",
+      "path": "folder/private.bin",
+      "sha256": "01ce90952dfd958afb4bc488604b7568e39af976258c372ea67f42d214a63420",
+      "size": null
+    }
+  ],
+  "name": "exports",
+  "torrent": null,
+  "total_size": null
+}

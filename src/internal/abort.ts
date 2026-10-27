@@ -70,3 +70,11 @@ export function abortable<T>(
     );
   });
 }
+
+/** Wait for `promise` to settle, at most `ms`. Never rejects. */
+export function settledWithin(promise: PromiseLike<unknown>, ms: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<void>((resolve) => { timer = setTimeout(resolve, ms); });
+  const settled = Promise.resolve(promise).then(() => undefined, () => undefined);
+  return Promise.race([settled, deadline]).finally(() => clearTimeout(timer));
+}

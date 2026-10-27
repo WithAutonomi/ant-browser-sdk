@@ -1,0 +1,24 @@
+ant-client worktree: /Users/mick/RustroverProjects/ant-client-sdk-sync-20261015
+cargo fmt --all -- --check
+RUSTUP_TOOLCHAIN=1.99.0 cargo test -p ant-core --lib
+RUSTUP_TOOLCHAIN=1.99.0 cargo clippy -p ant-core --all-targets --all-features -- -D warnings
+RUSTUP_TOOLCHAIN=1.99.0 cargo clippy -p ant-core --target wasm32-unknown-unknown --no-default-features --features browser-wasm -- -D warnings
+python3 scripts/adr-governance.py
+
+SDK worktree: /Users/mick/RustroverProjects/ant-browser-sdk-pr6-20261015
+ANT_CLIENT_DIR=/Users/mick/RustroverProjects/ant-client-sdk-sync-20261015 RUSTUP_TOOLCHAIN=1.99.0 PYTHON=/Users/mick/.local/bin/python3.11 npm run sync:wasm
+# Sync and verify used GITHUB_TOKEN obtained from gh auth token without logging it.
+npm run check
+npm run build:examples
+npm pack --dry-run --json
+npm run verify:wasm
+python3 scripts/adr-governance.py
+python3 .github/scripts/test_check_pr.py
+npx vite --config examples/all-in-one/vite.config.ts --host 127.0.0.1 --port 39971 --strictPort
+node /tmp/sdk-api-browser.mjs
+node /tmp/sdk-api-demo.mjs
+/Users/mick/RustroverProjects/ant-client-sdk-sync-20261015/target/release/ant --json manifest show /tmp/sdk-api-public.ant
+/Users/mick/RustroverProjects/ant-client-sdk-sync-20261015/target/release/ant --json manifest show /tmp/sdk-api-private.ant
+
+Node worktree: /Users/mick/RustroverProjects/ant-node-sdk-devnet-20261015
+./target/debug/ant-devnet --nodes 7 --bootstrap-count 3 --base-port 0 --webrtc-direct --webrtc-direct-base-port 0 --serve-port 39970 --enable-evm --data-dir /private/tmp/sdk-20261015-api-devnet-data --manifest /private/tmp/sdk-20261015-api-devnet.json

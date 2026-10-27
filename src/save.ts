@@ -4,14 +4,13 @@ import { operationId, progressReporter } from "./internal/progress.js";
 import type {
   DownloadResult,
   PrivateDownloadResult,
-  SaveFileHandle,
   SaveFileWritable,
   SaveOptions,
   SaveResult,
 } from "./types.js";
 
 interface SaveFilePickerWindow extends Window {
-  showSaveFilePicker?: (options?: { suggestedName?: string }) => Promise<SaveFileHandle>;
+  showSaveFilePicker?: (options?: { suggestedName?: string }) => Promise<FileSystemFileHandle>;
 }
 
 /** Save a completed download through the File System Access API or an anchor fallback. */
@@ -85,7 +84,7 @@ export async function saveDownload(
 export async function requestSaveFileHandle(
   suggestedName?: string,
   signal?: AbortSignal,
-): Promise<SaveFileHandle | undefined> {
+): Promise<FileSystemFileHandle | undefined> {
   throwIfAborted(signal);
   if (typeof window === "undefined") return undefined;
   const browserWindow = window as SaveFilePickerWindow;

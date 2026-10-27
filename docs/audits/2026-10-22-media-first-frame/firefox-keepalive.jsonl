@@ -1,0 +1,2 @@
+{"name":"baseline","browser":"153.0","answer":{"status":206,"body":[],"seconds":15.009},"whileOpen":0,"afterClose":0}
+{"name":"candidate","browser":"153.0","answer":{"status":206,"body":[100,101,102,103,104,105,106,107,108,109],"seconds":22.041},"whileOpen":2,"afterClose":0}

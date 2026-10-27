@@ -489,7 +489,7 @@ const payment: PaymentProvider = {
         totalAmount: submission.totalAmount,
       } };
     });
-    context.submitted(submission);
+    await context.submitted(submission);
     const settlement = await submission.wait();
     if (settlement.status === "failed") throw new Error(settlement.reason);
     return settlement.receipt;
@@ -509,7 +509,9 @@ check it immediately before submitting. After submitting storage payment, keep
 observing its receipt and resolve with that receipt even if the signal aborts;
 the SDK stops the upload waiting promptly and records the later receipt for
 recovery. Call `context.submitted()` immediately after broadcast, even if cancellation
-occurred while the wallet was submitting. The observer must reject on an unknown
+occurred while the wallet was submitting, and await it before observing the receipt.
+It settles once the SDK has journaled the broadcast, or after at most 30 seconds,
+and never rejects. The observer must reject on an unknown
 outcome (such as an RPC timeout) and return `failed` only for a definitive failure.
 Successful repricing may return a different confirmed transaction hash.
 
@@ -586,8 +588,26 @@ admission when eight-response windows show sustained GET CPU load above half the
 event loop and repeated processing or scheduling stalls above 50 ms. Isolated
 slow responses and background timer clamping do not trigger that reduction. These
 bounds include speculative GETs and can keep actual concurrency below your ceiling.
-Complete downloads are memory-bound. Use a random-access reader for large media
-or range-oriented formats.
+Streaming downloads and media reads no longer have a fixed 1 GB cap; byte
+positions are safe JavaScript integers, including positions beyond 4 GiB.
+Complete downloads remain memory-bound, so `download()` and `downloadAndSave()`
+reject a file larger than `maxMemoryBytes` before content transfer. It defaults
+to `SDK_LIMITS.defaultDownloadMemoryBytes` (1,000,000,000 bytes, the former cap).
+Pass a smaller budget to suit your application, a larger one to buffer bigger
+files deliberately, or use `streamAndSave()` to write them to disk:
+
+```ts
+const result = await client.download(address, {
+  maxMemoryBytes: 256 * 1024 * 1024,
+  signal: controller.signal,
+});
+```
+
+This budget covers the returned Uint8Array only. The Blob snapshot, resolved
+DataMap, caches and transport buffers need additional memory. Allocation can
+still fail below the budget. Cancellation stops the core download as well as the
+SDK caller; admitted transport responses may still drain to preserve the session.
+Concurrent reads on one client share in-flight fetches of the same chunk.
 
 For each record, the Rust client can try known or newly discovered candidates
 while discovery continues, accepting only verified content. Early misses do not
@@ -629,6 +649,51 @@ fetched:
 await client.downloadAndSave(address, { fileHandle });
 await saveDownload(download, { fileHandle });
 ```
+
+### Stream directly to disk
+
+`downloadAndSave()` retains its buffered bytes/Blob result. For large files, open
+a reader and use `pipeTo()` with a browser `WritableStream`, including a
+`FileSystemWritableFileStream`. Obtain a destination from a user action before
+awaiting network work; feature-detect `showSaveFilePicker` in your application:
+
+```ts
+// Inside a click handler in a browser supporting the File System Access API:
+const handle = await window.showSaveFilePicker({ suggestedName: "archive.bin" });
+const reader = await client.openFile(address, { signal: controller.signal });
+try {
+  const writable = await handle.createWritable();
+  if (controller.signal.aborted) {
+    await writable.abort(controller.signal.reason);
+    throw controller.signal.reason;
+  }
+  // pipeTo owns the destination once called; it closes or aborts it.
+  const result = await reader.pipeTo(writable, {
+    signal: controller.signal,
+    onProgress: (bytesWritten, totalBytes) => console.log(bytesWritten, totalBytes),
+  });
+  console.log(result.bytesWritten, result.hash);
+} finally {
+  reader.close();
+}
+```
+
+Options are passed as the second argument to `pipeTo`. Optional `start` and
+`end` select a half-open range; the returned BLAKE3 covers exactly those bytes.
+A failed read or verification rejects with `OPEN_FILE_FAILED`; an error raised by
+the destination's own write or close rejects with `SAVE_FAILED`, its cause intact.
+The core fetches concurrently and writes in order, awaiting each write and holding
+up to 32 MiB of pipeline plaintext, with at most 4 MiB per write. The resident
+DataMap/index, shared cache and transport reservations are additional memory.
+The destination's own buffering and disk quota also apply.
+
+The destination closes on success and aborts on transfer failure; its writer lock
+is released in both cases. Invalid arguments leave it untouched. An already
+aborted signal rejects before acquiring the destination, so the caller must
+abort a writable it has just created in that case. Cancellation during the final
+close can reject after the destination has committed. Closing the reader cancels
+active pipes; otherwise it remains reusable after a completed or failed pipe.
+The [all-in-one example](examples/all-in-one) includes a disk-download cancel button.
 
 ## Manifests and `ant://` links
 
@@ -674,7 +739,14 @@ client reads for an entry, `manifestFileName(entry)` its last path component, an
 is rejected. Entry `size` is a hint from the manifest's creator and decides
 nothing. `knownSize`, when present, is the plaintext size the core derives from
 an embedded root DataMap; public entries and shrunk maps omit it. Downloads and
-readers verify the actual content through the core.
+readers verify the actual content through the core. `sha256`, when present, is
+the hex SHA-256 of the plaintext as the manifest's creator recorded it; the ant
+CLI records one for every file it uploads. As the CLI does when extracting,
+`download()` and `downloadAndSave()` check it against the bytes before returning
+or saving them, and fail with `DOWNLOAD_FAILED` on a mismatch. The check uses
+WebCrypto, which browsers offer only in secure contexts; without it such an entry
+fails to download rather than arriving unchecked. `streamAndSave()`, `openFile()`
+and `createMediaSource()` never hold the whole file, so they do not check it.
 
 The bundled core reads the finalized ADR-0006 v1 encoding from `ant-client`
 main. Links and files created by the earlier draft builds using the
@@ -684,6 +756,159 @@ are rejected with `INVALID_SOURCE`.
 See the [main sync validation](docs/audits/2026-10-08-ant-client-main-sync.md)
 for production WASM and real-browser devnet evidence. The earlier streaming
 timings above were measured with a draft build.
+
+## Creating manifests and share links
+
+`createManifest()` builds canonical `.ant` bytes and an `ant://manifest/...`
+link offline through Rust. It accepts existing upload results; it does not
+upload another file or publish the manifest. The core validates portable paths,
+rejects collisions, derives embedded addresses and sorts entries canonically.
+
+```ts
+import { createManifest, createFileLink } from "@withautonomi/ant-browser-sdk";
+
+const exported = await createManifest({
+  name: "photos",
+  entries: [
+    { kind: "public", address: publicUpload.file.address, path: "public.jpg" },
+    { kind: "embedded", dataMap: privateUpload.file.dataMap, path: "private.jpg" },
+  ],
+});
+const manifestBlob = new Blob([exported.bytes.slice()], { type: "application/octet-stream" });
+// Save manifestBlob as photos.ant through your application's file UI.
+console.log(exported.link, exported.linkRecommended);
+console.log(await createFileLink(publicUpload.file.address));
+```
+
+Embedded DataMaps in both the exported file and link grant read access to private
+files. `linkRecommended` is false when the encoded link payload exceeds the core's
+1,500-byte recommendation; offer the `.ant` file then. A file may retain a root
+DataMap while its link uses the compact published form, with the same identity.
+Optional `torrent.infoHashV1` and `infoHashV2` are hex metadata, validated by Rust.
+An entry's optional `sha256` is the hex SHA-256 of its plaintext, recorded as your
+claim as the CLI records its own; the SDK computes none.
+
+## Pointers and payment recovery
+
+Pointers are owner-signed mutable references. `pointerAddress(ownerSeed)` computes
+an address offline from an application-owned 32-byte FIPS 204 seed. Keep that seed
+securely for later updates; the SDK never includes it in a checkpoint.
+
+```ts
+import { pointerAddress, PointerError } from "@withautonomi/ant-browser-sdk";
+
+const address = await pointerAddress(ownerSeed);
+// Use an application-owned file or database transaction for durable checkpoints.
+const onCheckpoint = async (checkpoint: string) => {
+  const writable = await journalFileHandle.createWritable();
+  await writable.write(checkpoint);
+  await writable.close();
+};
+
+try {
+  await client.createPointer({ ownerSeed, kind: "chunk", target: fileAddress, onCheckpoint });
+  await client.updatePointer({ ownerSeed, kind: "chunk", target: nextFileAddress, onCheckpoint });
+} catch (error) {
+  if (error instanceof PointerError && error.checkpoint) {
+    // Retain the original checkpoint. The configured payment provider's recover()
+    // observes an existing transaction; this call never submits a new payment.
+    await client.resumePointer(error.checkpoint, { onCheckpoint });
+  } else throw error;
+}
+const record = await client.getPointer(address); // Pointer or null
+const target = await client.resolvePointer(address);
+```
+
+Each write requires `onCheckpoint`; resolve it only after durable storage. Keep
+pending checkpoints across reloads and serialize writes for each owner in your
+application. Every checkpoint is the complete current state, so store each one
+over the previous one for that write. The SDK first persists the original signed
+state, verified plan and quotes immediately before calling the wallet, then
+retains broadcast evidence and, once Rust has accepted the receipt for that plan,
+the receipt with the paid record and proof. Calls never overlap: a state produced
+while a write is in progress is coalesced into the next call.
+
+`PointerError.checkpoint` is set once the wallet may have been asked to pay. It
+holds the latest evidence even if persisting it failed; retain it even if the
+operation was cancelled. When it is `undefined`, no payment was requested: delete
+any checkpoint you persisted for that attempt and write again. After payment, a
+rejected or unresponsive callback (timed out after 30 seconds) does not stop Rust
+from storing the paid state, and a write the network stored resolves normally;
+delete its checkpoint then. A write settles only after its last checkpoint call
+has finished or timed out.
+
+If the wallet reported a broadcast but its own receipt poll failed, the write
+observes that transaction again through the submission's `wait()`. Receipts are
+checked by Rust against the plan before they are journaled; a rejected receipt's
+transaction hashes are kept as evidence so recovery can observe them again.
+
+`resumePointer()` first re-observes broadcasts reported on this page through their
+`wait()`, then uses the client's payment provider, or an explicit `payment`
+override, only through its observation-only `recover()` method. Ethers and Wagmi
+adapters support this. A paid proof needs no wallet; it is stored even if
+persisting the recovered proof fails. Storers accept a paid proof only while its
+quotes are under a day old; an older one cannot be stored without paying again.
+`resumePointer()` then fails with the storer's error, which also says the proof
+holds a quote older than storers accept when this device's clock agrees. Recovery
+never signs a new state, refreshes quotes or calls `pay()`. If a crash hid the
+transaction hash, reconcile the original wallet externally; an empty journal is
+not proof that no transaction was submitted. Do not retry a fresh write while
+payment is unresolved.
+Checkpoints are application-owned, versioned opaque strings; do not edit them or
+accept them from untrusted sources. They contain signed state and payment evidence.
+
+```ts
+await client.transferPointer({ ownerSeed, recipient: recipientPointerAddress, onCheckpoint });
+const finality = await client.pointerFinality(address);
+if (finality.status === "final") {
+  console.log(finality.majority?.transferredTo);
+}
+```
+
+Transfer permanently redirects control to an existing recipient pointer. A write
+result alone does not establish finality: retain all five statuses (`open`,
+`settling`, `unconfirmed`, `final`, `forked`) and their holder counts. Only `final`
+means the core observed a majority with every peer answering and no rival final
+state. Pointer counters are decimal strings, including the final counter
+`18446744073709551615`; never convert them to `number`. Unknown target kinds retain
+their numeric `kindTag`.
+
+Pointer operations accept `signal` and `onProgress`. Cancellation before payment
+prevents submission. After submission, the write continues observing settlement,
+persisting evidence and storing the paid state. `client.close()` shuts the
+transport immediately unless such a write is still storing its paid state, in
+which case it waits for that write; reads and other operations are cancelled. This
+cannot outlive page termination; resume from the durable checkpoint on the next
+page load.
+
+## Streaming saves
+
+`client.streamAndSave(source, options)` accepts a public file/address, private
+DataMap reference or manifest entry. Invoke it directly from a click handler to
+open the browser save picker before network work:
+
+```ts
+const saved = await client.streamAndSave(entry, {
+  suggestedName: "movie.mp4",
+  signal: controller.signal,
+  onProgress: event => console.log(event.completed, event.total),
+});
+console.log(saved.name, saved.bytesWritten, saved.hash);
+```
+
+Pass `fileHandle` to reuse a selected file or OPFS handle, or `destination` for an
+application-owned `WritableStream<Uint8Array>`. Supply one destination. The method
+uses the core's bounded pipeline, closes its reader and destination on success,
+and aborts acquired destinations on failure/cancellation. Cancellation during close
+may arrive after the file has committed. It returns byte count and BLAKE3 without
+a whole-file Blob. Without a supplied destination or browser save picker, it
+rejects with `SAVE_FAILED`. Read and verification failures reject with
+`OPEN_FILE_FAILED`; destination write failures, such as a full disk, with
+`SAVE_FAILED`. A failed save leaves the file chosen in the save picker in place,
+possibly empty: the SDK cannot tell a file the picker created from an existing
+file the user chose, so it deletes neither; `downloadAndSave()` does the same.
+`downloadAndSave()` retains its buffered return value and ordinary
+browser-download fallback.
 
 ## Random-access reads
 
@@ -733,7 +958,8 @@ source.close();
 
 For audio and video content types, and common media extensions, creating the
 source also reads the first `SDK_LIMITS.mediaPrimeHeadBytes` (1 MiB) and the
-last `SDK_LIMITS.mediaPrimeTailBytes` (64 KiB) at once, in the background. A
+last `SDK_LIMITS.mediaPrimeTailBytes` (64 KiB) at once, in the background, as
+soon as its reader is open and while the service worker is still installing. A
 player reads the header, then seeks to the index MP4 files keep at the end,
 and only then plays; with both already in the reader's cache, playback starts
 as soon as the element is attached instead of after two sequential network
@@ -746,17 +972,26 @@ page-owned authenticated reader; it does not connect to Autonomi nodes itself.
 The page and client must therefore remain open while the media URL is in use.
 Multiple clients can serve independent media sources on the same page.
 
-A media source's reader streams: from wherever playback starts or seeks to, the
-shared core fetches up to four records of the next 32 MiB in parallel. Playback
-therefore does not wait for each record's discovery. It also fetches the file's
-last record when playback starts, because MP4 and WebM usually keep their index
-there. It keeps at most about 24 of the file's records cached, releasing those
-behind playback. Readers from `openFile()` read ahead only once a read
-continues a previous read, so a single header read does not fetch the window.
+A media source's reader is an ordinary random-access reader, like one from
+`openFile()`: it reads ahead once a read continues a previous one, so playback
+fetches the following records while it plays, but the first block a player
+waits for has the connections to itself. The core's streaming mode, which
+fetches up to four records of the next 32 MiB and the file's last record as soon
+as playback starts, delayed the first frame on the live network, so media
+sources no longer use it; priming reads the head and the tail instead. See
+[ADR-0003](docs/adr/ADR-0003-adaptive-browser-downloads.md).
+
+While a media source is open, the page messages the service worker every 10
+seconds. Firefox stops a worker that has had no new event for 30 seconds, even
+one still answering a request, which otherwise cut off a block that took longer
+or a response the player read for that long. The worker waits up to two minutes
+for a block, longer than the core's retries of a missing record, after 15 and 45
+seconds.
 
 If the application already has a root-scoped service worker, merge the
 `autonomi-file-range` fetch and message-handling logic from the packaged worker
-into it and pass that worker's URL:
+into it, including its `message` listener, which the keep-awake messages need,
+and pass that worker's URL:
 
 ```ts
 const source = await client.createMediaSource(address, {
@@ -767,7 +1002,9 @@ const source = await client.createMediaSource(address, {
 A site can have only one controlling service worker per scope. Media sources
 refuse to replace a different worker already registered for their exact scope.
 They also require a secure context (HTTPS or localhost), and the packaged bridge
-accepts files up to 1,000,000,000 bytes (1 GB).
+accepts sizes and offsets through `Number.MAX_SAFE_INTEGER`. Deploy the updated
+service worker with the SDK to remove the previous 1 GB media limit. Browser
+media support, storage and resident DataMap memory remain practical constraints.
 
 ## Public metadata names
 
@@ -897,25 +1134,29 @@ console.log(SDK_LIMITS.maxFileBytes, SDK_LIMITS.maxRangeBytes);
 
 | Limit | Value |
 | --- | --- |
-| `minFileBytes` / `maxFileBytes` | 3 / 1,000,000,000 bytes |
+| `minFileBytes` / `maxUploadBytes` | 3 / 1,000,000,000 bytes for uploads |
+| `maxFileBytes` | Alias of the upload limit, retained for compatibility |
 | `maxRangeBytes` | 4 MiB per read or stream chunk |
 | `defaultStreamChunkBytes` | 1 MiB |
 | `downloadConcurrency.min` / `.max` / `.default` | 1 / 256 / `"auto"` |
-| `mediaMaxFileBytes` | 1,000,000,000 bytes |
+| `defaultDownloadMemoryBytes` | 1,000,000,000 bytes, the default buffered-download `maxMemoryBytes` |
+| `mediaMaxFileBytes` | `Number.MAX_SAFE_INTEGER` (9,007,199,254,740,991) |
 
 The limits and capability reports are immutable. Unsupported input sizes are
-rejected before copying byte arrays, staging Blobs, or opening files from supplied
-metadata. Address-only reads learn the size from the core; media setup checks it
-before registering a worker or creating a URL. These are protocol ceilings;
-whole-file transfers still need sufficient memory, and staging needs quota for at
-least one encrypted record.
+rejected before copying upload byte arrays or staging Blobs. Reads learn the
+verified size from the core; media setup checks it before creating a URL. Its
+service worker installs while the reader opens. Uploads retain the upstream 1 GB
+cap. Buffered downloads need sufficient memory and default to a 1 GB output
+budget; disk streams need destination capacity, and upload staging needs quota
+for at least one encrypted record.
 
 `getBrowserCapabilities()` safely runs outside a browser and makes no network
 requests, allocations of workers, or permission prompts. `features` reports each
 API's presence. `operations` reports requirements for `connect`, `uploadBytes`,
-`uploadBlob`, `download`, `read`, `stream`, `media`, `saveWithPicker`, and
-`saveWithDownload`, including missing features for each. Call it again to get a
-fresh snapshot.
+`uploadBlob`, `download`, `read`, `stream`, `pipeTo`, `streamAndSave`, `media`, `saveWithPicker`, and
+`saveWithDownload`, including missing features for each. `streamAndSave` reports
+its default path, which opens the save picker; with your own `destination` or
+`fileHandle`, check `pipeTo` instead. Call it again to get a fresh snapshot.
 
 `available` means required APIs are present. It does not probe permissions,
 storage quota, CSP, media codecs, network access, or wallet availability. In
@@ -960,6 +1201,14 @@ and traffic policy remain deployment responsibilities.
 | `client.resumeUpload()` | Resume retained input with explicit authorization for new payments |
 | `recovery.discard()` | Release retained input after pending work settles |
 | `parseManifestLink()` | Decode an `ant://manifest/...` or `ant://<address>` link without network access |
+| `createManifest()` | Create canonical `.ant` bytes and a compact share link offline |
+| `createFileLink()` | Format a public file share link |
+| `pointerAddress()` | Derive a pointer address from its owner seed offline |
+| `client.getPointer()` / `resolvePointer()` | Read a verified pointer or resolve its chain |
+| `client.createPointer()` / `updatePointer()` | Pay for and store a state with durable recovery checkpoints |
+| `client.transferPointer()` / `pointerFinality()` | Transfer control permanently and inspect finality |
+| `client.resumePointer()` | Recover the original paid state without repayment |
+| `client.streamAndSave()` | Save through the bounded streaming pipeline |
 | `decodeManifest()` | Decode the bytes of a `.ant` manifest file |
 | `client.download()` | Fetch, reconstruct, and verify a complete public file, private file or manifest entry |
 | `client.downloadAndSave()` | Download and open a browser save flow |
@@ -1034,17 +1283,16 @@ recorded hashes and the binary is a clean build of a commit on `ant-client` main
 ### Releasing to npm
 
 The [release workflow](.github/workflows/release.yml) publishes
-`@withautonomi/ant-browser-sdk` when a `v<version>` tag is pushed:
+`@withautonomi/ant-browser-sdk` when a change that sets a new `version` in
+`package.json` (for example with `npm version 0.2.0 --no-git-tag-version`) is
+merged to main, and tags the merge commit `v<version>`. A push to main whose
+version is already tagged releases nothing. Pushing a `v<version>` tag on main
+also publishes that version, for example to release a commit already merged.
 
-1. Merge a change that sets `version` in `package.json` (for example with
-   `npm version 0.2.0 --no-git-tag-version`).
-2. Tag that commit on main and push the tag:
-   `git tag v0.2.0 && git push origin v0.2.0`.
-
-The workflow requires the tag to match `package.json` and to be on main, verifies
-the WASM provenance, runs `npm run check`, builds the examples, and packs the
-tarball. It publishes that tarball with npm provenance and attaches it to a GitHub
-release. Stable versions go to the `latest` dist-tag; `-beta.N` and `-rc.N`
+The workflow requires a pushed tag to match `package.json` and to be on main,
+verifies the WASM provenance, runs `npm run check`, builds the examples, and packs
+the tarball. It publishes that tarball with npm provenance and attaches it to a
+GitHub release. Stable versions go to the `latest` dist-tag; `-beta.N` and `-rc.N`
 versions go to `beta` and `rc`, and cannot be the package's first publish.
 Re-running a release skips steps that already completed. Run the workflow
 manually to perform every check without publishing.

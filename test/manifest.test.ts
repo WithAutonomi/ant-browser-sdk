@@ -2,6 +2,9 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import {
   decodeManifest,
+  createManifest,
+  createFileLink,
+  pointerAddress,
   initializeWasm,
   isManifestEntry,
   manifestEntrySource,
@@ -22,6 +25,8 @@ const TORRENT_MANIFEST_B64 = "wUFOVAGDpG5hbWWjdG9yp3RvcnJlbnSCrGluZm9faGFzaF92Mc
 
 // Golden v1 bytes pinned by ant-client's manifest format test (9a2b635).
 const GOLDEN_V1_HEX = "c1414e540182a46e616d65a172a7656e74726965739281a6736f7572636581a8456d62656464656481a8646174615f6d617081a66368756e6b73c444222222222222222222222222222222222222222222222222222222222222222233333333333333333333333333333333333333333333333333333333333333330000010283a470617468a161a473697a6505a6736f7572636581a65075626c696381a761646472657373c4201111111111111111111111111111111111111111111111111111111111111111";
+// Golden v1 bytes with a creator's sha256, pinned by ant-client's manifest format test (2eace73).
+const GOLDEN_V1_SHA256_HEX = "c1414e540181a7656e74726965739184a470617468a161a473697a6505a6736861323536c420ababababababababababababababababababababababababababababababababa6736f7572636581a65075626c696381a761646472657373c4201111111111111111111111111111111111111111111111111111111111111111";
 
 async function wasm() {
   await initializeWasm(await readFile(new URL("../src/wasm/ant_core_bg.wasm", import.meta.url)));
@@ -84,6 +89,15 @@ describe("manifests", () => {
     const publicEntry = manifest.entries.find((entry) => entry.kind === "public")!;
     expect(publicEntry).toMatchObject({ name: "a", path: "a", size: 5, address: "11".repeat(32) });
     expect(publicEntry).not.toHaveProperty("knownSize");
+    expect(publicEntry).not.toHaveProperty("sha256");
+  });
+
+  it("surfaces the creator's sha256 from the core's golden fixture", async () => {
+    await wasm();
+    const manifest = await decodeManifest(Uint8Array.from(Buffer.from(GOLDEN_V1_SHA256_HEX, "hex")));
+    expect(manifest.entries).toEqual([
+      { name: "a", path: "a", size: 5, sha256: "ab".repeat(32), kind: "public", address: "11".repeat(32) },
+    ]);
   });
 
   it("rejects the superseded draft DataMap layout and unsupported versions", async () => {
@@ -107,4 +121,49 @@ describe("manifests", () => {
     const { dataMap: _withheld, ...withoutDataMap } = embedded;
     expect(() => manifestEntrySource(withoutDataMap)).toThrow(/carries no DataMap/);
   });
+});
+
+
+it("exports canonical mixed manifests and links through production WASM", async () => {
+  await wasm();
+  const parsed = await parseManifestLink(LINK);
+  if (parsed.kind !== "manifest") throw new Error("fixture");
+  const dataMap = parsed.manifest.entries[0]!.dataMap!;
+  const created = await createManifest({ name: "share", torrent: { infoHashV1: "cd".repeat(20), infoHashV2: "ef".repeat(32) }, entries: [
+    { kind: "public", path: "z.bin", address: ADDRESS, size: 1, sha256: "EF".repeat(32) },
+    { kind: "embedded", path: "private/a.bin", dataMap },
+  ] });
+  expect(await decodeManifest(created.bytes)).toEqual(created.manifest);
+  expect(created.manifest.entries.map(e => e.name)).toEqual(["private/a.bin", "z.bin"]);
+  expect(created.manifest.entries[0]!.address).toBe(ADDRESS);
+  expect(created.manifest.entries[0]).not.toHaveProperty("sha256");
+  expect(created.manifest.entries[1]!.sha256).toBe("ef".repeat(32));
+  expect((await parseManifestLink(created.link))).toEqual({ kind: "manifest", manifest: created.manifest });
+  expect(created.linkRecommended).toBe(true);
+  expect(await createFileLink(ADDRESS.toUpperCase())).toBe(`ant://${ADDRESS}`);
+  expect(await pointerAddress(new Uint8Array(32))).toMatch(/^[a-f0-9]{64}$/u);
+  await expect(pointerAddress(new Uint8Array(31))).rejects.toMatchObject({ code: "INVALID_SOURCE" });
+});
+
+it("leaves a Buffer owner seed unchanged when computing a pointer address", async () => {
+  const seed = Buffer.alloc(32, 7);
+  expect(await pointerAddress(seed)).toBe(await pointerAddress(new Uint8Array(32).fill(7)));
+  expect(seed.every(n => n === 7)).toBe(true);
+  const short = Buffer.alloc(31, 7);
+  await expect(pointerAddress(short)).rejects.toMatchObject({ code: "INVALID_SOURCE" });
+  expect(short.every(n => n === 7)).toBe(true);
+});
+
+it("rejects unsafe paths, collisions, malformed maps and hashes, torrent identities and imprecise size hints", async () => {
+  await wasm();
+  const entry = { kind: "public" as const, address: ADDRESS };
+  for (const input of [
+    { entries: [{ ...entry, path: "../escape" }] },
+    { entries: [{ ...entry, path: "same" }, { ...entry, path: "same" }] },
+    { entries: [{ ...entry, size: Number.MAX_SAFE_INTEGER + 1 }] },
+    { entries: [{ kind: "embedded" as const, dataMap: Uint8Array.of(1) }] },
+    { entries: [{ ...entry, sha256: "ab".repeat(31) }] },
+    { entries: [{ ...entry, sha256: "zz".repeat(32) }] },
+    { entries: [entry], torrent: { infoHashV1: "aa" } },
+  ]) await expect(createManifest(input)).rejects.toMatchObject({ code: "INVALID_SOURCE" });
 });

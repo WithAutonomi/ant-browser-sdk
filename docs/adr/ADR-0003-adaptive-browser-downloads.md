@@ -143,3 +143,41 @@ attached afterwards is served from the reader's cache. The option
 `primePlayback` forces or disables it. The reads are never awaited and
 never fail the media source; a failure is left for the player to report.
 No core or wire change: the reads use the ordinary streaming reader.
+
+## Media readers open without streaming mode (2026-10-22)
+
+The first frame waits on one fetch: the record holding the start of the
+file. The core's streaming mode starts fetching up to four records of the
+next 32 MiB, and the file's last record, at the same moment, so those
+compete with it for the same connections. `createMediaSource()` now opens
+an ordinary reader, which reads ahead only once a read continues a previous
+one, and keeps priming the head and the tail. It also stops waiting on
+itself: the media service worker installs while the reader opens, and
+priming starts as soon as the reader is open rather than once the worker
+controls the page. Errors surface in the same order as before.
+
+Against the live network, ten alternating rounds in fresh Chromium contexts
+with the same 54.9 MB video gave a median first frame of 6.6 s against
+9.1 s, faster in 7 of 10 pairs; one baseline sample failed to load. Two
+later batches kept the plain reader ahead by less, 7.8 s against 9.7 s and
+then 8.8 s against 9.2 s: the first frame mostly waits for the first
+record's own fetch, which varied from 4 to 11 s, so the competing fetches
+cost less than the first batch suggested. Seeking to the middle after ten
+seconds of playback was slower in the first batch, median 6.5 s against
+3.4 s, and faster in a later one, 2.8 s against 5.1 s, so no seek
+difference is claimed. A fourth batch, with the `ccd4106` core, showed no
+first-frame gain either, 6.1 s against 5.6 s over 12 rounds, so none is
+claimed for the reader mode. The plain reader is kept because it does no
+worse, fetches less ahead of the player, and is what try.autonomi.com's
+player uses: with this change the SDK started the video as soon as that
+player, a median 4.5 s against 4.1 s over 20 rounds, doing the same network
+work.
+
+The page also messages the worker every 10 s while a media source is open,
+because Firefox stops a worker that has had no new event for 30 s even while
+it answers a request. The worker waits up to 120 s for a block, beyond the
+core's retries of a missing record after 15 and 45 s, and marks its
+responses `nosniff` and sandboxed, since their type comes from the file's
+metadata. No core or wire change. Evidence is in the
+[2026-10-22 audit](../audits/2026-10-22-media-first-frame.md) and the
+[2026-10-26 comparison with try.autonomi.com](../audits/2026-10-26-sdk-vs-try-streaming.md).

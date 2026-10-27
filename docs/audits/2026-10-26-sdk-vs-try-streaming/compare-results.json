@@ -1,0 +1,534 @@
+{
+  "startedAt": "2026-10-26T14:23:02.566Z",
+  "browser": "151.0.7922.34",
+  "rounds": 12,
+  "variants": [
+    {
+      "name": "sdk-before",
+      "kind": "sdk",
+      "url": "http://127.0.0.1:39831/"
+    },
+    {
+      "name": "sdk-now",
+      "kind": "sdk",
+      "url": "http://127.0.0.1:39832/"
+    },
+    {
+      "name": "try",
+      "kind": "try",
+      "url": "http://127.0.0.1:39833/"
+    }
+  ],
+  "video": {
+    "name": "Data That Encrypts Itself (with LEGO).mp4",
+    "size": 54903201
+  },
+  "scriptSha256": "723961aff9cff9734935c16faa6cf057154cb457f99d7af731cdb13168a4ef67",
+  "samples": [
+    {
+      "round": 1,
+      "variant": "sdk-now",
+      "startedAt": "2026-10-26T14:23:02.606Z",
+      "firstFrameMs": 9109.800000011921,
+      "playedIn10s": 9.962083,
+      "seekMs": 5783.500000023843,
+      "waiting": 2,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 1,
+      "variant": "try",
+      "startedAt": "2026-10-26T14:23:32.966Z",
+      "firstFrameMs": 4515.6000000357635,
+      "playedIn10s": 10.004869000000001,
+      "seekMs": 6521.800000047682,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 1,
+      "variant": "sdk-before",
+      "startedAt": "2026-10-26T14:23:59.621Z",
+      "firstFrameMs": 5540.900000023841,
+      "playedIn10s": 10.000266,
+      "seekMs": 4633.799999988078,
+      "waiting": 2,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 2,
+      "variant": "try",
+      "startedAt": "2026-10-26T14:24:25.365Z",
+      "firstFrameMs": 3118.2000000476837,
+      "playedIn10s": 9.979139,
+      "seekMs": 5099.500000047683,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 2,
+      "variant": "sdk-before",
+      "startedAt": "2026-10-26T14:24:49.234Z",
+      "firstFrameMs": 4414.9999999761585,
+      "playedIn10s": 10.008943,
+      "seekMs": 19330.499999976157,
+      "waiting": 2,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 2,
+      "variant": "sdk-now",
+      "startedAt": "2026-10-26T14:25:28.545Z",
+      "firstFrameMs": 5045.39999998808,
+      "playedIn10s": 10.004132,
+      "seekMs": 3764.2999999880776,
+      "waiting": 2,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 3,
+      "variant": "sdk-before",
+      "startedAt": "2026-10-26T14:25:52.872Z",
+      "firstFrameMs": 5702.300000023843,
+      "playedIn10s": 9.982410999999999,
+      "seekMs": 6182.0999999999985,
+      "waiting": 2,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 3,
+      "variant": "sdk-now",
+      "startedAt": "2026-10-26T14:26:20.218Z",
+      "firstFrameMs": 18067.399999976158,
+      "playedIn10s": 9.981035,
+      "seekMs": 2397.5999999761552,
+      "waiting": 2,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 3,
+      "variant": "try",
+      "startedAt": "2026-10-26T14:26:56.221Z",
+      "firstFrameMs": 2756.2999999880794,
+      "playedIn10s": 9.955395,
+      "seekMs": 18037.59999998808,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 4,
+      "variant": "sdk-now",
+      "startedAt": "2026-10-26T14:27:32.588Z",
+      "firstFrameMs": 4059.8999999999996,
+      "playedIn10s": 9.985454,
+      "seekMs": 20648.6,
+      "waiting": 2,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 4,
+      "variant": "try",
+      "startedAt": "2026-10-26T14:28:12.788Z",
+      "firstFrameMs": 4368.599999964237,
+      "playedIn10s": 9.989554,
+      "seekMs": 5841.799999988078,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 4,
+      "variant": "sdk-before",
+      "startedAt": "2026-10-26T14:28:38.564Z",
+      "firstFrameMs": 3548.4999999880783,
+      "playedIn10s": 9.995121,
+      "seekMs": 7267.299999964238,
+      "waiting": 2,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 5,
+      "variant": "try",
+      "startedAt": "2026-10-26T14:29:04.871Z",
+      "firstFrameMs": 3801.200000023842,
+      "playedIn10s": 9.9798,
+      "seekMs": 13624.600000011924,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 5,
+      "variant": "sdk-before",
+      "startedAt": "2026-10-26T14:29:37.939Z",
+      "firstFrameMs": 13674.299999988078,
+      "playedIn10s": 10.00333,
+      "seekMs": 5750.000000011918,
+      "waiting": 2,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 5,
+      "variant": "sdk-now",
+      "startedAt": "2026-10-26T14:30:12.832Z",
+      "firstFrameMs": 3218.199999988079,
+      "playedIn10s": 9.984007,
+      "seekMs": 8634.09999998808,
+      "waiting": 2,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 6,
+      "variant": "sdk-before",
+      "startedAt": "2026-10-26T14:30:40.135Z",
+      "firstFrameMs": 4599.700000011921,
+      "playedIn10s": 10.012837000000001,
+      "seekMs": 13361.900000023845,
+      "waiting": 2,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 6,
+      "variant": "sdk-now",
+      "startedAt": "2026-10-26T14:31:13.662Z",
+      "firstFrameMs": 4218.099999952316,
+      "playedIn10s": 9.983991,
+      "seekMs": 9352,
+      "waiting": 2,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 6,
+      "variant": "try",
+      "startedAt": "2026-10-26T14:31:42.706Z",
+      "firstFrameMs": 3400.7000000000007,
+      "playedIn10s": 9.957759,
+      "seekMs": 17938.59999998808,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 7,
+      "variant": "sdk-now",
+      "startedAt": "2026-10-26T14:32:19.605Z",
+      "firstFrameMs": 3168.9999999761585,
+      "playedIn10s": 9.984841,
+      "seekMs": 11400.79999997616,
+      "waiting": 2,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 7,
+      "variant": "try",
+      "startedAt": "2026-10-26T14:32:49.629Z",
+      "firstFrameMs": 5703.799999964238,
+      "playedIn10s": 9.977869,
+      "seekMs": 10765.700000011922,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 7,
+      "variant": "sdk-before",
+      "startedAt": "2026-10-26T14:33:21.750Z",
+      "firstFrameMs": 3452.60000001192,
+      "playedIn10s": 10.001487000000001,
+      "seekMs": 12412.60000001192,
+      "waiting": 2,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 8,
+      "variant": "try",
+      "startedAt": "2026-10-26T14:33:53.074Z",
+      "firstFrameMs": 11697.199999952318,
+      "playedIn10s": 9.955851999999998,
+      "seekMs": 13385.897999952314,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 8,
+      "variant": "sdk-before",
+      "startedAt": "2026-10-26T14:34:33.768Z",
+      "firstFrameMs": 6161.799999976158,
+      "playedIn10s": 10.003567,
+      "seekMs": 6463.099999952316,
+      "waiting": 2,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 8,
+      "variant": "sdk-now",
+      "startedAt": "2026-10-26T14:35:01.852Z",
+      "firstFrameMs": 7138.800000011921,
+      "playedIn10s": 9.985045000000001,
+      "seekMs": 5630.200000011922,
+      "waiting": 2,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 9,
+      "variant": "sdk-before",
+      "startedAt": "2026-10-26T14:35:30.077Z",
+      "firstFrameMs": 21050.49999998808,
+      "playedIn10s": 9.985264,
+      "seekMs": 8061,
+      "waiting": 2,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 9,
+      "variant": "sdk-now",
+      "startedAt": "2026-10-26T14:36:14.634Z",
+      "firstFrameMs": 9053.999999976159,
+      "playedIn10s": 9.990907,
+      "seekMs": 9783.899999976158,
+      "waiting": 2,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 9,
+      "variant": "try",
+      "startedAt": "2026-10-26T14:36:48.913Z",
+      "firstFrameMs": 3747.5999999523156,
+      "playedIn10s": 10.008094,
+      "seekMs": 12324.999999988078,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 10,
+      "variant": "sdk-now",
+      "startedAt": "2026-10-26T14:37:20.594Z",
+      "firstFrameMs": 8393.999999964237,
+      "playedIn10s": 9.985062000000001,
+      "seekMs": 10020.099999999999,
+      "waiting": 2,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 10,
+      "variant": "try",
+      "startedAt": "2026-10-26T14:37:54.457Z",
+      "firstFrameMs": 3018.700000023842,
+      "playedIn10s": 9.995354,
+      "seekMs": 18549.49599998808,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 10,
+      "variant": "sdk-before",
+      "startedAt": "2026-10-26T14:38:31.673Z",
+      "firstFrameMs": 4190.4,
+      "playedIn10s": 10.004790999999999,
+      "seekMs": 18430.29999997616,
+      "waiting": 2,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 11,
+      "variant": "try",
+      "startedAt": "2026-10-26T14:39:09.790Z",
+      "firstFrameMs": 3284.300000011921,
+      "playedIn10s": 9.978744,
+      "seekMs": 21958.064000011924,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 11,
+      "variant": "sdk-before",
+      "startedAt": "2026-10-26T14:39:50.604Z",
+      "firstFrameMs": 5997.500000047683,
+      "playedIn10s": 9.986182000000001,
+      "seekMs": 21561.200000035766,
+      "waiting": 2,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 11,
+      "variant": "sdk-now",
+      "startedAt": "2026-10-26T14:40:33.623Z",
+      "firstFrameMs": 4414.600000023842,
+      "playedIn10s": 9.984488,
+      "seekMs": 8410.100000047685,
+      "waiting": 2,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 12,
+      "variant": "sdk-before",
+      "startedAt": "2026-10-26T14:41:01.889Z",
+      "firstFrameMs": 19097.09999997616,
+      "playedIn10s": 10.00909,
+      "seekMs": 20977.49999996424,
+      "waiting": 2,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 12,
+      "variant": "sdk-now",
+      "startedAt": "2026-10-26T14:41:57.433Z",
+      "firstFrameMs": 14994.599999999999,
+      "playedIn10s": 9.984342,
+      "seekMs": 3910,
+      "waiting": 2,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    },
+    {
+      "round": 12,
+      "variant": "try",
+      "startedAt": "2026-10-26T14:42:31.765Z",
+      "firstFrameMs": 3730.400000035763,
+      "playedIn10s": 9.959126,
+      "seekMs": 8056.800000011921,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "08ae5d0cc7b96458ba9899d68be0455b276848644237f42704419a2e4311fec4"
+      ]
+    }
+  ],
+  "finishedAt": "2026-10-26T14:42:59.083Z"
+}

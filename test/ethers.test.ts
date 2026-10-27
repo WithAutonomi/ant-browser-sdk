@@ -206,6 +206,18 @@ it("reports broadcast evidence and retries confirmation without another transact
   expect(state.submissions).toEqual(["payForQuotes"]);
 });
 
+it("waits for the broadcast to be journaled before observing its receipt", async () => {
+  let journaled!: () => void;
+  const ctx = { ...context(), submitted: vi.fn(() => new Promise<void>((resolve) => { journaled = resolve; })) };
+  const pending = provider().pay(network, quotes, ctx);
+  await vi.waitFor(() => expect(ctx.submitted).toHaveBeenCalledOnce());
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(state.waits).toHaveLength(0);
+  journaled();
+  await waiting(); confirm("0xtransaction1");
+  await expect(pending).resolves.toMatchObject({ transactionHash: "0xtransaction1" });
+});
+
 it("submits native Merkle calldata and retains the decoded actual settlement", async () => {
   const request = { calldata: "0xabcdef", maximumAmount: "100", depth: 2, timestamp: 42, poolHashes: ["ab".repeat(32)] };
   const decodeReceipt = vi.fn(() => ({ winnerPoolHash: request.poolHashes[0]!, totalAmount: "70" }));
