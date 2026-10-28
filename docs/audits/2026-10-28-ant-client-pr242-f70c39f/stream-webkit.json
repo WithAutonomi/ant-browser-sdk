@@ -1,0 +1,194 @@
+{
+  "startedAt": "2026-10-28T15:21:50.655Z",
+  "engine": "webkit",
+  "browser": "26.5",
+  "rounds": 6,
+  "variants": [
+    {
+      "name": "main",
+      "kind": "try",
+      "url": "http://127.0.0.1:35181/"
+    },
+    {
+      "name": "pr",
+      "kind": "try",
+      "url": "http://127.0.0.1:35182/"
+    }
+  ],
+  "video": {
+    "name": "Data That Encrypts Itself (with LEGO).mp4",
+    "size": 54903201
+  },
+  "scriptSha256": "868c00b2561806d10bc6682e8ac054519dfa745d2702da096b92b4636f6eb7bb",
+  "samples": [
+    {
+      "round": 1,
+      "variant": "pr",
+      "startedAt": "2026-10-28T15:21:51.016Z",
+      "firstFrameMs": 3326,
+      "playedIn10s": 9.7624844689998,
+      "seekMs": 2519,
+      "waiting": 0,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "eea59cc4c493308242e3bcce004fe9c4937df3f1b15cf36ec04e1e25d4ab1ebf"
+      ]
+    },
+    {
+      "round": 1,
+      "variant": "main",
+      "startedAt": "2026-10-28T15:22:12.680Z",
+      "firstFrameMs": 4096,
+      "playedIn10s": 9.753238536999186,
+      "seekMs": 2826,
+      "waiting": 0,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "7873c65138aa499c48a8c34d9dbaa2fdd82509ca6e981afe9a4f77331b9e4cf4"
+      ]
+    },
+    {
+      "round": 2,
+      "variant": "main",
+      "startedAt": "2026-10-28T15:22:35.301Z",
+      "firstFrameMs": 3370,
+      "playedIn10s": 9.75143695133337,
+      "seekMs": 1973,
+      "waiting": 0,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "7873c65138aa499c48a8c34d9dbaa2fdd82509ca6e981afe9a4f77331b9e4cf4"
+      ]
+    },
+    {
+      "round": 2,
+      "variant": "pr",
+      "startedAt": "2026-10-28T15:22:56.280Z",
+      "firstFrameMs": 3011,
+      "playedIn10s": 9.767950875667177,
+      "seekMs": 3107,
+      "waiting": 0,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "eea59cc4c493308242e3bcce004fe9c4937df3f1b15cf36ec04e1e25d4ab1ebf"
+      ]
+    },
+    {
+      "round": 3,
+      "variant": "pr",
+      "startedAt": "2026-10-28T15:23:18.089Z",
+      "firstFrameMs": 2787,
+      "playedIn10s": 9.74190023266621,
+      "seekMs": 3574,
+      "waiting": 0,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "eea59cc4c493308242e3bcce004fe9c4937df3f1b15cf36ec04e1e25d4ab1ebf"
+      ]
+    },
+    {
+      "round": 3,
+      "variant": "main",
+      "startedAt": "2026-10-28T15:23:40.188Z",
+      "firstFrameMs": 3922,
+      "playedIn10s": 9.790531784333181,
+      "seekMs": 2512,
+      "waiting": 0,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "7873c65138aa499c48a8c34d9dbaa2fdd82509ca6e981afe9a4f77331b9e4cf4"
+      ]
+    },
+    {
+      "round": 4,
+      "variant": "main",
+      "startedAt": "2026-10-28T15:24:02.350Z",
+      "firstFrameMs": 3365,
+      "playedIn10s": 9.757257885334338,
+      "seekMs": 3908,
+      "waiting": 0,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "7873c65138aa499c48a8c34d9dbaa2fdd82509ca6e981afe9a4f77331b9e4cf4"
+      ]
+    },
+    {
+      "round": 4,
+      "variant": "pr",
+      "startedAt": "2026-10-28T15:24:25.329Z",
+      "firstFrameMs": 2856,
+      "playedIn10s": 9.755342945332988,
+      "seekMs": 2450,
+      "waiting": 0,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "eea59cc4c493308242e3bcce004fe9c4937df3f1b15cf36ec04e1e25d4ab1ebf"
+      ]
+    },
+    {
+      "round": 5,
+      "variant": "pr",
+      "startedAt": "2026-10-28T15:24:46.355Z",
+      "firstFrameMs": 3120,
+      "playedIn10s": 9.742260892332318,
+      "seekMs": 4430,
+      "waiting": 0,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "eea59cc4c493308242e3bcce004fe9c4937df3f1b15cf36ec04e1e25d4ab1ebf"
+      ]
+    },
+    {
+      "round": 5,
+      "variant": "main",
+      "startedAt": "2026-10-28T15:25:09.621Z",
+      "firstFrameMs": 7701,
+      "playedIn10s": 10.007100708334436,
+      "seekMs": 2956,
+      "waiting": 0,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "7873c65138aa499c48a8c34d9dbaa2fdd82509ca6e981afe9a4f77331b9e4cf4"
+      ]
+    },
+    {
+      "round": 6,
+      "variant": "main",
+      "startedAt": "2026-10-28T15:25:35.957Z",
+      "firstFrameMs": 4731,
+      "playedIn10s": 9.757505695333183,
+      "seekMs": 2955,
+      "waiting": 0,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "7873c65138aa499c48a8c34d9dbaa2fdd82509ca6e981afe9a4f77331b9e4cf4"
+      ]
+    },
+    {
+      "round": 6,
+      "variant": "pr",
+      "startedAt": "2026-10-28T15:25:59.282Z",
+      "firstFrameMs": 6851,
+      "playedIn10s": 10.010534125001193,
+      "seekMs": 1442,
+      "waiting": 0,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "eea59cc4c493308242e3bcce004fe9c4937df3f1b15cf36ec04e1e25d4ab1ebf"
+      ]
+    }
+  ],
+  "finishedAt": "2026-10-28T15:26:23.106Z"
+}
