@@ -1,0 +1,306 @@
+{
+  "startedAt": "2026-10-28T15:13:12.156Z",
+  "engine": "chromium",
+  "browser": "151.0.7922.34",
+  "rounds": 10,
+  "variants": [
+    {
+      "name": "main",
+      "kind": "try",
+      "url": "http://127.0.0.1:35181/"
+    },
+    {
+      "name": "pr",
+      "kind": "try",
+      "url": "http://127.0.0.1:35182/"
+    }
+  ],
+  "video": {
+    "name": "Data That Encrypts Itself (with LEGO).mp4",
+    "size": 54903201
+  },
+  "scriptSha256": "868c00b2561806d10bc6682e8ac054519dfa745d2702da096b92b4636f6eb7bb",
+  "samples": [
+    {
+      "round": 1,
+      "variant": "pr",
+      "startedAt": "2026-10-28T15:13:12.195Z",
+      "firstFrameMs": 3564.0999999996275,
+      "playedIn10s": 9.947961,
+      "seekMs": 4843.199999998884,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "eea59cc4c493308242e3bcce004fe9c4937df3f1b15cf36ec04e1e25d4ab1ebf"
+      ]
+    },
+    {
+      "round": 1,
+      "variant": "main",
+      "startedAt": "2026-10-28T15:13:35.891Z",
+      "firstFrameMs": 13105.200000000372,
+      "playedIn10s": 9.978159,
+      "seekMs": 3002.9000000000015,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "7873c65138aa499c48a8c34d9dbaa2fdd82509ca6e981afe9a4f77331b9e4cf4"
+      ]
+    },
+    {
+      "round": 2,
+      "variant": "main",
+      "startedAt": "2026-10-28T15:14:07.336Z",
+      "firstFrameMs": 7935.400000001118,
+      "playedIn10s": 10.000081,
+      "seekMs": 5010.100000001119,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "7873c65138aa499c48a8c34d9dbaa2fdd82509ca6e981afe9a4f77331b9e4cf4"
+      ]
+    },
+    {
+      "round": 2,
+      "variant": "pr",
+      "startedAt": "2026-10-28T15:14:35.632Z",
+      "firstFrameMs": 2811.7000000007447,
+      "playedIn10s": 9.989348999999999,
+      "seekMs": 8307.399999999256,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "eea59cc4c493308242e3bcce004fe9c4937df3f1b15cf36ec04e1e25d4ab1ebf"
+      ]
+    },
+    {
+      "round": 3,
+      "variant": "pr",
+      "startedAt": "2026-10-28T15:15:02.110Z",
+      "firstFrameMs": 6661.499999999627,
+      "playedIn10s": 9.978748000000001,
+      "seekMs": 4642.000000000371,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "eea59cc4c493308242e3bcce004fe9c4937df3f1b15cf36ec04e1e25d4ab1ebf"
+      ]
+    },
+    {
+      "round": 3,
+      "variant": "main",
+      "startedAt": "2026-10-28T15:15:28.786Z",
+      "firstFrameMs": 3549.699999999628,
+      "playedIn10s": 9.996219,
+      "seekMs": 5693.999999999629,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "7873c65138aa499c48a8c34d9dbaa2fdd82509ca6e981afe9a4f77331b9e4cf4"
+      ]
+    },
+    {
+      "round": 4,
+      "variant": "main",
+      "startedAt": "2026-10-28T15:15:53.406Z",
+      "firstFrameMs": 6329.299999999628,
+      "playedIn10s": 9.979721,
+      "seekMs": 1878.6999999985092,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "7873c65138aa499c48a8c34d9dbaa2fdd82509ca6e981afe9a4f77331b9e4cf4"
+      ]
+    },
+    {
+      "round": 4,
+      "variant": "pr",
+      "startedAt": "2026-10-28T15:16:16.966Z",
+      "firstFrameMs": 5109.299999999628,
+      "playedIn10s": 9.978150000000001,
+      "seekMs": 1885.9000000003725,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "eea59cc4c493308242e3bcce004fe9c4937df3f1b15cf36ec04e1e25d4ab1ebf"
+      ]
+    },
+    {
+      "round": 5,
+      "variant": "pr",
+      "startedAt": "2026-10-28T15:16:39.324Z",
+      "firstFrameMs": 2746.800000000372,
+      "playedIn10s": 9.978295,
+      "seekMs": 4101.600000000744,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "eea59cc4c493308242e3bcce004fe9c4937df3f1b15cf36ec04e1e25d4ab1ebf"
+      ]
+    },
+    {
+      "round": 5,
+      "variant": "main",
+      "startedAt": "2026-10-28T15:17:01.527Z",
+      "firstFrameMs": 3808.1000000000004,
+      "playedIn10s": 9.98062,
+      "seekMs": 5131.499999998883,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "7873c65138aa499c48a8c34d9dbaa2fdd82509ca6e981afe9a4f77331b9e4cf4"
+      ]
+    },
+    {
+      "round": 6,
+      "variant": "main",
+      "startedAt": "2026-10-28T15:17:25.832Z",
+      "firstFrameMs": 7111.199999999255,
+      "playedIn10s": 9.978354,
+      "seekMs": 4534.599999998511,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "7873c65138aa499c48a8c34d9dbaa2fdd82509ca6e981afe9a4f77331b9e4cf4"
+      ]
+    },
+    {
+      "round": 6,
+      "variant": "pr",
+      "startedAt": "2026-10-28T15:17:52.817Z",
+      "firstFrameMs": 10767.399999999627,
+      "playedIn10s": 10.001446999999999,
+      "seekMs": 4270.0999999996275,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "eea59cc4c493308242e3bcce004fe9c4937df3f1b15cf36ec04e1e25d4ab1ebf"
+      ]
+    },
+    {
+      "round": 7,
+      "variant": "pr",
+      "startedAt": "2026-10-28T15:18:23.257Z",
+      "firstFrameMs": 2623.9000000007454,
+      "playedIn10s": 9.964111,
+      "seekMs": 10589.900000000744,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "eea59cc4c493308242e3bcce004fe9c4937df3f1b15cf36ec04e1e25d4ab1ebf"
+      ]
+    },
+    {
+      "round": 7,
+      "variant": "main",
+      "startedAt": "2026-10-28T15:18:51.904Z",
+      "firstFrameMs": 3875.5999999988817,
+      "playedIn10s": 9.995636999999999,
+      "seekMs": 8445.799999998511,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "7873c65138aa499c48a8c34d9dbaa2fdd82509ca6e981afe9a4f77331b9e4cf4"
+      ]
+    },
+    {
+      "round": 8,
+      "variant": "main",
+      "startedAt": "2026-10-28T15:19:19.660Z",
+      "firstFrameMs": 6507.5999999996275,
+      "playedIn10s": 9.997223,
+      "seekMs": 2191.5,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "7873c65138aa499c48a8c34d9dbaa2fdd82509ca6e981afe9a4f77331b9e4cf4"
+      ]
+    },
+    {
+      "round": 8,
+      "variant": "pr",
+      "startedAt": "2026-10-28T15:19:43.673Z",
+      "firstFrameMs": 8268.9,
+      "playedIn10s": 10.009541,
+      "seekMs": 4678.299999999999,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "eea59cc4c493308242e3bcce004fe9c4937df3f1b15cf36ec04e1e25d4ab1ebf"
+      ]
+    },
+    {
+      "round": 9,
+      "variant": "pr",
+      "startedAt": "2026-10-28T15:20:12.040Z",
+      "firstFrameMs": 2351.8,
+      "playedIn10s": 9.978327,
+      "seekMs": 3232.499999999254,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "eea59cc4c493308242e3bcce004fe9c4937df3f1b15cf36ec04e1e25d4ab1ebf"
+      ]
+    },
+    {
+      "round": 9,
+      "variant": "main",
+      "startedAt": "2026-10-28T15:20:32.996Z",
+      "firstFrameMs": 4716.00000000149,
+      "playedIn10s": 9.978119000000001,
+      "seekMs": 6837.500000001492,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "7873c65138aa499c48a8c34d9dbaa2fdd82509ca6e981afe9a4f77331b9e4cf4"
+      ]
+    },
+    {
+      "round": 10,
+      "variant": "main",
+      "startedAt": "2026-10-28T15:20:59.990Z",
+      "firstFrameMs": 8288.4,
+      "playedIn10s": 9.978447,
+      "seekMs": 4933,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "7873c65138aa499c48a8c34d9dbaa2fdd82509ca6e981afe9a4f77331b9e4cf4"
+      ]
+    },
+    {
+      "round": 10,
+      "variant": "pr",
+      "startedAt": "2026-10-28T15:21:28.562Z",
+      "firstFrameMs": 4049.500000000746,
+      "playedIn10s": 10.002427,
+      "seekMs": 2138.000000001117,
+      "waiting": 1,
+      "status": "passed",
+      "pageErrors": [],
+      "wasm": [
+        "eea59cc4c493308242e3bcce004fe9c4937df3f1b15cf36ec04e1e25d4ab1ebf"
+      ]
+    }
+  ],
+  "finishedAt": "2026-10-28T15:21:50.085Z"
+}
